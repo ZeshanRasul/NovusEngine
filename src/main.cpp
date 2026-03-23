@@ -13,6 +13,16 @@ import vulkan_hpp;
 constexpr uint32_t WIDTH = 1920;
 constexpr uint32_t HEIGHT = 1080;
 
+const std::vector<char const*> validationLayers = {
+	"VK_LAYER_KHRONOS_validation"
+};
+
+#ifdef NDEBUG
+constexpr bool enableValidationLayers = false;
+#else
+constexpr bool enableValidationLayers = true;
+#endif
+
 class HelloTriangleApplication {
 public:
 	void run() {
@@ -47,6 +57,16 @@ private:
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Novus Engine", nullptr, nullptr);
 	}
 
+	std::vector<const char*> getRequiredInstanceExtensions()
+	{
+		uint32_t glfwExtensionCount = 0;
+		auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+		std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+		return extensions;
+	}
+
 	void createInstance() {
 		constexpr vk::ApplicationInfo appInfo{ .pApplicationName = "Novus Engine",
 											  .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
@@ -54,30 +74,41 @@ private:
 											  .engineVersion = VK_MAKE_VERSION(1, 0, 0),
 											  .apiVersion = vk::ApiVersion14 };
 
-		uint32_t glfwExtensionCount = 0;
-		auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-		auto extensionProperties = context.enumerateInstanceExtensionProperties();
-		for (uint32_t i = 0; i < glfwExtensionCount; ++i)
-		{
-			if (std::ranges::none_of(extensionProperties,
-				[glfwExtension = glfwExtensions[i]](auto const& extensionProperty)
-				{ return strcmp(extensionProperty.extensionName, glfwExtension) == 0; }))
-			{
-				throw std::runtime_error("Required GLFW extension not supported: " + std::string(glfwExtensions[i]));
-			}
+		std::vector<char const*> requiredLayers;
+		if (enableValidationLayers) {
+			requiredLayers.assign(validationLayers.begin(), validationLayers.end());
 		}
 
-		auto extensions = context.enumerateInstanceExtensionProperties();
+		auto layerProperties = context.enumerateInstanceLayerProperties();
+		if (std::ranges::any_of(requiredLayers, [&layerProperties](auto const& requiredLayer) {
+			return std::ranges::none_of(layerProperties,
+				[requiredLayer](auto const& layerProperty)
+				{ return strcmp(layerProperty.layerName, requiredLayer) == 0; });
+			}))
+		{
+			throw std::runtime_error("One or more required layers are not supported!");
+		}
 
-		for (const auto& extension : extensions) {
-			std::cout << '\t' << extension.extensionName << '\n';
+		auto requiredExtensions = getRequiredInstanceExtensions();
+
+		auto extensionProperties = context.enumerateInstanceExtensionProperties();
+		auto unsupportedPropertyIt =
+			std::ranges::find_if(requiredExtensions,
+				[&extensionProperties](auto const& requiredExtension) {
+					return std::ranges::none_of(extensionProperties,
+						[requiredExtension](auto const& extensionProperty) { return strcmp(extensionProperty.extensionName, requiredExtension) == 0; });
+				});
+		if (unsupportedPropertyIt != requiredExtensions.end())
+		{
+			throw std::runtime_error("Required extension not supported: " + std::string(*unsupportedPropertyIt));
 		}
 
 		vk::InstanceCreateInfo createInfo{
 			.pApplicationInfo = &appInfo,
-			.enabledExtensionCount = glfwExtensionCount,
-			.ppEnabledExtensionNames = glfwExtensions };
+			.enabledLayerCount = static_cast<uint32_t>(requiredLayers.size()),
+			.ppEnabledLayerNames = requiredLayers.data(),
+			.enabledExtensionCount = static_cast<uint32_t>(requiredExtensions.size()),
+			.ppEnabledExtensionNames = requiredExtensions.data()};
 
 		instance = vk::raii::Instance(context, createInfo);
 	}

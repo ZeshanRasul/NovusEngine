@@ -1,5 +1,8 @@
 {
   "dependencies": [
-    "fmt"
+    "fmt",
+    "glfw3",
+    "glm",
+    "tinyobjloader"
   ]
 }

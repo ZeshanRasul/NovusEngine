@@ -33,7 +33,9 @@ private:
     }
 
     void cleanup() {
+        glfwDestroyWindow(window);
 
+        glfwTerminate();
     }
 
     void initWindow() {

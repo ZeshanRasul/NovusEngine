@@ -56,6 +56,8 @@ private:
 			glfwPollEvents();
 			drawFrame();
 		}
+
+		device.waitIdle();
 	}
 
 	void cleanup() {
@@ -177,6 +179,7 @@ private:
 			vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
 		bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceVulkan11Features>().shaderDrawParameters &&
 			features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+			features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
 			features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
 
 		return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
@@ -222,10 +225,10 @@ private:
 			vk::PhysicalDeviceVulkan13Features,
 			vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
 			featureChain = {
-				{},                                    // vk::PhysicalDeviceFeatures2
-				{.shaderDrawParameters = true},        // vk::PhysicalDeviceVulkan11Features
-				{.dynamicRendering = true},            // vk::PhysicalDeviceVulkan13Features
-				{.extendedDynamicState = true}         // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+				{},                                                          // vk::PhysicalDeviceFeatures2
+				{.shaderDrawParameters = true},                              // vk::PhysicalDeviceVulkan11Features
+				{.synchronization2 = true, .dynamicRendering = true},        // vk::PhysicalDeviceVulkan13Features
+				{.extendedDynamicState = true}                               // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
 		};
 
 		float queuePriority = 0.5f;
@@ -547,6 +550,8 @@ private:
 		auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphore, nullptr);
 
 		recordCommandBuffer(commandBuffer, imageIndex);
+
+		queue.waitIdle();
 
 		vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,

@@ -43,6 +43,7 @@ private:
 		pickPhysicalDevice();
 		createLogicalDevice();
 		createSwapChain();
+		createImageViews();
 	}
 
 	void mainLoop() {
@@ -233,6 +234,25 @@ private:
 		queue = vk::raii::Queue(device, queueIndex, 0);
 	}
 
+	void createImageViews()
+	{
+		assert(swapChainImageViews.empty());
+
+		vk::ImageViewCreateInfo imageViewCreateInfo{
+			.viewType = vk::ImageViewType::e2D,
+			.format = swapChainSurfaceFormat.format,
+			.subresourceRange = {
+				vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1
+			}
+		};
+
+		for (auto& image : swapChainImages)
+		{
+			imageViewCreateInfo.image = image;
+			swapChainImageViews.emplace_back(device, imageViewCreateInfo);
+		}
+	}
+
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const& availableFormats)
 	{
 		assert(!availableFormats.empty());
@@ -335,6 +355,7 @@ private:
 	std::vector<vk::Image> swapChainImages;
 	vk::Extent2D swapChainExtent;
 	vk::SurfaceFormatKHR swapChainSurfaceFormat;
+	std::vector<vk::raii::ImageView> swapChainImageViews;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 };

@@ -53,4 +53,5 @@ target_link_libraries(NovusEngine PRIVATE
 target_compile_definitions(NovusEngine PRIVATE
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1
+    VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS=1
 )

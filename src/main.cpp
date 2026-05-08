@@ -1,22 +1,26 @@
+#include <algorithm>
+#include <assert.h>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <limits>
+#include <memory>
+#include <stdexcept>
+#include <vector>
+
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
-#include <vulkan/vulkan_raii.hpp>
+#	include <vulkan/vulkan_raii.hpp>
 #else
 import vulkan_hpp;
 #endif
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
 
-#include <iostream>
-#include <stdexcept>
-#include <cstdlib>
-#include <cstdint>
-#include <limits>
-#include <algorithm>
-#include <fstream>
+#define GLFW_INCLUDE_VULKAN        // REQUIRED only for GLFW CreateWindowSurface.
+#include <GLFW/glfw3.h>
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
-constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<char const*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation" };
@@ -26,6 +30,7 @@ constexpr bool enableValidationLayers = false;
 #else
 constexpr bool enableValidationLayers = true;
 #endif
+
 
 class HelloTriangleApplication {
 public:
@@ -41,6 +46,7 @@ public:
 private:
 	void initVulkan() {
 		createInstance();
+		setupDebugMessenger();
 		createSurface();
 		pickPhysicalDevice();
 		createLogicalDevice();
@@ -52,6 +58,21 @@ private:
 		createSyncObjects();
 	}
 
+	static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
+	{
+		auto app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+		app->framebufferResized = true;
+	}
+
+	void initWindow() {
+		glfwInit();
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+		window = glfwCreateWindow(WIDTH, HEIGHT, "Novus Engine", nullptr, nullptr);
+		glfwSetWindowUserPointer(window, this);
+		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+	}
+
 	void mainLoop() {
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
@@ -60,19 +81,33 @@ private:
 
 		device.waitIdle();
 	}
+	
+	void cleanupSwapChain()
+	{
+		swapChainImageViews.clear();
+		swapChain = nullptr;
+	}
 
 	void cleanup() {
 		glfwDestroyWindow(window);
-
 		glfwTerminate();
 	}
 
-	void initWindow() {
-		glfwInit();
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	void recreateSwapChain()
+	{
+		int width = 0, height = 0;
+		glfwGetFramebufferSize(window, &width, &height);
+		while (width == 0 || height == 0) {
+			glfwGetFramebufferSize(window, &width, &height);
+			glfwWaitEvents();
+		}
 
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Novus Engine", nullptr, nullptr);
+		device.waitIdle();
+
+		cleanupSwapChain();
+
+		createSwapChain();
+		createImageViews();
 	}
 
 	std::vector<const char*> getRequiredInstanceExtensions()
@@ -81,6 +116,11 @@ private:
 		auto glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
 		std::vector extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+		if (enableValidationLayers)
+		{
+			extensions.push_back(vk::EXTDebugUtilsExtensionName);
+		}
 
 		return extensions;
 	}
@@ -145,7 +185,6 @@ private:
 																			  .pfnUserCallback = &debugCallback };
 		debugMessenger = instance.createDebugUtilsMessengerEXT(debugUtilsMessengerCreateInfoEXT);
 	}
-
 
 	void createSurface() {
 		VkSurfaceKHR _surface;
@@ -486,10 +525,10 @@ private:
 		commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
 	}
 
-	void recordCommandBuffer(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+	void recordCommandBuffer(uint32_t imageIndex)
 	{
-		vk::CommandBufferBeginInfo beginInfo{};
-		commandBuffer.begin(beginInfo);
+		auto& commandBuffer = commandBuffers[frameIndex];
+		commandBuffer.begin({});
 
 		transition_image_layout(imageIndex, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal,
 			vk::AccessFlags2{}, vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -554,12 +593,24 @@ private:
 		{
 			throw std::runtime_error("Failed to wait for draw fence!");
 		}
-		device.resetFences(*inFlightFences[frameIndex]);
 
 		auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
 
+		if (result == vk::Result::eErrorOutOfDateKHR)
+		{
+			recreateSwapChain();
+			return;
+		}
+		if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+		{
+			assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
+			throw std::runtime_error("failed to acquire swap chain image!");
+		}
+		
+		device.resetFences(*inFlightFences[frameIndex]);
+
 		commandBuffers[frameIndex].reset();
-		recordCommandBuffer(commandBuffers[frameIndex], imageIndex);
+		recordCommandBuffer(imageIndex);
 
 		queue.waitIdle();
 
@@ -570,18 +621,28 @@ private:
 										  .commandBufferCount = 1,
 										  .pCommandBuffers = &*commandBuffers[frameIndex],
 										  .signalSemaphoreCount = 1,
-										  .pSignalSemaphores = &*renderFinishedSemaphores[frameIndex] };
+										  .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex] };
 
 		queue.submit(submitInfo, *inFlightFences[frameIndex]);
 
 		const vk::PresentInfoKHR presentInfoKHR{
 			.waitSemaphoreCount = 1,
-			.pWaitSemaphores = &*renderFinishedSemaphores[frameIndex],
+			.pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
 			.swapchainCount = 1,
 			.pSwapchains = &*swapChain,
 			.pImageIndices = &imageIndex };
 
 		result = queue.presentKHR(presentInfoKHR);
+
+		if ((result == vk::Result::eSuboptimalKHR) || (result == vk::Result::eErrorOutOfDateKHR) || framebufferResized)
+		{
+			framebufferResized = false;
+			recreateSwapChain();
+		}
+		else
+		{
+			assert(result == vk::Result::eSuccess);
+		}
 
 		frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
@@ -613,6 +674,7 @@ private:
 	vk::Extent2D swapChainExtent;
 	vk::SurfaceFormatKHR swapChainSurfaceFormat;
 	std::vector<vk::raii::ImageView> swapChainImageViews;
+	bool framebufferResized = false;
 
 	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	vk::raii::Pipeline graphicsPipeline = nullptr;

@@ -244,9 +244,9 @@ private:
 		gameObjects[2].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[2].vertexBuffer = nullptr;
 		gameObjects[2].indexBuffer = nullptr;
-		gameObjects[2].textureFilename = "../textures/ely-vanguardsoldier-kerwinatienza_diffuse_3.ktx";
+		gameObjects[2].textureFilename = "../textures/sponza_bricks.ktx";
 
-		loadModel("../models/EnemyEly.gltf", gameObjects[2]);
+		loadModel("../models/Sponza.gltf", gameObjects[2]);
 		createTextureImage(gameObjects[2]);
 		createTextureImageView(gameObjects[2]);
 
@@ -1076,17 +1076,17 @@ private:
 		glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 proj = glm::perspective(glm::radians(45.0f),
 			static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height),
-			0.1f, 20.0f);
+			0.1f, 2000.0f);
 	//	proj[1][1] *= -1; // Flip Y for Vulkan
 
 		// Update uniform buffers for each object
 		for (auto& gameObject : gameObjects) {
 			// Apply continuous rotation to the object
-			gameObject.rotation.y += 0.001f; // Slow rotation around Y axis
+		//	gameObject.rotation.y += 0.001f; // Slow rotation around Y axis
 
 			// Get the model matrix for this object
 			glm::mat4 initialRotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-			glm::mat4 model = gameObject.getModelMatrix() * initialRotation;
+			glm::mat4 model = gameObject.getModelMatrix();
 
 			// Create and update the UBO
 			UniformBufferObject ubo{

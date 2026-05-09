@@ -17,11 +17,12 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "../include/stb_image.h"
+#include <ktx.h>
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define TINYGLTF_IMPLEMENTATION
+#include <tiny_gltf.h>
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #	include <vulkan/vulkan_raii.hpp>
@@ -36,8 +37,8 @@ constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
 
-const std::string  MODEL_PATH = "../models/viking_room.obj";
-const std::string  TEXTURE_PATH = "../textures/viking_room.png";
+const std::string  MODEL_PATH = "../models/swat.gltf";
+const std::string  TEXTURE_PATH = "../textures/Swat_Ch15_body_BaseColor.ktx";
 
 
 const std::vector<char const*> validationLayers = {
@@ -704,37 +705,49 @@ private:
 
 	void createTextureImage()
 	{
-		int            texWidth, texHeight, texChannels;
-		stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-		vk::DeviceSize imageSize = texWidth * texHeight * 4;
+		ktxTexture* kTexture;
+		KTX_error_code result = ktxTexture_CreateFromNamedFile(
+			TEXTURE_PATH.c_str(),
+			KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+			&kTexture);
 
-		if (!pixels)
-		{
-			throw std::runtime_error("failed to load texture image!");
+		if (result != KTX_SUCCESS) {
+			throw std::runtime_error("failed to load ktx texture image!");
 		}
 
-		auto [stagingBuffer, stagingBufferMemory] = createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		// Get texture dimensions and data
+		uint32_t texWidth = kTexture->baseWidth;
+		uint32_t texHeight = kTexture->baseHeight;
+		ktx_size_t imageSize = ktxTexture_GetImageSize(kTexture, 0);
+		ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
 
+		// Create staging buffer
+		vk::raii::Buffer stagingBuffer({});
+		vk::raii::DeviceMemory stagingBufferMemory({});
+		createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+		// Copy texture data to staging buffer
 		void* data = stagingBufferMemory.mapMemory(0, imageSize);
-		memcpy(data, pixels, imageSize);
+		memcpy(data, ktxTextureData, imageSize);
 		stagingBufferMemory.unmapMemory();
 
-		stbi_image_free(pixels);
+		// Determine the Vulkan format from KTX format
+		vk::Format textureFormat = vk::Format::eR8G8B8A8Srgb; // Default format, should be determined from KTX metadata
 
-		createImage(texWidth,
-			texHeight,
-			vk::Format::eR8G8B8A8Srgb,
-			vk::ImageTiling::eOptimal,
+		// Create the texture image
+		createImage(texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal,
-			textureImage,
-			textureImageMemory);
+			vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage, textureImageMemory);
 
 		vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
 		transitionImageLayout(commandBuffer, textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 		copyBufferToImage(commandBuffer, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 		transitionImageLayout(commandBuffer, textureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		endSingleTimeCommands(std::move(commandBuffer));
+
+		// Cleanup KTX resources
+		ktxTexture_Destroy(kTexture);
+
 	}
 
 	void createTextureImageView()
@@ -762,15 +775,19 @@ private:
 		textureSampler = vk::raii::Sampler(device, samplerInfo);
 	}
 
-	std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties)
+	void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
 	{
-		vk::BufferCreateInfo   bufferInfo{ .size = size, .usage = usage, .sharingMode = vk::SharingMode::eExclusive };
-		vk::raii::Buffer       buffer = vk::raii::Buffer(device, bufferInfo);
+		vk::BufferCreateInfo bufferInfo{
+			.size = size,
+			.usage = usage,
+			.sharingMode = vk::SharingMode::eExclusive };
+		buffer = vk::raii::Buffer(device, bufferInfo);
 		vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
-		vk::MemoryAllocateInfo allocInfo{ .allocationSize = memRequirements.size, .memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties) };
-		vk::raii::DeviceMemory bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
+		vk::MemoryAllocateInfo allocInfo{
+			.allocationSize = memRequirements.size,
+			.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties) };
+		bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
 		buffer.bindMemory(*bufferMemory, 0);
-		return { std::move(buffer), std::move(bufferMemory) };
 	}
 
 	void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
@@ -782,60 +799,147 @@ private:
 
 	void loadModel()
 	{
-		tinyobj::attrib_t                attrib;
-		std::vector<tinyobj::shape_t>    shapes;
-		std::vector<tinyobj::material_t> materials;
-		std::string                      warn, err;
+		tinygltf::Model    model;
+		tinygltf::TinyGLTF loader;
+		std::string        err;
+		std::string        warn;
 
-		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
+		bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, MODEL_PATH);
+
+		if (!warn.empty())
 		{
-			throw std::runtime_error(warn + err);
+			std::cout << "glTF warning: " << warn << std::endl;
 		}
 
-		std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-		for (const auto& shape : shapes)
+		if (!err.empty())
 		{
-			for (const auto& index : shape.mesh.indices)
+			std::cout << "glTF error: " << err << std::endl;
+		}
+
+		if (!ret)
+		{
+			throw std::runtime_error("Failed to load glTF model");
+		}
+
+		vertices.clear();
+		indices.clear();
+
+		// Process all meshes in the model
+		for (const auto& mesh : model.meshes)
+		{
+			for (const auto& primitive : mesh.primitives)
 			{
-				Vertex vertex{};
+				// Get indices
+				const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+				const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+				const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
 
-				vertex.pos = {
-					attrib.vertices[3 * index.vertex_index + 0],
-					attrib.vertices[3 * index.vertex_index + 1],
-					attrib.vertices[3 * index.vertex_index + 2]
-				};
+				// Get vertex positions
+				const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
+				const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+				const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
-				vertex.texCoord = {
-					attrib.texcoords[2 * index.texcoord_index + 0],
-					1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-				};
+				// Get texture coordinates if available
+				bool                        hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
+				const tinygltf::Accessor* texCoordAccessor = nullptr;
+				const tinygltf::BufferView* texCoordBufferView = nullptr;
+				const tinygltf::Buffer* texCoordBuffer = nullptr;
 
-				vertex.color = { 1.0f, 1.0f, 1.0f };
-
-				auto [it, inserted] = uniqueVertices.insert({ vertex, static_cast<uint32_t>(vertices.size()) });
-				if (inserted)
+				if (hasTexCoords)
 				{
+					texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
+					texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
+					texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
+				}
+
+				uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
+
+				for (size_t i = 0; i < posAccessor.count; i++)
+				{
+					Vertex vertex{};
+
+					const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset + i * 12]);
+					// glTF uses a right-handed coordinate system with Y-up
+					// Vulkan uses a right-handed coordinate system with Y-down
+					// We need to flip the Y coordinate
+					vertex.pos = { pos[0], -pos[1], pos[2] };
+
+					if (hasTexCoords)
+					{
+						const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * 8]);
+						vertex.texCoord = { texCoord[0], texCoord[1] };
+					}
+					else
+					{
+						vertex.texCoord = { 0.0f, 0.0f };
+					}
+
+					vertex.color = { 1.0f, 1.0f, 1.0f };
+
 					vertices.push_back(vertex);
 				}
-				indices.push_back(it->second);
+
+				const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+				size_t               indexCount = indexAccessor.count;
+				size_t               indexStride = 0;
+
+				// Determine index stride based on component type
+				if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+				{
+					indexStride = sizeof(uint16_t);
+				}
+				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+				{
+					indexStride = sizeof(uint32_t);
+				}
+				else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+				{
+					indexStride = sizeof(uint8_t);
+				}
+				else
+				{
+					throw std::runtime_error("Unsupported index component type");
+				}
+
+				indices.reserve(indices.size() + indexCount);
+
+				for (size_t i = 0; i < indexCount; i++)
+				{
+					uint32_t index = 0;
+
+					if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+					{
+						index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
+					}
+					else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+					{
+						index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
+					}
+					else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+					{
+						index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
+					}
+
+					indices.push_back(baseVertex + index);
+				}
 			}
 		}
+
 	}
 
 	void createVertexBuffer()
 	{
 		vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
-		auto [stagingBuffer, stagingBufferMemory] =
-			createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		vk::raii::Buffer       stagingBuffer({});
+		vk::raii::DeviceMemory stagingBufferMemory({});
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
 		void* dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
 		memcpy(dataStaging, vertices.data(), bufferSize);
 		stagingBufferMemory.unmapMemory();
 
-		std::tie(vertexBuffer, vertexBufferMemory) =
-			createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
 
 		copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
 	}
@@ -844,15 +948,15 @@ private:
 	{
 		vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
 
-		auto [stagingBuffer, stagingBufferMemory] =
-			createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+		vk::raii::Buffer stagingBuffer({});
+		vk::raii::DeviceMemory stagingBufferMemory({});
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
 		void* dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
 		memcpy(dataStaging, indices.data(), bufferSize);
 		stagingBufferMemory.unmapMemory();
 
-		std::tie(indexBuffer, indexBufferMemory) =
-			createBuffer(bufferSize, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal);
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
 		copyBuffer(stagingBuffer, indexBuffer, bufferSize);
 	}
 
@@ -861,8 +965,10 @@ private:
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
 			vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-			auto [buffer, bufferMem] = createBuffer(
-				bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+			
+			vk::raii::Buffer buffer({});
+			vk::raii::DeviceMemory bufferMem({});
+			createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, buffer, bufferMem);
 			uniformBuffers.emplace_back(std::move(buffer));
 			uniformBuffersMemory.emplace_back(std::move(bufferMem));
 			uniformBuffersMapped.emplace_back(uniformBuffersMemory.back().mapMemory(0, bufferSize));

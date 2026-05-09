@@ -7,12 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
 add_executable(NovusEngine
-    src/main.cpp
- )
+    src/main.cpp)
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(tinyobjloader CONFIG REQUIRED)
+find_package(ktx CONFIG REQUIRED)
 find_package(Vulkan 1.4 REQUIRED)
 
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
@@ -47,6 +47,7 @@ target_link_libraries(NovusEngine PRIVATE
     glfw
     glm::glm
     tinyobjloader::tinyobjloader
+    KTX::ktx        
     Vulkan::Vulkan
 )
 

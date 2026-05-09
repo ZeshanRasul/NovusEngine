@@ -3,6 +3,8 @@
     "fmt",
     "glfw3",
     "glm",
-    "tinyobjloader"
+    "tinyobjloader",
+    "tinygltf",
+    "ktx"
   ]
 }

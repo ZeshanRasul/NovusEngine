@@ -116,6 +116,11 @@ struct GameObject {
 	vk::raii::DeviceMemory indexBufferMemory = nullptr;
 	void* indexBufferMapped = nullptr;
 
+	vk::raii::Image        textureImage = nullptr;
+	vk::raii::DeviceMemory textureImageMemory = nullptr;
+	vk::raii::ImageView    textureImageView = nullptr;
+	std::string			   textureFilename;
+
 	// Descriptor sets for this object (one per frame in flight)
 	std::vector<vk::raii::DescriptorSet> descriptorSets;
 
@@ -158,8 +163,6 @@ private:
 		createGraphicsPipeline();
 		createCommandPool();
 		createDepthResources();
-		createTextureImage();
-		createTextureImageView();
 		createTextureSampler();
 		setupGameObjects();
 		createVertexBuffer(gameObjects[0]);
@@ -218,7 +221,10 @@ private:
 		gameObjects[0].scale = { 1.0f, 1.0f, 1.0f };
 		gameObjects[0].vertexBuffer = nullptr;
 		gameObjects[0].indexBuffer = nullptr;
+		gameObjects[0].textureFilename = "../textures/Swat_Ch15_body_BaseColor.ktx";
 		loadModel("../models/swat.gltf", gameObjects[0]);
+		createTextureImage(gameObjects[0]);
+		createTextureImageView(gameObjects[0]);
 
 		// Object 2 - Left
 		gameObjects[1].position = { -2.0f, 1.25f, -1.0f };
@@ -226,8 +232,11 @@ private:
 		gameObjects[1].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[1].vertexBuffer = nullptr;
 		gameObjects[1].indexBuffer = nullptr;
+		gameObjects[1].textureFilename = "../textures/ely-vanguardsoldier-kerwinatienza_diffuse.ktx";
 
 		loadModel("../models/EnemyEly.gltf", gameObjects[1]);
+		createTextureImage(gameObjects[1]);
+		createTextureImageView(gameObjects[1]);
 
 		// Object 3 - Right
 		gameObjects[2].position = { 2.0f, 1.25f, -1.0f };
@@ -235,8 +244,12 @@ private:
 		gameObjects[2].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[2].vertexBuffer = nullptr;
 		gameObjects[2].indexBuffer = nullptr;
+		gameObjects[2].textureFilename = "../textures/ely-vanguardsoldier-kerwinatienza_diffuse_3.ktx";
 
 		loadModel("../models/EnemyEly.gltf", gameObjects[2]);
+		createTextureImage(gameObjects[2]);
+		createTextureImageView(gameObjects[2]);
+
 	}
 
 	void recreateSwapChain()
@@ -775,11 +788,11 @@ private:
 		depthImageView = createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
 	}
 
-	void createTextureImage()
+	void createTextureImage(GameObject& gameObj)
 	{
 		ktxTexture* kTexture;
 		KTX_error_code result = ktxTexture_CreateFromNamedFile(
-			TEXTURE_PATH.c_str(),
+			gameObj.textureFilename.c_str(),
 			KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
 			&kTexture);
 
@@ -809,22 +822,21 @@ private:
 		// Create the texture image
 		createImage(texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage, textureImageMemory);
+			vk::MemoryPropertyFlagBits::eDeviceLocal, gameObj.textureImage, gameObj.textureImageMemory);
 
 		vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
-		transitionImageLayout(commandBuffer, textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		copyBufferToImage(commandBuffer, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-		transitionImageLayout(commandBuffer, textureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		transitionImageLayout(commandBuffer, gameObj.textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+		copyBufferToImage(commandBuffer, stagingBuffer, gameObj.textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+		transitionImageLayout(commandBuffer, gameObj.textureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		endSingleTimeCommands(std::move(commandBuffer));
 
 		// Cleanup KTX resources
 		ktxTexture_Destroy(kTexture);
-
 	}
 
-	void createTextureImageView()
+	void createTextureImageView(GameObject& gameObj)
 	{
-		textureImageView = createImageView(*textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
+		gameObj.textureImageView = createImageView(*gameObj.textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
 	}
 
 	void createTextureSampler()
@@ -1122,7 +1134,7 @@ private:
 				};
 				vk::DescriptorImageInfo imageInfo{
 					.sampler = *textureSampler,
-					.imageView = *textureImageView,
+					.imageView = *gameObject.textureImageView,
 					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
 				};
 				std::array descriptorWrites{

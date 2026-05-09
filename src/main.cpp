@@ -36,6 +36,7 @@ import vulkan_hpp;
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
+constexpr int MAX_OBJECTS = 3;
 
 const std::string  MODEL_PATH = "../models/swat.gltf";
 const std::string  TEXTURE_PATH = "../textures/Swat_Ch15_body_BaseColor.ktx";
@@ -94,6 +95,32 @@ struct UniformBufferObject
 	alignas(16) glm::mat4 proj;
 };
 
+// Define a structure to hold per-object data
+struct GameObject {
+	// Transform properties
+	glm::vec3 position = { 0.0f, 5.25f, 0.0f };
+	glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
+	glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
+
+	// Uniform buffer for this object (one per frame in flight)
+	std::vector<vk::raii::Buffer> uniformBuffers;
+	std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
+	std::vector<void*> uniformBuffersMapped;
+
+	// Descriptor sets for this object (one per frame in flight)
+	std::vector<vk::raii::DescriptorSet> descriptorSets;
+
+	// Calculate model matrix based on position, rotation, and scale
+	glm::mat4 getModelMatrix() const {
+		glm::mat4 model = glm::mat4(1.0f);
+		model = glm::translate(model, position);
+		model = glm::rotate(model, rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+		model = glm::rotate(model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+		model = glm::rotate(model, rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+		model = glm::scale(model, scale);
+		return model;
+	}
+};
 
 class HelloTriangleApplication {
 public:
@@ -123,6 +150,7 @@ private:
 		createTextureImageView();
 		createTextureSampler();
 		loadModel();
+		setupGameObjects();
 		createVertexBuffer();
 		createIndexBuffer();
 		createUniformBuffers();
@@ -165,6 +193,24 @@ private:
 	void cleanup() {
 		glfwDestroyWindow(window);
 		glfwTerminate();
+	}
+
+	// Initialize the game objects with different positions, rotations, and scales
+	void setupGameObjects() {
+		// Object 1 - Center
+		gameObjects[0].position = { 0.0f, 1.25f, 0.0f };
+		gameObjects[0].rotation = { 0.0f, 0.0f, 0.0f };
+		gameObjects[0].scale = { 1.0f, 1.0f, 1.0f };
+
+		// Object 2 - Left
+		gameObjects[1].position = { -2.0f, 1.25f, -1.0f };
+		gameObjects[1].rotation = { 0.0f, glm::radians(45.0f), 0.0f };
+		gameObjects[1].scale = { 0.75f, 0.75f, 0.75f };
+
+		// Object 3 - Right
+		gameObjects[2].position = { 2.0f, 1.25f, -1.0f };
+		gameObjects[2].rotation = { 0.0f, glm::radians(-45.0f), 0.0f };
+		gameObjects[2].scale = { 0.75f, 0.75f, 0.75f };
 	}
 
 	void recreateSwapChain()
@@ -962,77 +1008,119 @@ private:
 
 	void createUniformBuffers()
 	{
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		{
-			vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-			
-			vk::raii::Buffer buffer({});
-			vk::raii::DeviceMemory bufferMem({});
-			createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, buffer, bufferMem);
-			uniformBuffers.emplace_back(std::move(buffer));
-			uniformBuffersMemory.emplace_back(std::move(bufferMem));
-			uniformBuffersMapped.emplace_back(uniformBuffersMemory.back().mapMemory(0, bufferSize));
+		// For each game object
+		for (auto& gameObject : gameObjects) {
+			gameObject.uniformBuffers.clear();
+			gameObject.uniformBuffersMemory.clear();
+			gameObject.uniformBuffersMapped.clear();
+
+			// Create uniform buffers for each frame in flight
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+				vk::raii::Buffer buffer({});
+				vk::raii::DeviceMemory bufferMem({});
+				createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+					vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+					buffer, bufferMem);
+				gameObject.uniformBuffers.emplace_back(std::move(buffer));
+				gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
+				gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));
+			}
 		}
 	}
 
-	void updateUniformBuffer(uint32_t currentImage)
-	{
+	void updateUniformBuffers() {
 		static auto startTime = std::chrono::high_resolution_clock::now();
-
 		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+		float time = std::chrono::duration<float>(currentTime - startTime).count();
 
-		UniformBufferObject ubo{};
-		ubo.model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.25f, 0.0f));
-		ubo.model = rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		ubo.view = lookAt(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		ubo.proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
-	//	ubo.proj[1][1] *= -1;
-		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+		// Camera and projection matrices (shared by all objects)
+		glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 proj = glm::perspective(glm::radians(45.0f),
+			static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height),
+			0.1f, 20.0f);
+	//	proj[1][1] *= -1; // Flip Y for Vulkan
+
+		// Update uniform buffers for each object
+		for (auto& gameObject : gameObjects) {
+			// Apply continuous rotation to the object
+			gameObject.rotation.y += 0.001f; // Slow rotation around Y axis
+
+			// Get the model matrix for this object
+			glm::mat4 initialRotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+			glm::mat4 model = gameObject.getModelMatrix() * initialRotation;
+
+			// Create and update the UBO
+			UniformBufferObject ubo{
+				.model = model,
+				.view = view,
+				.proj = proj
+			};
+
+			// Copy the UBO data to the mapped memory
+			memcpy(gameObject.uniformBuffersMapped[frameIndex], &ubo, sizeof(ubo));
+		}
 	}
 
 	void createDescriptorPool()
 	{
-		std::array<vk::DescriptorPoolSize, 2> poolSize{ {{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_FRAMES_IN_FLIGHT},
-														{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = MAX_FRAMES_IN_FLIGHT}} };
+		std::array<vk::DescriptorPoolSize, 2> poolSize{ {{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT},
+														{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT}} };
 		vk::DescriptorPoolCreateInfo          poolInfo{ .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-													   .maxSets = MAX_FRAMES_IN_FLIGHT,
+													   .maxSets = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT,
 													   .poolSizeCount = static_cast<uint32_t>(poolSize.size()),
 													   .pPoolSizes = poolSize.data() };
 
 		descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	}
 
-	void createDescriptorSets()
-	{
-		std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
-		vk::DescriptorSetAllocateInfo        allocInfo{ .descriptorPool = descriptorPool,
-													   .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-													   .pSetLayouts = layouts.data() };
+	void createDescriptorSets() {
+		// For each game object
+		for (auto& gameObject : gameObjects) {
+			// Create descriptor sets for each frame in flight
+			std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
+			vk::DescriptorSetAllocateInfo allocInfo{
+				.descriptorPool = *descriptorPool,
+				.descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+				.pSetLayouts = layouts.data()
+			};
 
-		descriptorSets = device.allocateDescriptorSets(allocInfo);
+			gameObject.descriptorSets.clear();
+			gameObject.descriptorSets = device.allocateDescriptorSets(allocInfo);
 
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		{
-			vk::DescriptorBufferInfo bufferInfo{ .buffer = uniformBuffers[i], .offset = 0, .range = sizeof(UniformBufferObject) };
-			vk::DescriptorImageInfo  imageInfo{ .sampler = textureSampler, .imageView = textureImageView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
-
-			std::array<vk::WriteDescriptorSet, 2> descriptorWrites{ {{.dstSet = descriptorSets[i],
-																	 .dstBinding = 0,
-																	 .dstArrayElement = 0,
-																	 .descriptorCount = 1,
-																	 .descriptorType = vk::DescriptorType::eUniformBuffer,
-																	 .pBufferInfo = &bufferInfo},
-																	{.dstSet = descriptorSets[i],
-																	 .dstBinding = 1,
-																	 .dstArrayElement = 0,
-																	 .descriptorCount = 1,
-																	 .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-																	 .pImageInfo = &imageInfo}} };
-			device.updateDescriptorSets(descriptorWrites, {});
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				vk::DescriptorBufferInfo bufferInfo{
+					.buffer = *gameObject.uniformBuffers[i],
+					.offset = 0,
+					.range = sizeof(UniformBufferObject)
+				};
+				vk::DescriptorImageInfo imageInfo{
+					.sampler = *textureSampler,
+					.imageView = *textureImageView,
+					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+				};
+				std::array descriptorWrites{
+					vk::WriteDescriptorSet{
+						.dstSet = *gameObject.descriptorSets[i],
+						.dstBinding = 0,
+						.dstArrayElement = 0,
+						.descriptorCount = 1,
+						.descriptorType = vk::DescriptorType::eUniformBuffer,
+						.pBufferInfo = &bufferInfo
+					},
+					vk::WriteDescriptorSet{
+						.dstSet = *gameObject.descriptorSets[i],
+						.dstBinding = 1,
+						.dstArrayElement = 0,
+						.descriptorCount = 1,
+						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+						.pImageInfo = &imageInfo
+					}
+				};
+				device.updateDescriptorSets(descriptorWrites, {});
+			}
 		}
 	}
-
 	uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
 	{
 		vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
@@ -1148,14 +1236,27 @@ private:
 
 		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
 
-		commandBuffer.bindVertexBuffers(0, { *vertexBuffer }, { 0 });
-		commandBuffers[frameIndex].bindIndexBuffer(*indexBuffer, 0, vk::IndexTypeValue<decltype(indices)::value_type>::value);
-
 		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
 		commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-		commandBuffers[frameIndex].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSets[frameIndex], nullptr);
+		
+		// Bind vertex and index buffers (shared by all objects)
+		commandBuffers[frameIndex].bindVertexBuffers(0, *vertexBuffer, { 0 });
+		commandBuffers[frameIndex].bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint32);
 
-		commandBuffer.drawIndexed(static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+		// Draw each object with its own descriptor set
+		for (const auto& gameObject : gameObjects) {
+			// Bind the descriptor set for this object
+			commandBuffers[frameIndex].bindDescriptorSets(
+				vk::PipelineBindPoint::eGraphics,
+				*pipelineLayout,
+				0,
+				*gameObject.descriptorSets[frameIndex],
+				nullptr
+			);
+
+			// Draw the object
+			commandBuffers[frameIndex].drawIndexed(indices.size(), 1, 0, 0, 0);
+		}
 
 		commandBuffer.endRendering();
 
@@ -1217,7 +1318,7 @@ private:
 
 		queue.waitIdle();
 
-		updateUniformBuffer(frameIndex);
+		updateUniformBuffers();
 
 		vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,
@@ -1317,6 +1418,8 @@ private:
 	vk::raii::ImageView depthImageView = nullptr;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
+
+	std::array<GameObject, MAX_OBJECTS> gameObjects;
 };
 
 int main()

@@ -1,5 +1,6 @@
 struct VSInput {
-    float2 inPosition;
+    float3 inPosition;
+    float3 inColor;
     float2 inTexCoord;
 };
 
@@ -13,6 +14,7 @@ ConstantBuffer<UniformBuffer> ubo;
 struct VertexOutput 
 {
 	float4 sv_position : SV_POSITION;
+    float3 color : COLOR;
     float2 fragTexCoord;
 };
 
@@ -20,7 +22,8 @@ struct VertexOutput
 VertexOutput vertMain(VSInput input)
 {
 	VertexOutput output;
-    output.sv_position = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 0.0, 1.0))));
+    output.sv_position = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 1.0))));
+    output.color = input.inColor;
 	output.fragTexCoord = input.inTexCoord;
 	return output;
 }

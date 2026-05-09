@@ -33,8 +33,10 @@ import vulkan_hpp;
 #define GLFW_INCLUDE_VULKAN        // REQUIRED only for GLFW CreateWindowSurface.
 #include <GLFW/glfw3.h>
 
-constexpr uint32_t WIDTH = 800;
-constexpr uint32_t HEIGHT = 600;
+#include "ECS/components/camera_component.h"
+
+constexpr uint32_t WIDTH = 1920;
+constexpr uint32_t HEIGHT = 1080;
 constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
 constexpr int MAX_OBJECTS = 3;
 
@@ -191,11 +193,22 @@ private:
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Novus Engine", nullptr, nullptr);
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+
+		camera.setupInputCallbacks(window);
+		camera.getViewMatrix();
+		camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT);
 	}
 
 	void mainLoop() {
+		lastFrameTime = 0.0f;
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
+			static auto startTime = std::chrono::high_resolution_clock::now();
+			auto currentTime = std::chrono::high_resolution_clock::now();
+			float time = std::chrono::duration<float>(currentTime - startTime).count();
+			float deltaTime = time - lastFrameTime;
+			lastFrameTime = time;
+			camera.processInput(window, camera, deltaTime);
 			drawFrame();
 		}
 
@@ -1068,15 +1081,9 @@ private:
 	}
 
 	void updateUniformBuffers() {
-		static auto startTime = std::chrono::high_resolution_clock::now();
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float>(currentTime - startTime).count();
-
 		// Camera and projection matrices (shared by all objects)
-		glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.5f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		glm::mat4 proj = glm::perspective(glm::radians(45.0f),
-			static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height),
-			0.1f, 2000.0f);
+		glm::mat4 view = camera.getViewMatrix();
+		glm::mat4 proj = camera.getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 2000.0f);
 	//	proj[1][1] *= -1; // Flip Y for Vulkan
 
 		// Update uniform buffers for each object
@@ -1456,6 +1463,13 @@ private:
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 
 	std::array<GameObject, MAX_OBJECTS> gameObjects;
+
+
+
+	// ENGINE REFACTOR
+
+	Camera camera;
+	float lastFrameTime = 0.0f;
 };
 
 int main()

@@ -97,6 +97,7 @@ struct UniformBufferObject
 
 // Define a structure to hold per-object data
 struct GameObject {
+
 	// Transform properties
 	glm::vec3 position = { 0.0f, 5.25f, 0.0f };
 	glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
@@ -107,8 +108,19 @@ struct GameObject {
 	std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
 	std::vector<void*> uniformBuffersMapped;
 
+	vk::raii::Buffer vertexBuffer = { {} };
+	vk::raii::DeviceMemory vertexBufferMemory = nullptr;
+	void* vertexBufferMapped = nullptr;
+
+	vk::raii::Buffer indexBuffer = { {} };
+	vk::raii::DeviceMemory indexBufferMemory = nullptr;
+	void* indexBufferMapped = nullptr;
+
 	// Descriptor sets for this object (one per frame in flight)
 	std::vector<vk::raii::DescriptorSet> descriptorSets;
+
+	std::vector<Vertex>    vertices;
+	std::vector<uint32_t>  indices;
 
 	// Calculate model matrix based on position, rotation, and scale
 	glm::mat4 getModelMatrix() const {
@@ -149,10 +161,13 @@ private:
 		createTextureImage();
 		createTextureImageView();
 		createTextureSampler();
-		loadModel();
 		setupGameObjects();
-		createVertexBuffer();
-		createIndexBuffer();
+		createVertexBuffer(gameObjects[0]);
+		createVertexBuffer(gameObjects[1]);
+		createVertexBuffer(gameObjects[2]);
+		createIndexBuffer(gameObjects[0]);
+		createIndexBuffer(gameObjects[1]);
+		createIndexBuffer(gameObjects[2]);
 		createUniformBuffers();
 		createDescriptorPool();
 		createDescriptorSets();
@@ -201,16 +216,27 @@ private:
 		gameObjects[0].position = { 0.0f, 1.25f, 0.0f };
 		gameObjects[0].rotation = { 0.0f, 0.0f, 0.0f };
 		gameObjects[0].scale = { 1.0f, 1.0f, 1.0f };
+		gameObjects[0].vertexBuffer = nullptr;
+		gameObjects[0].indexBuffer = nullptr;
+		loadModel("../models/swat.gltf", gameObjects[0]);
 
 		// Object 2 - Left
 		gameObjects[1].position = { -2.0f, 1.25f, -1.0f };
 		gameObjects[1].rotation = { 0.0f, glm::radians(45.0f), 0.0f };
 		gameObjects[1].scale = { 0.75f, 0.75f, 0.75f };
+		gameObjects[1].vertexBuffer = nullptr;
+		gameObjects[1].indexBuffer = nullptr;
+
+		loadModel("../models/EnemyEly.gltf", gameObjects[1]);
 
 		// Object 3 - Right
 		gameObjects[2].position = { 2.0f, 1.25f, -1.0f };
 		gameObjects[2].rotation = { 0.0f, glm::radians(-45.0f), 0.0f };
 		gameObjects[2].scale = { 0.75f, 0.75f, 0.75f };
+		gameObjects[2].vertexBuffer = nullptr;
+		gameObjects[2].indexBuffer = nullptr;
+
+		loadModel("../models/EnemyEly.gltf", gameObjects[2]);
 	}
 
 	void recreateSwapChain()
@@ -843,14 +869,14 @@ private:
 		endSingleTimeCommands(std::move(commandCopyBuffer));
 	}
 
-	void loadModel()
+	void loadModel(std::string modelFilename, GameObject& gameObj)
 	{
 		tinygltf::Model    model;
 		tinygltf::TinyGLTF loader;
 		std::string        err;
 		std::string        warn;
 
-		bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, MODEL_PATH);
+		bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, modelFilename);
 
 		if (!warn.empty())
 		{
@@ -867,8 +893,8 @@ private:
 			throw std::runtime_error("Failed to load glTF model");
 		}
 
-		vertices.clear();
-		indices.clear();
+		gameObj.vertices.clear();
+		gameObj.indices.clear();
 
 		// Process all meshes in the model
 		for (const auto& mesh : model.meshes)
@@ -898,7 +924,7 @@ private:
 					texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
 				}
 
-				uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
+				uint32_t baseVertex = static_cast<uint32_t>(gameObj.vertices.size());
 
 				for (size_t i = 0; i < posAccessor.count; i++)
 				{
@@ -922,7 +948,7 @@ private:
 
 					vertex.color = { 1.0f, 1.0f, 1.0f };
 
-					vertices.push_back(vertex);
+					gameObj.vertices.push_back(vertex);
 				}
 
 				const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
@@ -947,7 +973,7 @@ private:
 					throw std::runtime_error("Unsupported index component type");
 				}
 
-				indices.reserve(indices.size() + indexCount);
+				gameObj.indices.reserve(gameObj.indices.size() + indexCount);
 
 				for (size_t i = 0; i < indexCount; i++)
 				{
@@ -966,44 +992,44 @@ private:
 						index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
 					}
 
-					indices.push_back(baseVertex + index);
+					gameObj.indices.push_back(baseVertex + index);
 				}
 			}
 		}
 
 	}
 
-	void createVertexBuffer()
+	void createVertexBuffer(GameObject& gameObj)
 	{
-		vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+		vk::DeviceSize bufferSize = sizeof(gameObj.vertices[0]) * gameObj.vertices.size();
 
 		vk::raii::Buffer       stagingBuffer({});
 		vk::raii::DeviceMemory stagingBufferMemory({});
 		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
 		void* dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
-		memcpy(dataStaging, vertices.data(), bufferSize);
+		memcpy(dataStaging, gameObj.vertices.data(), bufferSize);
 		stagingBufferMemory.unmapMemory();
 
-		createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal, gameObj.vertexBuffer, gameObj.vertexBufferMemory);
 
-		copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+		copyBuffer(stagingBuffer, gameObj.vertexBuffer, bufferSize);
 	}
 
-	void createIndexBuffer()
+	void createIndexBuffer(GameObject& gameObj)
 	{
-		vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+		vk::DeviceSize bufferSize = sizeof(gameObj.indices[0]) * gameObj.indices.size();
 
 		vk::raii::Buffer stagingBuffer({});
 		vk::raii::DeviceMemory stagingBufferMemory({});
 		createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
 		void* dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
-		memcpy(dataStaging, indices.data(), bufferSize);
+		memcpy(dataStaging, gameObj.indices.data(), bufferSize);
 		stagingBufferMemory.unmapMemory();
 
-		createBuffer(bufferSize, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
-		copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+		createBuffer(bufferSize, vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst, vk::MemoryPropertyFlagBits::eDeviceLocal, gameObj.indexBuffer, gameObj.indexBufferMemory);
+		copyBuffer(stagingBuffer, gameObj.indexBuffer, bufferSize);
 	}
 
 	void createUniformBuffers()
@@ -1239,12 +1265,12 @@ private:
 		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
 		commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 		
-		// Bind vertex and index buffers (shared by all objects)
-		commandBuffers[frameIndex].bindVertexBuffers(0, *vertexBuffer, { 0 });
-		commandBuffers[frameIndex].bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint32);
 
 		// Draw each object with its own descriptor set
 		for (const auto& gameObject : gameObjects) {
+			// Bind vertex and index buffers (shared by all objects)
+			commandBuffers[frameIndex].bindVertexBuffers(0, *gameObject.vertexBuffer, { 0 });
+			commandBuffers[frameIndex].bindIndexBuffer(*gameObject.indexBuffer, 0, vk::IndexType::eUint32);
 			// Bind the descriptor set for this object
 			commandBuffers[frameIndex].bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics,
@@ -1255,7 +1281,7 @@ private:
 			);
 
 			// Draw the object
-			commandBuffers[frameIndex].drawIndexed(indices.size(), 1, 0, 0, 0);
+			commandBuffers[frameIndex].drawIndexed(gameObject.indices.size(), 1, 0, 0, 0);
 		}
 
 		commandBuffer.endRendering();
@@ -1397,8 +1423,6 @@ private:
 	std::vector<vk::raii::Fence>     inFlightFences;
 	uint32_t frameIndex = 0;
 
-	std::vector<Vertex>    vertices;
-	std::vector<uint32_t>  indices;
 	vk::raii::Buffer vertexBuffer = nullptr;
 	vk::raii::DeviceMemory vertexBufferMemory = nullptr;
 	vk::raii::Buffer       indexBuffer = nullptr;

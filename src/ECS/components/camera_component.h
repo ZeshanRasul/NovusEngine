@@ -30,8 +30,8 @@ private:
 	float movementSpeed;
 	float mouseSensitivity;
 	float zoom;
-
 	void updateCameraVectors();
+
 
 public:
 
@@ -44,6 +44,7 @@ public:
 		: position(position), worldUp(up), yaw(yaw), pitch(pitch),
 		movementSpeed(14.5f), mouseSensitivity(0.1f), zoom(45.0f)
 	{
+		updateCameraVectors();
 	};
 
 	glm::mat4 getViewMatrix() const;

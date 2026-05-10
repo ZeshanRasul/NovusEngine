@@ -2,7 +2,7 @@
 
 class ComponentTypeIDSystem {
 private:
-    static size_t nextTypeID;
+    inline static size_t nextTypeID = 0;
 
 public:
     template<typename T>

@@ -36,11 +36,12 @@ import vulkan_hpp;
 #include "ECS/components/camera_component.h"
 #include "ECS/entity.h"
 #include "ECS/components/transform_component.h"
+#include "renderer/renderer_types.h"
+#include "ECS/components/renderable_component.h"
 
 constexpr uint32_t WIDTH = 1920;
 constexpr uint32_t HEIGHT = 1080;
 constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
-constexpr int MAX_OBJECTS = 3;
 
 const std::string  MODEL_PATH = "../models/swat.gltf";
 const std::string  TEXTURE_PATH = "../textures/Swat_Ch15_body_BaseColor.ktx";
@@ -54,45 +55,6 @@ constexpr bool enableValidationLayers = false;
 #else
 constexpr bool enableValidationLayers = true;
 #endif
-
-struct Vertex
-{
-	glm::vec3 pos;
-	glm::vec3 normal;
-	glm::vec2 texCoord;
-	glm::vec4 tangent;
-
-	static vk::VertexInputBindingDescription getBindingDescription()
-	{
-		return { .binding = 0, .stride = sizeof(Vertex), .inputRate = vk::VertexInputRate::eVertex };
-	}
-
-	static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions() {
-		return {
-			vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, pos)),
-			vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal)),
-			vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord)),
-			vk::VertexInputAttributeDescription(3, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(Vertex, tangent))
-		};
-	};
-
-	bool operator==(const Vertex& other) const
-	{
-		return pos == other.pos && normal == other.normal && texCoord == other.texCoord && tangent == other.tangent;
-	}
-
-};
-
-namespace std
-{
-	template<> struct hash<Vertex>
-	{
-		size_t operator()(Vertex const& vertex) const
-		{
-			return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.normal) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1) ^ (hash<glm::vec4>()(vertex.tangent) << 1);
-		}
-	};
-}
 
 struct UniformBufferObject
 {
@@ -110,140 +72,7 @@ struct UniformBufferObject
 
 };
 
-class Material {
-public:
-	explicit Material(std::string name) : name(std::move(name)) {
-	}
-	~Material() = default;
-
-	[[nodiscard]] const std::string& GetName() const {
-		return name;
-	}
-
-	// PBR properties (Metallic-Roughness default)
-	glm::vec3 albedo = glm::vec3(1.0f);
-	float metallic = 0.0;
-	float roughness = 0.6;
-	float ao = 1.0f;
-	glm::vec3 emissive = glm::vec3(0.0f);
-	float ior = 1.5f; // Index of refraction
-	float emissiveStrength = 1.0f; // KHR_materials_emissive_strength extension
-	float alpha = 1.0f; // Base color alpha (from MR baseColorFactor or SpecGloss diffuseFactor)
-	float transmissionFactor = 0.0f; // KHR_materials_transmission: 0=opaque, 1=fully transmissive
-
-	// Specular-Glossiness workflow (KHR_materials_pbrSpecularGlossiness)
-	bool useSpecularGlossiness = false;
-	glm::vec3 specularFactor = glm::vec3(0.04f);
-	float glossinessFactor = 1.0f;
-	std::string specGlossTexturePath; // Stored separately; also mirrored to metallicRoughnessTexturePath for binding 2
-
-	// Alpha handling (glTF alphaMode and cutoff)
-	std::string alphaMode = "OPAQUE"; // "OPAQUE", "MASK", or "BLEND"
-	float alphaCutoff = 0.5f; // Used when alphaMode == MASK
-
-	// Texture paths for PBR materials
-	std::string albedoTexturePath;
-	std::string normalTexturePath;
-	std::string metallicRoughnessTexturePath;
-	std::string occlusionTexturePath;
-	std::string emissiveTexturePath;
-
-	// Hint used by the renderer to select a specialized glass rendering path
-	// for architectural glass (windows, lamp glass, etc.). Set by ModelLoader
-	// based on material name/properties; defaults to false so non-glass
-	// materials continue to use the generic PBR path.
-	bool isGlass = false;
-
-	// Hint used by the renderer to preferentially render inner liquid volumes
-	// before outer glass shells (e.g., beer/wine in bar glasses). Set by
-	// ModelLoader based on material name/properties; defaults to false.
-	bool isLiquid = false;
-
-	glm::vec4 baseColorFactor = glm::vec4(1.0f);
-	float metallicFactor = 0.0f;
-	float roughnessFactor = 1.0f;
-	float baseColorTextureIndex = -1.0f;
-	float metallicRoughnessTextureIndex = -1.0f;
-	float normalTextureIndex = -1.0f;
-	float occlusionTextureIndex = -1.0f;
-	float emissiveTextureIndex = -1.0f;
-
-private:
-	std::string name;
-};
-
-// Define a mesh structure to track individual primitives/submeshes
-struct Mesh {
-	uint32_t firstIndex = 0;      // Starting index in the index buffer
-	uint32_t indexCount = 0;      // Number of indices for this mesh
-	uint32_t materialIndex = 0;   // Index into materials array (if you have multiple materials)
-};
-
-// Define a structure to hold per-object data
-struct GameObject {
-
-	// Transform properties
-	glm::vec3 position = { 0.0f, 5.25f, 0.0f };
-	glm::vec3 rotation = { 0.0f, 0.0f, 0.0f };
-	glm::vec3 scale = { 1.0f, 1.0f, 1.0f };
-
-	// Uniform buffer for this object (one per frame in flight)
-	std::vector<vk::raii::Buffer> uniformBuffers;
-	std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
-	std::vector<void*> uniformBuffersMapped;
-
-	vk::raii::Buffer vertexBuffer = { {} };
-	vk::raii::DeviceMemory vertexBufferMemory = nullptr;
-	void* vertexBufferMapped = nullptr;
-
-	vk::raii::Buffer indexBuffer = { {} };
-	vk::raii::DeviceMemory indexBufferMemory = nullptr;
-	void* indexBufferMapped = nullptr;
-
-	// PBR textures - 5 texture slots for complete PBR rendering
-	struct PBRTextures {
-		vk::raii::Image        baseColorImage = nullptr;
-		vk::raii::DeviceMemory baseColorMemory = nullptr;
-		vk::raii::ImageView    baseColorView = nullptr;
-
-		vk::raii::Image        metallicRoughnessImage = nullptr;
-		vk::raii::DeviceMemory metallicRoughnessMemory = nullptr;
-		vk::raii::ImageView    metallicRoughnessView = nullptr;
-
-		vk::raii::Image        normalImage = nullptr;
-		vk::raii::DeviceMemory normalMemory = nullptr;
-		vk::raii::ImageView    normalView = nullptr;
-
-		vk::raii::Image        occlusionImage = nullptr;
-		vk::raii::DeviceMemory occlusionMemory = nullptr;
-		vk::raii::ImageView    occlusionView = nullptr;
-
-		vk::raii::Image        emissiveImage = nullptr;
-		vk::raii::DeviceMemory emissiveMemory = nullptr;
-		vk::raii::ImageView    emissiveView = nullptr;
-  };
-
-    std::vector<Material> materials;
-	std::vector<PBRTextures> materialTextures;
-	std::vector<std::vector<vk::raii::DescriptorSet>> materialDescriptorSets;
-
-	std::vector<Vertex>    vertices;
-	std::vector<uint32_t>  indices;
-
-	// Mesh information for submeshes
-	std::vector<Mesh>      meshes;
-
-	// Calculate model matrix based on position, rotation, and scale
-	glm::mat4 getModelMatrix() const {
-		glm::mat4 model = glm::mat4(1.0f);
-		model = glm::translate(model, position);
-		model = glm::rotate(model, rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-		model = glm::rotate(model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-		model = glm::rotate(model, rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-		model = glm::scale(model, scale);
-		return model;
-	}
-};
+// Vertex, Material, and Mesh are defined in renderer/renderer_types.h (included via renderable_component.h)
 
 class HelloTriangleApplication {
 public:
@@ -278,13 +107,10 @@ private:
 		createTextureSampler();
 		createDefaultTextures();
 		setupGameObjects();
-		createVertexBuffer(gameObjects[0]);
-		createVertexBuffer(gameObjects[0]);
-		createVertexBuffer(gameObjects[1]);
-		createVertexBuffer(gameObjects[2]);
-		createIndexBuffer(gameObjects[0]);
-		createIndexBuffer(gameObjects[1]);
-		createIndexBuffer(gameObjects[2]);
+		for (auto& entityPtr : entities) {
+			createVertexBuffer(*entityPtr->GetComponent<RenderableComponent>());
+			createIndexBuffer(*entityPtr->GetComponent<RenderableComponent>());
+		}
 		createUniformBuffers();
 		createDescriptorPool();
 		createDescriptorSets();
@@ -340,39 +166,43 @@ private:
 
 	// Initialize the game objects with different positions, rotations, and scales
 	void setupGameObjects() {
-		// Object 1 - Flight Helmet (Center)
-		gameObjects[0].position = { -3.0f, 0.0f, 0.0f };
-		gameObjects[0].rotation = { 0.0f, 0.0f, 0.0f };
-		gameObjects[0].scale = { 3.0f, 3.0f, 3.0f };
-		gameObjects[0].vertexBuffer = nullptr;
-		gameObjects[0].indexBuffer = nullptr;
-		loadModel("../models/FlightHelmet.gltf", gameObjects[0]);
-        for (size_t i = 0; i < gameObjects[0].materials.size(); ++i) {
-			loadPBRTextures(gameObjects[0].materials[i], gameObjects[0].materialTextures[i]);
-		}
+		// Helper lambda to create an entity with TransformComponent and RenderableComponent
+		auto makeEntity = [&](const std::string& name,
+							  glm::vec3 position, glm::vec3 rotation, glm::vec3 scale,
+							  const std::string& modelPath) -> Entity& {
+			entities.push_back(std::make_unique<Entity>(name));
+			Entity& entity = *entities.back();
 
-		// Object 2 - Damaged Helmet (Left)
-		gameObjects[2].position = { 3.0f, 0.0f, 0.0f };
-		gameObjects[1].rotation = { 0.0f, 0.0f, 0.0f };
-		gameObjects[1].scale = { 0.75f, 0.75f, 0.75f };
-		gameObjects[1].vertexBuffer = nullptr;
-		gameObjects[1].indexBuffer = nullptr;
-		loadModel("../models/DamagedHelmet.gltf", gameObjects[1]);
-        for (size_t i = 0; i < gameObjects[1].materials.size(); ++i) {
-			loadPBRTextures(gameObjects[1].materials[i], gameObjects[1].materialTextures[i]);
+			auto* transform = entity.AddComponent<TransformComponent>();
+			transform->SetPosition(position);
+			transform->SetRotation(glm::quat(rotation));
+			transform->SetScale(scale);
+
+			auto* renderable = entity.AddComponent<RenderableComponent>();
+			loadModel(modelPath, *renderable);
+			for (size_t i = 0; i < renderable->materials.size(); ++i) {
+				loadPBRTextures(renderable->materials[i], renderable->materialTextures[i]);
+			}
+			return entity;
+		};
+
+		// Object 1 - Flight Helmet (Left)
+		makeEntity("FlightHelmet_Left",
+			{ -3.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3.0f, 3.0f, 3.0f },
+			"../models/FlightHelmet.gltf");
+
+		// Object 2 - Damaged Helmet (Center)
+		{
+			Entity& e = makeEntity("DamagedHelmet",
+				{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.75f, 0.75f, 0.75f },
+				"../models/DamagedHelmet.gltf");
+			e.GetComponent<RenderableComponent>()->materials[0].metallicFactor = 1.0f;
 		}
-		gameObjects[1].materials[0].metallicFactor = 1.0f; // Override metallic factor for a more pronounced metallic look
 
 		// Object 3 - Flight Helmet (Right)
-		gameObjects[1].position = { 0.0f, 0.0f, 0.0f };
-		gameObjects[2].rotation = { 0.0f, glm::radians(-45.0f), 0.0f };
-		gameObjects[2].scale = { 3.0f, 3.0f, 3.0f };
-		gameObjects[2].vertexBuffer = nullptr;
-		gameObjects[2].indexBuffer = nullptr;
-		loadModel("../models/FlightHelmet.gltf", gameObjects[2]);
-        for (size_t i = 0; i < gameObjects[2].materials.size(); ++i) {
-			loadPBRTextures(gameObjects[2].materials[i], gameObjects[2].materialTextures[i]);
-		}
+		makeEntity("FlightHelmet_Right",
+			{ 3.0f, 0.0f, 0.0f }, { 0.0f, glm::radians(-45.0f), 0.0f }, { 3.0f, 3.0f, 3.0f },
+			"../models/FlightHelmet.gltf");
 	}
 
 	void recreateSwapChain()
@@ -1028,7 +858,7 @@ private:
 	}
 
    // Load all PBR textures for a material
-	void loadPBRTextures(const Material& material, GameObject::PBRTextures& textures) {
+	void loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures) {
 		std::cout << "Loading PBR textures for material: " << material.GetName() << std::endl;
 
 		// Base color / albedo (sRGB)
@@ -1178,7 +1008,7 @@ private:
 		endSingleTimeCommands(std::move(commandCopyBuffer));
 	}
 
-	void loadModel(std::string modelFilename, GameObject& gameObj)
+	void loadModel(std::string modelFilename, RenderableComponent& gameObj)
 	{
 		tinygltf::Model    model;
 		tinygltf::TinyGLTF loader;
@@ -1448,7 +1278,7 @@ private:
 
 	}
 
-	void createVertexBuffer(GameObject& gameObj)
+	void createVertexBuffer(RenderableComponent& gameObj)
 	{
 		vk::DeviceSize bufferSize = sizeof(gameObj.vertices[0]) * gameObj.vertices.size();
 
@@ -1465,7 +1295,7 @@ private:
 		copyBuffer(stagingBuffer, gameObj.vertexBuffer, bufferSize);
 	}
 
-	void createIndexBuffer(GameObject& gameObj)
+	void createIndexBuffer(RenderableComponent& gameObj)
 	{
 		vk::DeviceSize bufferSize = sizeof(gameObj.indices[0]) * gameObj.indices.size();
 
@@ -1483,8 +1313,9 @@ private:
 
 	void createUniformBuffers()
 	{
-		// For each game object
-		for (auto& gameObject : gameObjects) {
+		// For each entity
+		for (auto& entityPtr : entities) {
+			auto& gameObject = *entityPtr->GetComponent<RenderableComponent>();
 			gameObject.uniformBuffers.clear();
 			gameObject.uniformBuffersMemory.clear();
 			gameObject.uniformBuffersMapped.clear();
@@ -1510,33 +1341,33 @@ private:
 		glm::mat4 proj = camera.getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 2000.0f);
 		//	proj[1][1] *= -1; // Flip Y for Vulkan
 
-			// Update uniform buffers for each object
-		for (auto& gameObject : gameObjects) {
-			// Apply continuous rotation to the object
-		//	gameObject.rotation.y += 0.001f; // Slow rotation around Y axis
+			// Update uniform buffers for each entity
+			for (auto& entityPtr : entities) {
+					auto* renderable = entityPtr->GetComponent<RenderableComponent>();
+					auto* transform = entityPtr->GetComponent<TransformComponent>();
 
-			// Get the model matrix for this object
-			glm::mat4 initialRotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-			glm::mat4 model = gameObject.getModelMatrix();
+				glm::mat4 model = transform ? transform->GetTransformMatrix() : glm::mat4(1.0f);
 
-			// Create and update the UBO
-			UniformBufferObject ubo{
-				.model = model,
-				.view = view,
-				.proj = proj
-			};
+				// Create and update the UBO
+				UniformBufferObject ubo{
+					.model = model,
+					.view = view,
+					.proj = proj
+				};
 
-			// Copy the UBO data to the mapped memory
-			memcpy(gameObject.uniformBuffersMapped[frameIndex], &ubo, sizeof(ubo));
-		}
+				// Copy the UBO data to the mapped memory
+				memcpy(renderable->uniformBuffersMapped[frameIndex], &ubo, sizeof(ubo));
+			}
 	}
 
 	void createDescriptorPool()
 	{
-        uint32_t materialCount = 0;
-		for (const auto& gameObject : gameObjects)
+		uint32_t materialCount = 0;
+		for (auto& entityPtr : entities)
 		{
-			materialCount += static_cast<uint32_t>(std::max<size_t>(1, gameObject.materials.size()));
+			auto* renderable = entityPtr->GetComponent<RenderableComponent>();
+			if (renderable)
+				materialCount += static_cast<uint32_t>(std::max<size_t>(1, renderable->materials.size()));
 		}
 
 		std::array<vk::DescriptorPoolSize, 2> poolSize{ {{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = materialCount * MAX_FRAMES_IN_FLIGHT},
@@ -1550,7 +1381,8 @@ private:
 	}
 
    void createDescriptorSets() {
-		for (auto& gameObject : gameObjects) {
+		for (auto& entityPtr : entities) {
+			auto& gameObject = *entityPtr->GetComponent<RenderableComponent>();
 			gameObject.materialDescriptorSets.clear();
 			gameObject.materialDescriptorSets.resize(gameObject.materials.size());
 
@@ -1667,9 +1499,9 @@ private:
 		commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
 	}
 
-	void pushMaterialProperties(vk::CommandBuffer commandBuffer, const GameObject* model, uint32_t materialIndex) {
+	void pushMaterialProperties(vk::CommandBuffer commandBuffer, const RenderableComponent* model, uint32_t materialIndex) {
 		// Get material from the model
-     const Material& material = model->materials[materialIndex < model->materials.size() ? materialIndex : 0];
+	 const Material& material = model->materials[materialIndex < model->materials.size() ? materialIndex : 0];
 
 		// Define push constants
 		PushConstantBlock pushConstants{};
@@ -1808,27 +1640,31 @@ private:
 
 		// Bind the PBR pipeline
 
-		// For each model in the scene
-		for (auto& model : gameObjects) {
+		// For each entity in the scene
+		for (auto& entityPtr : entities) {
+			auto* renderable = entityPtr->GetComponent<RenderableComponent>();
+			auto* transform = entityPtr->GetComponent<TransformComponent>();
+			if (!renderable || !transform) continue;
+
 			// Bind vertex and index buffers once per model
-			updateUniformBuffer(frameIndex, &model, &camera);
-			vk::Buffer vertexBuffers[] = { model.vertexBuffer };
+			updateUniformBuffer(frameIndex, renderable, transform, &camera);
+			vk::Buffer vertexBuffers[] = { renderable->vertexBuffer };
 			vk::DeviceSize offsets[] = { 0 };
 			commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-			commandBuffer.bindIndexBuffer(*model.indexBuffer, 0, vk::IndexType::eUint32);
+			commandBuffer.bindIndexBuffer(*renderable->indexBuffer, 0, vk::IndexType::eUint32);
 
 			// For each mesh in the model
-			for (const auto& mesh : model.meshes) {
+			for (const auto& mesh : renderable->meshes) {
 				// Push material properties for this mesh
-				pushMaterialProperties(commandBuffer, &model, mesh.materialIndex);
-				uint32_t descriptorMaterialIndex = mesh.materialIndex < model.materialDescriptorSets.size() ? mesh.materialIndex : 0;
+				pushMaterialProperties(commandBuffer, renderable, mesh.materialIndex);
+				uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
 				// Bind descriptor sets
 				commandBuffer.bindDescriptorSets(
 					vk::PipelineBindPoint::eGraphics,
 					*pbrPipelineLayout,
 					0,
-                  *model.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
+					*renderable->materialDescriptorSets[descriptorMaterialIndex][frameIndex],
 					nullptr
 				);
 
@@ -2096,61 +1932,41 @@ private:
 	}
 
 	// Update uniform buffer
-	void updateUniformBuffer(uint32_t currentFrame, GameObject* entity, Camera* camera) {
-		// Get the transform component from the entity
-	//	auto transform = entity->GetComponent<TransformComponent>();
-		//if (!transform) {
-		//	std::cerr << "Entity does not have a transform component" << std::endl;
-		//	return;
-		//}
-
-		// Create the uniform buffer object
+	void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable, TransformComponent* transform, Camera* camera) {
 		UniformBufferObject ubo{};
 
-		// Set the model matrix from the entity's transform
-		ubo.model = glm::translate(glm::mat4(1.0f), entity->position);
-		ubo.model = glm::rotate(ubo.model, glm::radians(entity->rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-		ubo.model = glm::rotate(ubo.model, glm::radians(entity->rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-		ubo.model = glm::rotate(ubo.model, glm::radians(entity->rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.model = glm::scale(ubo.model, glm::vec3(entity->scale));
+		// Model matrix from TransformComponent
+		ubo.model = transform ? transform->GetTransformMatrix() : glm::mat4(1.0f);
 
-		// Set the view and projection matrices from the camera
+		// View and projection from camera
 		if (camera) {
 			ubo.view = camera->getViewMatrix();
 			ubo.proj = camera->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 2000.0f);
 		}
 		else {
-			// Default view and projection matrices if no camera is provided
 			ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 			ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 100.0f);
-			ubo.proj[1][1] *= -1; // Flip Y coordinate for Vulkan
+			ubo.proj[1][1] *= -1;
 		}
 
-        // Set up lights in a tighter studio arrangement around the actual scene bounds.
-		// The objects span roughly x:[-5,1], so keep lights close enough to affect all of them.
+		// Studio light arrangement around the scene bounds (x: [-5, 5])
 		ubo.lightPositions[0] = glm::vec4(-1.5f, 3.5f, 3.0f, 1.0f);  // front key
 		ubo.lightPositions[1] = glm::vec4(-4.5f, 2.5f, 2.0f, 1.0f);  // left fill
 		ubo.lightPositions[2] = glm::vec4(1.5f, 2.0f, -2.5f, 1.0f);  // right rim
 		ubo.lightPositions[3] = glm::vec4(-2.0f, 4.5f, -1.0f, 1.0f); // top back
 
-		// Use balanced white lights first so material response is easier to judge.
 		ubo.lightColors[0] = glm::vec4(2.0f, 0.0f, 0.0f, 1.0f);
 		ubo.lightColors[1] = glm::vec4(0.0f, 0.0f, 4.0f, 1.0f);
 		ubo.lightColors[2] = glm::vec4(0.0f, 4.0f, 0.0f, 1.0f);
 		ubo.lightColors[3] = glm::vec4(6.0f, 0.1f, 0.0f, 1.0f);
 
-		// Set camera position for view-dependent effects
 		ubo.camPos = glm::vec4(camera ? camera->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
-
-		// Set PBR parameters - increased exposure for brighter rendering
 		ubo.exposure = 1.0f;
 		ubo.gamma = 2.2f;
 		ubo.prefilteredCubeMipLevels = 1.0f;
-      ubo.scaleIBLAmbient = 0.02f;
+		ubo.scaleIBLAmbient = 0.02f;
 
-		// Copy the uniform buffer object to the device memory using vk::raii
-		// With vk::raii, we can use the mapped memory directly
-		memcpy(entity->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+		memcpy(renderable->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 	}
 
 private:
@@ -2216,7 +2032,7 @@ private:
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 
-	std::array<GameObject, MAX_OBJECTS> gameObjects;
+	std::vector<std::unique_ptr<Entity>> entities;
 
 
 

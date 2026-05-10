@@ -200,9 +200,9 @@ private:
 		}
 
 		// Object 3 - Flight Helmet (Right)
-		makeEntity("FlightHelmet_Right",
-			{ 3.0f, 0.0f, 0.0f }, { 0.0f, glm::radians(-45.0f), 0.0f }, { 3.0f, 3.0f, 3.0f },
-			"../models/FlightHelmet.gltf");
+		makeEntity("Sponza",
+			{ 0.0f, 0.0f, 0.0f }, { 0.0f, glm::radians(-45.0f), 0.0f }, { 3.0f, 3.0f, 3.0f },
+			"../models/Sponza.gltf");
 	}
 
 	void recreateSwapChain()

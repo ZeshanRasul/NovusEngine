@@ -1,4 +1,27 @@
 #include "imgui_vulkan_util.h"
+#include <fstream>
+#include <stdexcept>
+
+std::vector<char> ImGuiVulkanUtil::readFile(const std::string& filename)
+{
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+	if (!file.is_open())
+		throw std::runtime_error("failed to open file: " + filename);
+	size_t fileSize = static_cast<size_t>(file.tellg());
+	std::vector<char> buffer(fileSize);
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+	return buffer;
+}
+
+vk::raii::ShaderModule ImGuiVulkanUtil::createShaderModule(const std::vector<char>& code)
+{
+	vk::ShaderModuleCreateInfo createInfo{
+		.codeSize = code.size(),
+		.pCode    = reinterpret_cast<const uint32_t*>(code.data())
+	};
+	return vk::raii::ShaderModule(*device, createInfo);
+}
 
 ImGuiVulkanUtil::ImGuiVulkanUtil(vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice,
 	vk::raii::Queue& graphicsQueue, uint32_t graphicsQueueFamily)
@@ -133,13 +156,13 @@ void ImGuiVulkanUtil::initResources() {
 
 	// Create optimized GPU image for font texture storage
 	// This image will be sampled by shaders during UI rendering
-	createImage(1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+	createImage(static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
 		vk::MemoryPropertyFlagBits::eDeviceLocal, fontImage, fontImageMemory);
 
 	// Create image view for shader access
 	// The image view defines how shaders interpret the raw image data
-	createImageView(*fontImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+	fontImageView = createImageView(*fontImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
 
 	vk::raii::Buffer       stagingBuffer({});
 	vk::raii::DeviceMemory stagingBufferMemory({});
@@ -240,14 +263,111 @@ void ImGuiVulkanUtil::initResources() {
 
 	pipelineLayout = device->createPipelineLayout(pipelineLayoutInfo);
 
-	// Create the graphics pipeline with dynamic rendering
-	// ... (shader loading, pipeline state setup, etc.)
+	// Load the compiled imgui shader (vertex + fragment entry points in one SPIR-V blob)
+	auto shaderCode = readFile("../shaders/imgui.spv");
+	vk::raii::ShaderModule shaderModule = createShaderModule(shaderCode);
 
-	// For brevity, we're omitting the full pipeline creation code here
-	// In a real implementation, you would:
-	// 1. Load the vertex and fragment shaders
-	// 2. Set up all the pipeline state (vertex input, input assembly, rasterization, etc.)
-	// 3. Include the renderingInfo in the pipeline creation to enable dynamic rendering
+	vk::PipelineShaderStageCreateInfo vertStageInfo{
+		.stage  = vk::ShaderStageFlagBits::eVertex,
+		.module = shaderModule,
+		.pName  = "vertMain"
+	};
+	vk::PipelineShaderStageCreateInfo fragStageInfo{
+		.stage  = vk::ShaderStageFlagBits::eFragment,
+		.module = shaderModule,
+		.pName  = "fragMain"
+	};
+	vk::PipelineShaderStageCreateInfo shaderStages[] = { vertStageInfo, fragStageInfo };
+
+	// ImDrawVert: pos(float2), uv(float2), col(uint32 packed as R8G8B8A8_UNORM)
+	vk::VertexInputBindingDescription bindingDesc{
+		.binding   = 0,
+		.stride    = sizeof(ImDrawVert),
+		.inputRate = vk::VertexInputRate::eVertex
+	};
+	std::array<vk::VertexInputAttributeDescription, 3> attrDescs{{
+		{ .location = 0, .binding = 0, .format = vk::Format::eR32G32Sfloat,  .offset = offsetof(ImDrawVert, pos) },
+		{ .location = 1, .binding = 0, .format = vk::Format::eR32G32Sfloat,  .offset = offsetof(ImDrawVert, uv)  },
+		{ .location = 2, .binding = 0, .format = vk::Format::eR8G8B8A8Unorm, .offset = offsetof(ImDrawVert, col) }
+	}};
+
+	vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+		.vertexBindingDescriptionCount   = 1,
+		.pVertexBindingDescriptions      = &bindingDesc,
+		.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrDescs.size()),
+		.pVertexAttributeDescriptions    = attrDescs.data()
+	};
+
+	vk::PipelineInputAssemblyStateCreateInfo inputAssembly{ .topology = vk::PrimitiveTopology::eTriangleList };
+
+	vk::PipelineViewportStateCreateInfo viewportState{ .viewportCount = 1, .scissorCount = 1 };
+
+	vk::PipelineRasterizationStateCreateInfo rasterizer{
+		.depthClampEnable        = vk::False,
+		.rasterizerDiscardEnable = vk::False,
+		.polygonMode             = vk::PolygonMode::eFill,
+		.cullMode                = vk::CullModeFlagBits::eNone,
+		.frontFace               = vk::FrontFace::eCounterClockwise,
+		.depthBiasEnable         = vk::False,
+		.lineWidth               = 1.0f
+	};
+
+	vk::PipelineMultisampleStateCreateInfo multisampling{
+		.rasterizationSamples = vk::SampleCountFlagBits::e1,
+		.sampleShadingEnable  = vk::False
+	};
+
+	// Alpha blending for UI transparency
+	vk::PipelineColorBlendAttachmentState colorBlendAttachment{
+		.blendEnable         = vk::True,
+		.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+		.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+		.colorBlendOp        = vk::BlendOp::eAdd,
+		.srcAlphaBlendFactor = vk::BlendFactor::eOne,
+		.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+		.alphaBlendOp        = vk::BlendOp::eAdd,
+		.colorWriteMask      = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+							   vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
+	};
+
+	vk::PipelineColorBlendStateCreateInfo colorBlending{
+		.logicOpEnable   = vk::False,
+		.attachmentCount = 1,
+		.pAttachments    = &colorBlendAttachment
+	};
+
+	// No depth testing for UI overlay
+	vk::PipelineDepthStencilStateCreateInfo depthStencil{
+		.depthTestEnable  = vk::False,
+		.depthWriteEnable = vk::False,
+		.stencilTestEnable = vk::False
+	};
+
+	std::vector<vk::DynamicState> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+	vk::PipelineDynamicStateCreateInfo dynamicState{
+		.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+		.pDynamicStates    = dynamicStates.data()
+	};
+
+	// Chain pipeline create info with dynamic rendering info (no render pass needed)
+	vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineChain = {
+		{ .stageCount          = 2,
+		  .pStages             = shaderStages,
+		  .pVertexInputState   = &vertexInputInfo,
+		  .pInputAssemblyState = &inputAssembly,
+		  .pViewportState      = &viewportState,
+		  .pRasterizationState = &rasterizer,
+		  .pMultisampleState   = &multisampling,
+		  .pDepthStencilState  = &depthStencil,
+		  .pColorBlendState    = &colorBlending,
+		  .pDynamicState       = &dynamicState,
+		  .layout              = *pipelineLayout,
+		  .renderPass          = nullptr },
+		{ .colorAttachmentCount    = 1,
+		  .pColorAttachmentFormats = &colorFormat }
+	};
+
+	pipeline = vk::raii::Pipeline(*device, nullptr, pipelineChain.get<vk::GraphicsPipelineCreateInfo>());
 }
 
 
@@ -263,6 +383,8 @@ bool ImGuiVulkanUtil::newFrame() {
 		// Handle button click
 	}
 	ImGui::End();
+
+	ImGui::ShowDemoWindow();
 
 	// End the frame
 	ImGui::EndFrame();
@@ -323,6 +445,131 @@ void ImGuiVulkanUtil::updateBuffers() {
 
 	vertexBufferMemory.unmapMemory();
 	indexBufferMemory.unmapMemory();
+}
+
+void ImGuiVulkanUtil::drawFrame(vk::raii::CommandBuffer& commandBuffer, vk::ImageView swapchainImageView) {
+	ImDrawData* drawData = ImGui::GetDrawData();
+	if (!drawData || drawData->CmdListsCount == 0) {
+		return;
+	}
+
+	// Begin dynamic rendering
+	vk::RenderingAttachmentInfo colorAttachment{};
+	colorAttachment.imageView   = swapchainImageView;
+	colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+	colorAttachment.loadOp      = vk::AttachmentLoadOp::eLoad;
+	colorAttachment.storeOp     = vk::AttachmentStoreOp::eStore;
+
+	vk::RenderingInfo renderingInfo{};
+	renderingInfo.renderArea = vk::Rect2D{ {0, 0}, {static_cast<uint32_t>(drawData->DisplaySize.x),
+												   static_cast<uint32_t>(drawData->DisplaySize.y)} };
+	renderingInfo.layerCount = 1;
+	renderingInfo.colorAttachmentCount = 1;
+	renderingInfo.pColorAttachments = &colorAttachment;
+	commandBuffer.beginRendering(renderingInfo);
+
+	// Bind the pipeline used for ImGui
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+
+	// Configure viewport for UI pixel coordinates
+	vk::Viewport viewport{};
+	viewport.width = drawData->DisplaySize.x;
+	viewport.height = drawData->DisplaySize.y;
+	viewport.minDepth = 0.0f;
+	viewport.maxDepth = 1.0f;
+	commandBuffer.setViewport(0, viewport);
+
+	// Convert from ImGui coordinates into NDC via a simple scale/translate
+	pushConstBlock.scale = glm::vec2(2.0f / drawData->DisplaySize.x, 2.0f / drawData->DisplaySize.y);
+	pushConstBlock.translate = glm::vec2(-1.0f);
+
+	commandBuffer.pushConstants<PushConstBlock>(
+		*pipelineLayout,                    // Must be dereferenced if using vk::raii::PipelineLayout
+		vk::ShaderStageFlagBits::eVertex,   // Or appropriate stage flags
+		0,                                   // offset
+		pushConstBlock                             // Your data
+	);
+
+	// We already filled these buffers this frame
+	vk::Buffer vertexBuffers[] = { vertexBuffer };
+	vk::DeviceSize offsets[] = { 0 };
+	commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
+	commandBuffer.bindIndexBuffer(indexBuffer, 0, vk::IndexType::eUint16);
+
+	int vertexOffset = 0;
+	int indexOffset = 0;
+
+	for (int i = 0; i < drawData->CmdListsCount; i++) {
+		const ImDrawList* cmdList = drawData->CmdLists[i];
+
+		for (int j = 0; j < cmdList->CmdBuffer.Size; j++) {
+			const ImDrawCmd* pcmd = &cmdList->CmdBuffer[j];
+
+			// Clip per draw call
+			vk::Rect2D scissor{};
+			scissor.offset.x = std::max(static_cast<int32_t>(pcmd->ClipRect.x), 0);
+			scissor.offset.y = std::max(static_cast<int32_t>(pcmd->ClipRect.y), 0);
+			scissor.extent.width = static_cast<uint32_t>(pcmd->ClipRect.z - pcmd->ClipRect.x);
+			scissor.extent.height = static_cast<uint32_t>(pcmd->ClipRect.w - pcmd->ClipRect.y);
+			commandBuffer.setScissor(0, scissor);
+
+			// Bind font (and any UI) textures for this draw
+			commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+				*pipelineLayout, 0, *descriptorSet, {});
+
+			// Issue indexed draw for this UI batch
+			commandBuffer.drawIndexed(pcmd->ElemCount, 1, indexOffset, vertexOffset, 0);
+			indexOffset += pcmd->ElemCount;
+		}
+
+		vertexOffset += cmdList->VtxBuffer.Size;
+	}
+
+	// Close the rendering scope for the UI overlay
+	commandBuffer.endRendering();
+}
+
+void ImGuiVulkanUtil::handleKey(int key, int scancode, int action, int mods) {
+	ImGuiIO& io = ImGui::GetIO();
+
+	// This example uses GLFW key codes and actions, but you can adapt this
+	// to work with any windowing library's input system
+
+	// Map the platform-specific key action to ImGui's key state
+	// In GLFW: GLFW_PRESS = 1, GLFW_RELEASE = 0
+	const int KEY_PRESSED = 1;  // Generic key pressed value
+	const int KEY_RELEASED = 0; // Generic key released value
+
+	//if (action == KEY_PRESSED)
+	//	io.KeysDown[key] = true;
+	//if (action == KEY_RELEASED)
+	//	io.KeysDown[key] = false;
+
+	//// Update modifier keys
+	//// These key codes are GLFW-specific, but you would use your windowing library's
+	//// equivalent key codes for other libraries
+	//const int KEY_LEFT_CTRL = 341;   // GLFW_KEY_LEFT_CONTROL
+	//const int KEY_RIGHT_CTRL = 345;  // GLFW_KEY_RIGHT_CONTROL
+	//const int KEY_LEFT_SHIFT = 340;  // GLFW_KEY_LEFT_SHIFT
+	//const int KEY_RIGHT_SHIFT = 344; // GLFW_KEY_RIGHT_SHIFT
+	//const int KEY_LEFT_ALT = 342;    // GLFW_KEY_LEFT_ALT
+	//const int KEY_RIGHT_ALT = 346;   // GLFW_KEY_RIGHT_ALT
+	//const int KEY_LEFT_SUPER = 343;  // GLFW_KEY_LEFT_SUPER
+	//const int KEY_RIGHT_SUPER = 347; // GLFW_KEY_RIGHT_SUPER
+
+	//io.KeyCtrl = io.KeysDown[KEY_LEFT_CTRL] || io.KeysDown[KEY_RIGHT_CTRL];
+	//io.KeyShift = io.KeysDown[KEY_LEFT_SHIFT] || io.KeysDown[KEY_RIGHT_SHIFT];
+	//io.KeyAlt = io.KeysDown[KEY_LEFT_ALT] || io.KeysDown[KEY_RIGHT_ALT];
+	//io.KeySuper = io.KeysDown[KEY_LEFT_SUPER] || io.KeysDown[KEY_RIGHT_SUPER];
+}
+
+bool ImGuiVulkanUtil::getWantKeyCapture() {
+	return ImGui::GetIO().WantCaptureKeyboard;
+}
+
+void ImGuiVulkanUtil::charPressed(uint32_t key) {
+	ImGuiIO& io = ImGui::GetIO();
+	io.AddInputCharacter(key);
 }
 
 // ---------------------------------------------------------------------------

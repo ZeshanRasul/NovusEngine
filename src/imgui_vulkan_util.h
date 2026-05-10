@@ -5,6 +5,10 @@
 #include "../include/imgui.h"
 #include "../include/imconfig.h"   
 #include <glm/glm.hpp>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 class ImGuiVulkanUtil {
 private:
@@ -72,7 +76,7 @@ public:
     // Frame-by-frame rendering operations
     bool newFrame();                                         // Begin new ImGui frame and generate geometry
     void updateBuffers();                                    // Upload updated geometry to GPU buffers
-    void drawFrame(vk::raii::CommandBuffer& commandBuffer); // Record rendering commands to command buffer
+    void drawFrame(vk::raii::CommandBuffer& commandBuffer, vk::ImageView swapchainImageView); // Record rendering commands to command buffer
 
     // Input event handling for interactive UI elements
     void handleKey(int key, int scancode, int action, int mods); // Process keyboard input events
@@ -124,6 +128,8 @@ private:
                            vk::raii::Image& image, uint32_t width, uint32_t height);
     vk::raii::CommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(vk::raii::CommandBuffer&& commandBuffer);
+    static std::vector<char> readFile(const std::string& filename);
+    vk::raii::ShaderModule createShaderModule(const std::vector<char>& code);
 
     vk::raii::CommandPool commandPool{ nullptr };
 };

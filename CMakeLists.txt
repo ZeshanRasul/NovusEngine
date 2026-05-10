@@ -28,7 +28,7 @@ add_executable(NovusEngine
     src/renderer/renderer.cpp
     "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h" "src/ECS/components/mesh_component.h" "src/ECS/components/camera_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h"
     ${IMGUI_SOURCES}
-    ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h")
+    ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h" "src/input/input_system.h" "src/input/input_system.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -40,6 +40,7 @@ find_program(SLANGC_EXECUTABLE slangc REQUIRED)
 
 set(SLANG_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader.slang)
 set(PBR_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.slang)
+set(IMGUI_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/imgui.slang)
 
 function (add_slang_shader_target TARGET)
   set (SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
@@ -49,15 +50,16 @@ function (add_slang_shader_target TARGET)
           COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_DIR}
   )
   add_custom_command (
-          OUTPUT  ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv
+          OUTPUT  ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv
           COMMAND ${SLANGC_EXECUTABLE} ${SLANG_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
           COMMAND ${SLANGC_EXECUTABLE} ${PBR_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o pbr.spv
+          COMMAND ${SLANGC_EXECUTABLE} ${IMGUI_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o imgui.spv
           WORKING_DIRECTORY ${SHADERS_DIR}
-          DEPENDS ${SHADERS_DIR} ${SLANG_SHADER_SOURCE} ${PBR_SHADER_SOURCE}
+          DEPENDS ${SHADERS_DIR} ${SLANG_SHADER_SOURCE} ${PBR_SHADER_SOURCE} ${IMGUI_SHADER_SOURCE}
           COMMENT "Compiling Slang Shaders"
           VERBATIM
   )
-  add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv)
+  add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv)
 endfunction()
 
 add_slang_shader_target(shaders)

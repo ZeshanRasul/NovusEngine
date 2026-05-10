@@ -33,6 +33,8 @@ import vulkan_hpp;
 #include "ECS/components/transform_component.h"
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"
+#include "../imgui_vulkan_util.h"
+#include "../input/input_system.h"
 
 constexpr uint32_t WIDTH               = 1920;
 constexpr uint32_t HEIGHT              = 1080;
@@ -196,6 +198,9 @@ private:
 
 	// Callbacks
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
+	static void mousePosCallback(GLFWwindow* window, double xpos, double ypos);
+	static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 	static VKAPI_ATTR vk::Bool32 VKAPI_CALL
 		debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
 					  vk::DebugUtilsMessageTypeFlagsEXT type,
@@ -272,4 +277,6 @@ private:
 
 	Camera camera;
 	float  lastFrameTime = 0.0f;
+
+	ImGuiVulkanUtil* imGui;
 };

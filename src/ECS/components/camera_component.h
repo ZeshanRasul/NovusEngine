@@ -1,7 +1,9 @@
+#pragma once
+#pragma once 
+
 #include "glm/glm.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
-#pragma once
 
 #include <GLFW/glfw3.h>
 
@@ -40,12 +42,12 @@ public:
 		float pitch = 0.0f
 	)
 		: position(position), worldUp(up), yaw(yaw), pitch(pitch),
-		movementSpeed(4.5f), mouseSensitivity(0.1f), zoom(45.0f)
+		movementSpeed(14.5f), mouseSensitivity(0.1f), zoom(45.0f)
 	{
 	};
 
 	glm::mat4 getViewMatrix() const;
-	glm::mat4 getProjectionMatrix(float aspectRatio, float nearPlane = 0.1f, float farPlane = 1000.0f) const;
+	glm::mat4 getProjectionMatrix(float aspectRatio, float nearPlane = 0.1f, float farPlane = 3000.0f) const;
 
 	void processKeyboard(CameraMovement direction, float deltaTime);
 	void processMouseMovement(float xOffset, float yOffset, bool constrainPitch = true);
@@ -54,24 +56,33 @@ public:
 	glm::vec3 getPosition() const { return position; }
 	glm::vec3 getFront() const { return front; }
 	float getZoom() const { return zoom; }
+	float getMovementSpeed() const { return movementSpeed; }
+	float getMouseSensitivity() const { return mouseSensitivity; }
+
+	void setPosition(glm::vec3 newPos) { position = newPos; }
+	void setYaw(float newYaw) { yaw = newYaw; }
+	void setPitch(float newPitch) { pitch = newPitch; }
+	void setMovementSpeed(float speed) { movementSpeed = speed; }
+	void setMouseSensitivity(float sensitivity) { mouseSensitivity = sensitivity; }
+	void setZoom(float newZoom) { zoom = newZoom; }
 
 	void processInput(GLFWwindow* window, Camera& camera, float deltaTime) {
 		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-			camera.processKeyboard(CameraMovement::FORWARD, deltaTime);
+				camera.processKeyboard(CameraMovement::FORWARD, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-			camera.processKeyboard(CameraMovement::BACKWARD, deltaTime);
+				camera.processKeyboard(CameraMovement::BACKWARD, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-			camera.processKeyboard(CameraMovement::LEFT, deltaTime);
+				camera.processKeyboard(CameraMovement::LEFT, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-			camera.processKeyboard(CameraMovement::RIGHT, deltaTime);
+				camera.processKeyboard(CameraMovement::RIGHT, deltaTime);
 
 		// Vertical movement controls for 3D navigation
 		// Space and Control provide intuitive up/down movement
 		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-			camera.processKeyboard(CameraMovement::UP, deltaTime);
+				camera.processKeyboard(CameraMovement::UP, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-			camera.processKeyboard(CameraMovement::DOWN, deltaTime);
-	}
+				camera.processKeyboard(CameraMovement::DOWN, deltaTime);
+		}
 
 	static void mouseCallback(GLFWwindow* window, double xpos, double ypos) {
 		// Static variables maintain state between callback invocations
@@ -114,19 +125,11 @@ public:
 		}
 	}
 
-	// Input system initialization and callback registration
-	// Establishes the connection between windowing system and camera control callbacks
+	// Input system initialization — no longer registers GLFW callbacks directly;
+	// the Renderer owns the window user pointer and routes input here.
 	void setupInputCallbacks(GLFWwindow* window) {
-		// Store the camera instance pointer in the window's user pointer
-		glfwSetWindowUserPointer(window, this);
-
-		// Register callback functions with the windowing system
-		// These establish the event-driven connection between hardware input and camera control
-		glfwSetCursorPosCallback(window, Camera::mouseCallback);        // Connect mouse movement to camera rotation
-		glfwSetScrollCallback(window, Camera::scrollCallback);          // Connect scroll wheel to camera zoom
 		// Configure mouse capture mode for first-person camera behavior
-		// Disabling the cursor provides continuous mouse input without cursor interference
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	}
 };
 

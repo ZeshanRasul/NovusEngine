@@ -38,8 +38,9 @@ void Renderer::initWindow()
 	camera.setupInputCallbacks(window);
 	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
+	camera.setPosition(glm::vec3(0.0f, 1.0f, 3.0f));
 	camera.getViewMatrix();
-	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT);
+	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 }
 
 void Renderer::initVulkan()
@@ -896,6 +897,8 @@ void Renderer::createVertexBuffer(RenderableComponent& gameObj)
 void Renderer::createIndexBuffer(RenderableComponent& gameObj)
 {
 	vk::DeviceSize         bufferSize = sizeof(gameObj.indices[0]) * gameObj.indices.size();
+	if (bufferSize == 0) return;
+
 	vk::raii::Buffer       stagingBuffer({});
 	vk::raii::DeviceMemory stagingBufferMemory({});
 	createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
@@ -974,15 +977,15 @@ void Renderer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* r
 		ubo.proj[1][1] *= -1;
 	}
 
-	ubo.lightPositions[0] = glm::vec4(-1.5f, 3.5f, 3.0f, 1.0f);
-	ubo.lightPositions[1] = glm::vec4(-4.5f, 2.5f, 2.0f, 1.0f);
-	ubo.lightPositions[2] = glm::vec4(1.5f, 2.0f, -2.5f, 1.0f);
-	ubo.lightPositions[3] = glm::vec4(-2.0f, 4.5f, -1.0f, 1.0f);
+	ubo.lightPositions[0] = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
+	ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 5.0f, 1.0f);
+	ubo.lightPositions[2] = glm::vec4(10.0f, 10.0f, -5.0f, 1.0f);
+	ubo.lightPositions[3] = glm::vec4(0.0f, 10.0f, -10.0f, 1.0f);
 
-	ubo.lightColors[0] = glm::vec4(200.0f, 0.0f, 0.0f, 1.0f);
-	ubo.lightColors[1] = glm::vec4(0.0f, 0.0f, 400.0f, 1.0f);
-	ubo.lightColors[2] = glm::vec4(0.0f, 400.0f, 0.0f, 1.0f);
-	ubo.lightColors[3] = glm::vec4(600.0f, 10.0f, 0.0f, 1.0f);
+	ubo.lightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
+	ubo.lightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
+	ubo.lightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
+	ubo.lightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
 
 	ubo.camPos = glm::vec4(cam ? cam->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
 	ubo.exposure = 1.0f;
@@ -1239,6 +1242,10 @@ void Renderer::loadTextureFromFile(const std::string& filepath,
 		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
 		vk::MemoryPropertyFlagBits::eDeviceLocal, image, imageMemory);
 
+	// Delay staging buffer cleanup until command execution is complete
+	// In a real application, you would queue these for deletion after idle
+	// But for our simplified start-up use single time commands already waitIdle
+	// Just make sure endSingleTimeCommands actually waits
 	vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
 	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 	copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
@@ -1602,18 +1609,18 @@ void Renderer::setupGameObjects()
 		};
 
 	makeEntity("FlightHelmet_Left",
-		{ -3.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3.0f, 3.0f, 3.0f },
+		{ -3.0f, 0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3.0f, 3.0f, 3.0f },
 		"../models/FlightHelmet.gltf");
 
 	{
 		Entity& e = makeEntity("DamagedHelmet",
-			{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.75f, 0.75f, 0.75f },
+			{ 3.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.5f, 1.5f, 1.5f },
 			"../models/DamagedHelmet.gltf");
 		e.GetComponent<RenderableComponent>()->materials[0].metallicFactor = 1.0f;
 	}
 
 	makeEntity("Sponza",
-		{ 0.0f, 0.0f, 0.0f }, { 0.0f, glm::radians(-45.0f), 0.0f }, { 3.0f, 3.0f, 3.0f },
+		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3.0f, 3.0f, 3.0f },
 		"../models/Sponza.gltf");
 }
 

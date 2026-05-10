@@ -1,3 +1,5 @@
+#pragma once
+
 class ComponentTypeIDSystem {
 private:
     static size_t nextTypeID;
@@ -11,6 +13,8 @@ public:
 };
 
 class Component {
+friend class Entity; // Allow Entity to call protected methods
+
 public:
     enum class State {
         Uninitialized,
@@ -64,5 +68,4 @@ protected:
     virtual void Update(float deltaTime) {}
     virtual void Render() {}
 
-    friend class Entity; // Allow Entity to call protected methods
 };

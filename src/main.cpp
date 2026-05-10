@@ -34,6 +34,8 @@ import vulkan_hpp;
 #include <GLFW/glfw3.h>
 
 #include "ECS/components/camera_component.h"
+#include "ECS/entity.h"
+#include "ECS/components/transform_component.h"
 
 constexpr uint32_t WIDTH = 1920;
 constexpr uint32_t HEIGHT = 1080;
@@ -56,25 +58,27 @@ constexpr bool enableValidationLayers = true;
 struct Vertex
 {
 	glm::vec3 pos;
-	glm::vec3 color;
+	glm::vec3 normal;
 	glm::vec2 texCoord;
+	glm::vec4 tangent;
 
 	static vk::VertexInputBindingDescription getBindingDescription()
 	{
 		return { .binding = 0, .stride = sizeof(Vertex), .inputRate = vk::VertexInputRate::eVertex };
 	}
 
-	static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
+	static std::array<vk::VertexInputAttributeDescription, 4> getAttributeDescriptions() {
 		return {
 			vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, pos)),
-			vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
-			vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord))
+			vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, normal)),
+			vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord)),
+			vk::VertexInputAttributeDescription(3, 0, vk::Format::eR32G32B32A32Sfloat, offsetof(Vertex, tangent))
 		};
 	};
 
 	bool operator==(const Vertex& other) const
 	{
-		return pos == other.pos && color == other.color && texCoord == other.texCoord;
+		return pos == other.pos && normal == other.normal && texCoord == other.texCoord && tangent == other.tangent;
 	}
 
 };
@@ -85,7 +89,7 @@ namespace std
 	{
 		size_t operator()(Vertex const& vertex) const
 		{
-			return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
+			return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.normal) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1) ^ (hash<glm::vec4>()(vertex.tangent) << 1);
 		}
 	};
 }
@@ -95,6 +99,85 @@ struct UniformBufferObject
 	alignas(16) glm::mat4 model;
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
+
+	glm::vec4 lightPositions[4];           // Light positions in world space
+	glm::vec4 lightColors[4];              // Light intensities and colors
+	glm::vec4 camPos;                      // Camera position for view-dependent effects
+	float exposure;                     // HDR exposure control
+	float gamma;                        // Gamma correction value (typically 2.2)
+	float prefilteredCubeMipLevels;     // IBL prefiltered environment map mip levels
+	float scaleIBLAmbient;              // IBL ambient contribution scale
+
+};
+
+class Material {
+public:
+	explicit Material(std::string name) : name(std::move(name)) {
+	}
+	~Material() = default;
+
+	[[nodiscard]] const std::string& GetName() const {
+		return name;
+	}
+
+	// PBR properties (Metallic-Roughness default)
+	glm::vec3 albedo = glm::vec3(1.0f);
+	float metallic = 0.0f;
+	float roughness = 1.0f;
+	float ao = 1.0f;
+	glm::vec3 emissive = glm::vec3(0.0f);
+	float ior = 1.5f; // Index of refraction
+	float emissiveStrength = 1.0f; // KHR_materials_emissive_strength extension
+	float alpha = 1.0f; // Base color alpha (from MR baseColorFactor or SpecGloss diffuseFactor)
+	float transmissionFactor = 0.0f; // KHR_materials_transmission: 0=opaque, 1=fully transmissive
+
+	// Specular-Glossiness workflow (KHR_materials_pbrSpecularGlossiness)
+	bool useSpecularGlossiness = false;
+	glm::vec3 specularFactor = glm::vec3(0.04f);
+	float glossinessFactor = 1.0f;
+	std::string specGlossTexturePath; // Stored separately; also mirrored to metallicRoughnessTexturePath for binding 2
+
+	// Alpha handling (glTF alphaMode and cutoff)
+	std::string alphaMode = "OPAQUE"; // "OPAQUE", "MASK", or "BLEND"
+	float alphaCutoff = 0.5f; // Used when alphaMode == MASK
+
+	// Texture paths for PBR materials
+	std::string albedoTexturePath;
+	std::string normalTexturePath;
+	std::string metallicRoughnessTexturePath;
+	std::string occlusionTexturePath;
+	std::string emissiveTexturePath;
+
+	// Hint used by the renderer to select a specialized glass rendering path
+	// for architectural glass (windows, lamp glass, etc.). Set by ModelLoader
+	// based on material name/properties; defaults to false so non-glass
+	// materials continue to use the generic PBR path.
+	bool isGlass = false;
+
+	// Hint used by the renderer to preferentially render inner liquid volumes
+	// before outer glass shells (e.g., beer/wine in bar glasses). Set by
+	// ModelLoader based on material name/properties; defaults to false.
+	bool isLiquid = false;
+
+	glm::vec4 baseColorFactor = glm::vec4(1.0f);
+	float metallicFactor = 0.0f;
+	float roughnessFactor = 1.0f;
+	float baseColorTextureIndex = 0.0f;
+	float metallicRoughnessTextureIndex = 0.0f;
+	float normalTextureIndex = 0.0f;
+	float occlusionTextureIndex = 0.0f;
+	float emissiveTextureIndex = 0.0f;
+
+
+private:
+	std::string name;
+};
+
+// Define a mesh structure to track individual primitives/submeshes
+struct Mesh {
+	uint32_t firstIndex = 0;      // Starting index in the index buffer
+	uint32_t indexCount = 0;      // Number of indices for this mesh
+	uint32_t materialIndex = 0;   // Index into materials array (if you have multiple materials)
 };
 
 // Define a structure to hold per-object data
@@ -129,6 +212,11 @@ struct GameObject {
 	std::vector<Vertex>    vertices;
 	std::vector<uint32_t>  indices;
 
+	// Mesh information for submeshes
+	std::vector<Mesh>      meshes;
+
+	Material material = Material("DefaultMaterial");
+
 	// Calculate model matrix based on position, rotation, and scale
 	glm::mat4 getModelMatrix() const {
 		glm::mat4 model = glm::mat4(1.0f);
@@ -150,6 +238,7 @@ public:
 		cleanup();
 	}
 
+	HelloTriangleApplication() = default;
 	~HelloTriangleApplication() = default;
 
 private:
@@ -163,10 +252,16 @@ private:
 		createImageViews();
 		createDescriptorSetLayout();
 		createGraphicsPipeline();
+		
+		if (!createPBRPipeline()) {
+			std::cerr << "Failed to create PBR pipeline" << std::endl;
+		}
+
 		createCommandPool();
 		createDepthResources();
 		createTextureSampler();
 		setupGameObjects();
+		createVertexBuffer(gameObjects[0]);
 		createVertexBuffer(gameObjects[0]);
 		createVertexBuffer(gameObjects[1]);
 		createVertexBuffer(gameObjects[2]);
@@ -229,37 +324,37 @@ private:
 	// Initialize the game objects with different positions, rotations, and scales
 	void setupGameObjects() {
 		// Object 1 - Center
-		gameObjects[0].position = { 0.0f, 1.25f, 0.0f };
+		gameObjects[0].position = { -1.0f, 0.0f, 0.0f };
 		gameObjects[0].rotation = { 0.0f, 0.0f, 0.0f };
 		gameObjects[0].scale = { 1.0f, 1.0f, 1.0f };
 		gameObjects[0].vertexBuffer = nullptr;
 		gameObjects[0].indexBuffer = nullptr;
-		gameObjects[0].textureFilename = "../textures/Swat_Ch15_body_BaseColor.ktx";
-		loadModel("../models/swat.gltf", gameObjects[0]);
+		gameObjects[0].textureFilename = "../textures/FlightHelmet_Materials_MetalPartsMat_BaseColor.ktx";
+		loadModel("../models/FlightHelmet.gltf", gameObjects[0]);
 		createTextureImage(gameObjects[0]);
 		createTextureImageView(gameObjects[0]);
 
 		// Object 2 - Left
-		gameObjects[1].position = { -2.0f, 1.25f, -1.0f };
+		gameObjects[1].position = { 1.0f, 0.0f, 0.0f };
 		gameObjects[1].rotation = { 0.0f, glm::radians(45.0f), 0.0f };
 		gameObjects[1].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[1].vertexBuffer = nullptr;
 		gameObjects[1].indexBuffer = nullptr;
-		gameObjects[1].textureFilename = "../textures/ely-vanguardsoldier-kerwinatienza_diffuse.ktx";
+		gameObjects[1].textureFilename = "../textures/Default_albedo.ktx";
 
-		loadModel("../models/EnemyEly.gltf", gameObjects[1]);
+		loadModel("../models/DamagedHelmet.gltf", gameObjects[1]);
 		createTextureImage(gameObjects[1]);
 		createTextureImageView(gameObjects[1]);
 
 		// Object 3 - Right
-		gameObjects[2].position = { 2.0f, 1.25f, -1.0f };
+		gameObjects[2].position = { -5.0f, 0.0f, 0.0f };
 		gameObjects[2].rotation = { 0.0f, glm::radians(-45.0f), 0.0f };
 		gameObjects[2].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[2].vertexBuffer = nullptr;
 		gameObjects[2].indexBuffer = nullptr;
-		gameObjects[2].textureFilename = "../textures/sponza_bricks.ktx";
+		gameObjects[2].textureFilename = "../textures/FlightHelmet_Materials_MetalPartsMat_BaseColor.ktx";
 
-		loadModel("../models/Sponza.gltf", gameObjects[2]);
+		loadModel("../models/FlightHelmet.gltf", gameObjects[2]);
 		createTextureImage(gameObjects[2]);
 		createTextureImageView(gameObjects[2]);
 
@@ -389,11 +484,13 @@ private:
 
 		auto features = physicalDevice.template getFeatures2<vk::PhysicalDeviceFeatures2,
 			vk::PhysicalDeviceVulkan13Features,
-			vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+			vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+			vk::PhysicalDeviceDynamicRenderingLocalReadFeaturesKHR>();
 		bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy &&
 			features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
 			features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
-			features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+			features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
+			features.template get<vk::PhysicalDeviceDynamicRenderingLocalReadFeaturesKHR>().dynamicRenderingLocalRead;
 
 		return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
 	}
@@ -434,12 +531,14 @@ private:
 		vk::StructureChain<vk::PhysicalDeviceFeatures2,
 			vk::PhysicalDeviceVulkan11Features,
 			vk::PhysicalDeviceVulkan13Features,
-			vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>
+			vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+			vk::PhysicalDeviceDynamicRenderingLocalReadFeaturesKHR>
 			featureChain = {
 				{.features = {.samplerAnisotropy = true } },                                                          // vk::PhysicalDeviceFeatures2
 				{.shaderDrawParameters = true},                              // vk::PhysicalDeviceVulkan11Features
 				{.synchronization2 = true, .dynamicRendering = true},        // vk::PhysicalDeviceVulkan13Features
-				{.extendedDynamicState = true}                               // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+				{.extendedDynamicState = true},                              // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+				{.dynamicRenderingLocalRead = true}                              // vk::PhysicalDeviceDynamicRenderingLocalReadFeaturesKHR
 		};
 
 		float queuePriority = 0.5f;
@@ -764,9 +863,9 @@ private:
 		image.bindMemory(imageMemory, 0);
 	}
 
-	vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) 
+	vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
 	{
-		for (const auto format : candidates) 
+		for (const auto format : candidates)
 		{
 			vk::FormatProperties props = physicalDevice.getFormatProperties(format);
 
@@ -780,7 +879,7 @@ private:
 		throw std::runtime_error("failed to find supported format!");
 	}
 
-	vk::Format findDepthFormat() 
+	vk::Format findDepthFormat()
 	{
 		return findSupportedFormat(
 			{ vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint },
@@ -789,7 +888,7 @@ private:
 		);
 	}
 
-	bool hasStencilComponent(vk::Format format) 
+	bool hasStencilComponent(vk::Format format)
 	{
 		return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
 	}
@@ -920,12 +1019,18 @@ private:
 
 		gameObj.vertices.clear();
 		gameObj.indices.clear();
+		gameObj.meshes.clear();
 
 		// Process all meshes in the model
 		for (const auto& mesh : model.meshes)
 		{
 			for (const auto& primitive : mesh.primitives)
 			{
+				// Track the starting point for this mesh
+				Mesh meshInfo;
+				meshInfo.firstIndex = static_cast<uint32_t>(gameObj.indices.size());
+				meshInfo.materialIndex = primitive.material >= 0 ? primitive.material : 0;
+
 				// Get indices
 				const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
 				const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
@@ -936,17 +1041,41 @@ private:
 				const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
 				const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
+				bool                        hasNormals = primitive.attributes.find("NORMAL") != primitive.attributes.end();
+				const tinygltf::Accessor* normalAccessor = nullptr;
+				const tinygltf::BufferView* normalBufferView = nullptr;
+				const tinygltf::Buffer* normalBuffer = nullptr;
+
 				// Get texture coordinates if available
 				bool                        hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
 				const tinygltf::Accessor* texCoordAccessor = nullptr;
 				const tinygltf::BufferView* texCoordBufferView = nullptr;
 				const tinygltf::Buffer* texCoordBuffer = nullptr;
 
+				bool hasTangents = primitive.attributes.find("TANGENT") != primitive.attributes.end();
+				const tinygltf::Accessor* tangentAccessor = nullptr;
+				const tinygltf::BufferView* tangentBufferView = nullptr;
+				const tinygltf::Buffer* tangentBuffer = nullptr;
+
 				if (hasTexCoords)
 				{
 					texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
 					texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
 					texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
+				}
+				
+				if (hasNormals)
+				{
+					normalAccessor = &model.accessors[primitive.attributes.at("NORMAL")];
+					normalBufferView = &model.bufferViews[normalAccessor->bufferView];
+					normalBuffer = &model.buffers[normalBufferView->buffer];
+				}
+
+				if (hasTangents)
+				{
+					tangentAccessor = &model.accessors[primitive.attributes.at("TANGENT")];
+					tangentBufferView = &model.bufferViews[tangentAccessor->bufferView];
+					tangentBuffer = &model.buffers[tangentBufferView->buffer];
 				}
 
 				uint32_t baseVertex = static_cast<uint32_t>(gameObj.vertices.size());
@@ -971,7 +1100,26 @@ private:
 						vertex.texCoord = { 0.0f, 0.0f };
 					}
 
-					vertex.color = { 1.0f, 1.0f, 1.0f };
+					if (hasNormals)
+					{
+						const float* normal = reinterpret_cast<const float*>(&normalBuffer->data[normalBufferView->byteOffset + normalAccessor->byteOffset + i * 12]);
+						vertex.normal = { normal[0], -normal[1], normal[2] };
+
+					}
+					else
+					{
+						vertex.normal = { 0.0f, 0.0f, 0.0f };
+					}
+
+					if (hasTangents)
+					{
+						const float* tangent = reinterpret_cast<const float*>(&tangentBuffer->data[tangentBufferView->byteOffset + tangentAccessor->byteOffset + i * 16]);
+						vertex.tangent = { tangent[0], -tangent[1], tangent[2], tangent[3] };
+					}
+					else
+					{
+						vertex.tangent = { 0.0f, 0.0f, 0.0f, 1.0f };
+					}
 
 					gameObj.vertices.push_back(vertex);
 				}
@@ -1019,6 +1167,10 @@ private:
 
 					gameObj.indices.push_back(baseVertex + index);
 				}
+
+				// Record mesh information
+				meshInfo.indexCount = static_cast<uint32_t>(gameObj.indices.size() - meshInfo.firstIndex);
+				gameObj.meshes.push_back(meshInfo);
 			}
 		}
 
@@ -1084,9 +1236,9 @@ private:
 		// Camera and projection matrices (shared by all objects)
 		glm::mat4 view = camera.getViewMatrix();
 		glm::mat4 proj = camera.getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 2000.0f);
-	//	proj[1][1] *= -1; // Flip Y for Vulkan
+		//	proj[1][1] *= -1; // Flip Y for Vulkan
 
-		// Update uniform buffers for each object
+			// Update uniform buffers for each object
 		for (auto& gameObject : gameObjects) {
 			// Apply continuous rotation to the object
 		//	gameObject.rotation.y += 0.001f; // Slow rotation around Y axis
@@ -1233,6 +1385,73 @@ private:
 		commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
 	}
 
+	void pushMaterialProperties(vk::CommandBuffer commandBuffer, const GameObject* model, uint32_t materialIndex) {
+		// Get material from the model
+		const Material& material = model->material;
+
+		// Define push constants
+		PushConstantBlock pushConstants{};
+		pushConstants.baseColorFactor = material.baseColorFactor;
+		pushConstants.metallicFactor = material.metallicFactor;
+		pushConstants.roughnessFactor = material.roughnessFactor;
+		pushConstants.baseColorTextureSet = material.baseColorTextureIndex;
+		pushConstants.physicalDescriptorTextureSet = material.metallicRoughnessTextureIndex;
+		pushConstants.normalTextureSet = material.normalTextureIndex;
+		pushConstants.occlusionTextureSet = material.occlusionTextureIndex;
+		pushConstants.emissiveTextureSet = material.emissiveTextureIndex;
+		pushConstants.alphaMask = 0.0f;
+		pushConstants.alphaMaskCutoff = material.alphaCutoff;
+
+		// Push constants to shader using vk::raii
+		commandBuffer.pushConstants(
+			*pbrPipelineLayout,
+			vk::ShaderStageFlagBits::eFragment,
+			0,
+			sizeof(PushConstantBlock),
+			&pushConstants
+		);
+	}
+
+
+	//void updateUniformBuffer(uint32_t currentFrame) {
+	//	// Update uniform buffer for each game object
+	//	for (auto& gameObject : gameObjects) {
+	//		UniformBufferObject ubo{};
+
+	//		// Update model matrix from game object transform
+	//		ubo.model = gameObject.getModelMatrix();
+
+	//		// Update view and projection matrices from camera
+	//		ubo.view = camera.getViewMatrix();
+	//		float aspectRatio = swapChainExtent.width / static_cast<float>(swapChainExtent.height);
+	//		ubo.proj = camera.getProjectionMatrix(aspectRatio);
+
+	//		// Set up lights (4 point lights around the scene)
+	//		ubo.lightPositions[0] = glm::vec4(10.0f, 10.0f, 10.0f, 1.0f);
+	//		ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 10.0f, 1.0f);
+	//		ubo.lightPositions[2] = glm::vec4(10.0f, 10.0f, -10.0f, 1.0f);
+	//		ubo.lightPositions[3] = glm::vec4(-10.0f, 10.0f, -10.0f, 1.0f);
+
+	//		// Set light colors (white lights with different intensities)
+	//		ubo.lightColors[0] = glm::vec4(0.0f, 0.0f, 300.0f, 1.0f);
+	//		ubo.lightColors[1] = glm::vec4(300.0f, 0.0f, 0.0f, 1.0f);
+	//		ubo.lightColors[2] = glm::vec4(0.0f, 300.0f, 0.0f, 1.0f);
+	//		ubo.lightColors[3] = glm::vec4(300.0f, 300.0f, 300.0f, 1.0f);
+
+	//		// Set camera position
+	//		ubo.camPos = glm::vec4(camera.getPosition(), 1.0f);
+
+	//		// Set HDR and gamma parameters
+	//		ubo.exposure = 1.0f;
+	//		ubo.gamma = 2.2f;
+	//		ubo.prefilteredCubeMipLevels = 1.0f;
+	//		ubo.scaleIBLAmbient = 1.0f;
+
+	//		// Copy data to mapped uniform buffer
+	//		memcpy(gameObject.uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+	//	}
+	//}
+
 	void recordCommandBuffer(uint32_t imageIndex)
 	{
 		auto& commandBuffer = commandBuffers[frameIndex];
@@ -1279,28 +1498,60 @@ private:
 
 		commandBuffer.beginRendering(renderingInfo);
 
-		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+	//	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pbrPipeline);
 
 		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
 		commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-		
 
-		// Draw each object with its own descriptor set
-		for (const auto& gameObject : gameObjects) {
-			// Bind vertex and index buffers (shared by all objects)
-			commandBuffers[frameIndex].bindVertexBuffers(0, *gameObject.vertexBuffer, { 0 });
-			commandBuffers[frameIndex].bindIndexBuffer(*gameObject.indexBuffer, 0, vk::IndexType::eUint32);
-			// Bind the descriptor set for this object
-			commandBuffers[frameIndex].bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics,
-				*pipelineLayout,
-				0,
-				*gameObject.descriptorSets[frameIndex],
-				nullptr
-			);
 
-			// Draw the object
-			commandBuffers[frameIndex].drawIndexed(gameObject.indices.size(), 1, 0, 0, 0);
+		//// Draw each object with its own descriptor set
+		//for (const auto& gameObject : gameObjects) {
+		//	// Bind vertex and index buffers (shared by all objects)
+		//	commandBuffers[frameIndex].bindVertexBuffers(0, *gameObject.vertexBuffer, { 0 });
+		//	commandBuffers[frameIndex].bindIndexBuffer(*gameObject.indexBuffer, 0, vk::IndexType::eUint32);
+		//	// Bind the descriptor set for this object
+		//	commandBuffers[frameIndex].bindDescriptorSets(
+		//		vk::PipelineBindPoint::eGraphics,
+		//		*pipelineLayout,
+		//		0,
+		//		*gameObject.descriptorSets[frameIndex],
+		//		nullptr
+		//	);
+
+		//	// Draw the object
+		//	commandBuffers[frameIndex].drawIndexed(gameObject.indices.size(), 1, 0, 0, 0);
+		//}
+
+
+		// Bind the PBR pipeline
+
+		// For each model in the scene
+		for (auto& model : gameObjects) {
+			// Bind vertex and index buffers once per model
+			updateUniformBuffer(frameIndex, &model, &camera);
+			vk::Buffer vertexBuffers[] = { model.vertexBuffer };
+			vk::DeviceSize offsets[] = { 0 };
+			commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
+			commandBuffer.bindIndexBuffer(*model.indexBuffer, 0, vk::IndexType::eUint32);
+
+			// For each mesh in the model
+			for (const auto& mesh : model.meshes) {
+				// Push material properties for this mesh
+				pushMaterialProperties(commandBuffer, &model, mesh.materialIndex);
+
+				// Bind descriptor sets
+				commandBuffer.bindDescriptorSets(
+					vk::PipelineBindPoint::eGraphics,
+					*pbrPipelineLayout,
+					0,
+					*model.descriptorSets[frameIndex],
+					nullptr
+				);
+
+				// Draw this specific mesh using its index range
+				commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
+			}
 		}
 
 		commandBuffer.endRendering();
@@ -1317,6 +1568,9 @@ private:
 		);
 
 		commandBuffer.end();
+
+
+
 	}
 
 	void createSyncObjects()
@@ -1358,12 +1612,13 @@ private:
 
 		device.resetFences(*inFlightFences[frameIndex]);
 
+		// Update uniform buffers with current frame data
+//		updateUniformBuffer(frameIndex);
+
 		commandBuffers[frameIndex].reset();
 		recordCommandBuffer(imageIndex);
 
 		queue.waitIdle();
-
-		updateUniformBuffers();
 
 		vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 		const vk::SubmitInfo   submitInfo{ .waitSemaphoreCount = 1,
@@ -1406,6 +1661,220 @@ private:
 		}
 
 		return vk::False;
+	}
+
+	bool createPBRPipeline() {
+		try {
+			// Load our compiled PBR shader from disk
+			// The .spv file contains both vertex and fragment shader code compiled by slangc
+			auto shaderCode = readFile("../shaders/pbr.spv");
+
+			// Create a shader module - this is Vulkan's container for shader bytecode
+			// The shader module acts as a wrapper around the SPIR-V bytecode that GPU drivers understand
+			vk::raii::ShaderModule shaderModule = createShaderModule(shaderCode);
+
+			// Configure the vertex shader stage
+			// This tells Vulkan which shader stage this module serves and its entry point function
+			vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
+			vertShaderStageInfo.setStage(vk::ShaderStageFlagBits::eVertex)
+				.setModule(*shaderModule)
+				.setPName("vertMain");  // Must match the vertex shader function name
+
+			// Configure the fragment shader stage
+			// Same module, different entry point - this is how combined shaders work
+			vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
+			fragShaderStageInfo.setStage(vk::ShaderStageFlagBits::eFragment)
+				.setModule(*shaderModule)
+				.setPName("fragMain");  // Must match the fragment shader function name
+
+			std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = { vertShaderStageInfo, fragShaderStageInfo };
+
+			// Configure how vertex data is structured and fed to the vertex shader
+			vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+
+			// Use the same vertex binding and attribute descriptions as the Vertex struct
+			auto bindingDescription = Vertex::getBindingDescription();
+			auto attributeDescriptions = Vertex::getAttributeDescriptions();
+
+			// Connect the binding and attribute descriptions to the vertex input state
+			vertexInputInfo.setVertexBindingDescriptionCount(1)
+				.setPVertexBindingDescriptions(&bindingDescription)
+				.setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributeDescriptions.size()))
+				.setPVertexAttributeDescriptions(attributeDescriptions.data());
+
+			// Configure input assembly - how vertices become triangles
+			vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
+			inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList)  // Every 3 vertices form a triangle
+				.setPrimitiveRestartEnable(false);                    // Don't use primitive restart indices
+
+			// Configure viewport and scissor state
+			vk::PipelineViewportStateCreateInfo viewportState;
+			viewportState.setViewportCount(1)       // Single viewport (most common case)
+				.setScissorCount(1);        // Single scissor rectangle
+
+			// Define which pipeline state can be changed dynamically
+			// This improves performance by avoiding pipeline recreation for common changes
+			std::vector<vk::DynamicState> dynamicStates = {
+				vk::DynamicState::eViewport,        // Viewport can change (window resize, camera changes)
+				vk::DynamicState::eScissor          // Scissor rectangle can change (UI clipping, effects)
+			};
+
+			vk::PipelineDynamicStateCreateInfo dynamicState;
+			dynamicState.setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
+				.setPDynamicStates(dynamicStates.data());
+
+			// Configure rasterization - how triangles become pixels
+			vk::PipelineRasterizationStateCreateInfo rasterizer;
+			rasterizer.setDepthClampEnable(false)                           // Don't clamp depth values (standard behavior)
+				.setRasterizerDiscardEnable(false)                     // Don't discard primitives before rasterization
+				.setPolygonMode(vk::PolygonMode::eFill)                // Fill triangles (not wireframe or points)
+				.setLineWidth(1.0f)                                    // Line width (only relevant for wireframe)
+				.setCullMode(vk::CullModeFlagBits::eBack)              // Cull back-facing triangles
+				.setFrontFace(vk::FrontFace::eCounterClockwise)        // Counter-clockwise vertices = front-facing
+				.setDepthBiasEnable(false);                            // No depth bias (used for shadow mapping)
+
+			// Configure multisampling - anti-aliasing settings
+			vk::PipelineMultisampleStateCreateInfo multisampling;
+			multisampling.setSampleShadingEnable(false)                     // Disable per-sample shading
+				.setRasterizationSamples(vk::SampleCountFlagBits::e1); // No multisampling (1 sample per pixel)
+
+			// Configure depth and stencil testing
+			vk::PipelineDepthStencilStateCreateInfo depthStencil;
+			depthStencil.setDepthTestEnable(true)                           // Enable depth testing for proper occlusion
+				.setDepthWriteEnable(true)                           // Write depth values to depth buffer
+				.setDepthCompareOp(vk::CompareOp::eLess)             // Fragment passes if its depth is less (closer)
+				.setDepthBoundsTestEnable(false)                     // Don't use depth bounds testing
+				.setStencilTestEnable(false);                        // Don't use stencil testing
+
+			// Configure color blending - how new pixels combine with existing ones
+			vk::PipelineColorBlendAttachmentState colorBlendAttachment;
+			colorBlendAttachment.setColorWriteMask(
+				vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |     // Write all color channels
+				vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+				.setBlendEnable(true)                                    // Enable alpha blending
+				.setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)      // New fragment's alpha
+				.setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)  // One minus new fragment's alpha
+				.setColorBlendOp(vk::BlendOp::eAdd)                      // Add source and destination
+				.setSrcAlphaBlendFactor(vk::BlendFactor::eOne)           // Preserve new alpha
+				.setDstAlphaBlendFactor(vk::BlendFactor::eZero)          // Ignore old alpha
+				.setAlphaBlendOp(vk::BlendOp::eAdd);                     // Add alpha values
+
+			vk::PipelineColorBlendStateCreateInfo colorBlending;
+			colorBlending.setLogicOpEnable(false)                                     // Don't use logical operations
+				.setAttachmentCount(1)                                        // Single color attachment
+				.setPAttachments(&colorBlendAttachment);
+
+			// Configure push constants for fast material property updates
+			vk::PushConstantRange pushConstantRange;
+			pushConstantRange.setStageFlags(vk::ShaderStageFlagBits::eFragment)      // Only fragment shader uses these
+				.setOffset(0)                                             // Start at beginning
+				.setSize(sizeof(PushConstantBlock));                      // Size of our material data
+
+			// Create the pipeline layout - defines resource organization
+			vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+			pipelineLayoutInfo.setSetLayoutCount(1)                                  // Single descriptor set
+				.setPSetLayouts(&*descriptorSetLayout)                  // Our texture/uniform bindings
+				.setPushConstantRangeCount(1)                           // One push constant block
+				.setPPushConstantRanges(&pushConstantRange);
+
+			// Create the pipeline layout object
+			pbrPipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
+
+			// Assemble the complete graphics pipeline
+			vk::GraphicsPipelineCreateInfo pipelineInfo;
+			pipelineInfo.setStageCount(static_cast<uint32_t>(shaderStages.size()))   // Number of shader stages
+				.setPStages(shaderStages.data())                               // Shader stage configurations
+				.setPVertexInputState(&vertexInputInfo)                        // Vertex format
+				.setPInputAssemblyState(&inputAssembly)                        // Primitive topology
+				.setPViewportState(&viewportState)                             // Viewport configuration
+				.setPRasterizationState(&rasterizer)                           // Rasterization settings
+				.setPMultisampleState(&multisampling)                          // Anti-aliasing settings
+				.setPDepthStencilState(&depthStencil)                          // Depth/stencil testing
+				.setPColorBlendState(&colorBlending)                           // Blending configuration
+				.setPDynamicState(&dynamicState)                               // Dynamic state settings
+				.setLayout(*pbrPipelineLayout)                                 // Resource layout
+				.setRenderPass(nullptr)                                        // Using dynamic rendering
+				.setSubpass(0)                                                 // Subpass index
+				.setBasePipelineHandle(nullptr);                               // No base pipeline
+
+			// Configure for dynamic rendering (modern Vulkan approach)
+			vk::PipelineRenderingCreateInfo renderingInfo;
+			renderingInfo.setColorAttachmentCount(1)                                 // Single color target
+				.setPColorAttachmentFormats(&swapChainSurfaceFormat.format)           // Match swapchain format
+				.setDepthAttachmentFormat(findDepthFormat());                // Depth buffer format
+			pipelineInfo.setPNext(&renderingInfo);
+
+			// Create the final graphics pipeline
+			pbrPipeline = device.createGraphicsPipeline(nullptr, pipelineInfo);
+
+			return true;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Error creating PBR pipeline: " << e.what() << std::endl;
+			return false;
+		}
+	}
+
+	// Update uniform buffer
+	void updateUniformBuffer(uint32_t currentFrame, GameObject* entity, Camera* camera) {
+		// Get the transform component from the entity
+	//	auto transform = entity->GetComponent<TransformComponent>();
+		//if (!transform) {
+		//	std::cerr << "Entity does not have a transform component" << std::endl;
+		//	return;
+		//}
+
+		// Create the uniform buffer object
+		UniformBufferObject ubo{};
+
+		// Set the model matrix from the entity's transform
+		ubo.model = glm::translate(glm::mat4(1.0f), entity->position);
+		ubo.model = glm::rotate(ubo.model, glm::radians(entity->rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+		ubo.model = glm::rotate(ubo.model, glm::radians(entity->rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+		ubo.model = glm::rotate(ubo.model, glm::radians(entity->rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+		ubo.model = glm::scale(ubo.model, glm::vec3(entity->scale));
+
+		// Set the view and projection matrices from the camera
+		if (camera) {
+			ubo.view = camera->getViewMatrix();
+			ubo.proj = camera->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 2000.0f);
+		}
+		else {
+			// Default view and projection matrices if no camera is provided
+			ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+			ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 100.0f);
+			ubo.proj[1][1] *= -1; // Flip Y coordinate for Vulkan
+		}
+
+		// Set up lights
+		// Light 1: White light from above
+		ubo.lightPositions[0] = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
+		ubo.lightColors[0] = glm::vec4(300.0f, 300.0f, 300.0f, 1.0f);
+
+		// Light 2: Blue light from the left
+		ubo.lightPositions[1] = glm::vec4(-5.0f, 0.0f, 0.0f, 1.0f);
+		ubo.lightColors[1] = glm::vec4(0.0f, 0.0f, 300.0f, 1.0f);
+
+		// Light 3: Red light from the right
+		ubo.lightPositions[2] = glm::vec4(5.0f, 0.0f, 0.0f, 1.0f);
+		ubo.lightColors[2] = glm::vec4(300.0f, 0.0f, 0.0f, 1.0f);
+
+		// Light 4: Green light from behind
+		ubo.lightPositions[3] = glm::vec4(0.0f, -5.0f, 0.0f, 1.0f);
+		ubo.lightColors[3] = glm::vec4(0.0f, 300.0f, 0.0f, 1.0f);
+
+		// Set camera position for view-dependent effects
+		ubo.camPos = glm::vec4(camera ? camera->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
+
+		// Set PBR parameters
+		ubo.exposure = 4.5f;
+		ubo.gamma = 2.2f;
+		ubo.prefilteredCubeMipLevels = 1.0f;
+		ubo.scaleIBLAmbient = 1.0f;
+
+		// Copy the uniform buffer object to the device memory using vk::raii
+		// With vk::raii, we can use the mapped memory directly
+		memcpy(entity->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 	}
 
 private:
@@ -1470,6 +1939,26 @@ private:
 
 	Camera camera;
 	float lastFrameTime = 0.0f;
+
+	// Engine - Renderer
+	vk::raii::PipelineLayout pbrPipelineLayout = nullptr;
+	vk::raii::Pipeline pbrPipeline = nullptr;
+
+	// Push constant block for PBR material properties
+	struct PushConstantBlock {
+		glm::vec4 baseColorFactor;
+		float metallicFactor;
+		float roughnessFactor;
+		int baseColorTextureSet;
+		int physicalDescriptorTextureSet;
+		int normalTextureSet;
+		int occlusionTextureSet;
+		int emissiveTextureSet;
+		float alphaMask;
+		float alphaMaskCutoff;
+	};
+
+
 };
 
 int main()

@@ -30,15 +30,11 @@ void Renderer::initWindow()
 	window = glfwCreateWindow(WIDTH, HEIGHT, "Novus Engine", nullptr, nullptr);
 	glfwSetWindowUserPointer(window, this);
 	glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
-	// Callbacks managed by InputSystem now
-	// glfwSetCursorPosCallback(window, mousePosCallback);
-	// glfwSetMouseButtonCallback(window, mouseButtonCallback);
-	// glfwSetScrollCallback(window, scrollCallback);
 
 	camera.setupInputCallbacks(window);
 	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
-	camera.setPosition(glm::vec3(0.0f, 1.0f, 3.0f));
+	camera.setPosition(glm::vec3(0.0f, 20.0f, 23.0f));
 	camera.getViewMatrix();
 	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 }
@@ -1511,7 +1507,7 @@ void Renderer::drawFrame()
 
 	// Add a button to reset camera position
 	if (ImGui::Button("Reset Camera")) {
-		camera.setPosition(glm::vec3(0.0f, 0.0f, 3.0f));
+		camera.setPosition(glm::vec3(0.0f, 20.0f, 23.0f));
 		camera.setYaw(-90.0f);
 		camera.setPitch(0.0f);
 	}
@@ -1609,12 +1605,12 @@ void Renderer::setupGameObjects()
 		};
 
 	makeEntity("FlightHelmet_Left",
-		{ -3.0f, 0.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3.0f, 3.0f, 3.0f },
+		{ -3.0f, 10.5f, 10.0f }, { 0.0f, 0.0f, 0.0f }, { 33.0f, 33.0f, 33.0f },
 		"../models/FlightHelmet.gltf");
 
 	{
 		Entity& e = makeEntity("DamagedHelmet",
-			{ 3.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.5f, 1.5f, 1.5f },
+			{ 3.0f, 52.0f, -10.0f }, { 0.0f, 0.0f, 0.0f }, { 11.5f, 11.5f, 11.5f },
 			"../models/DamagedHelmet.gltf");
 		e.GetComponent<RenderableComponent>()->materials[0].metallicFactor = 1.0f;
 	}

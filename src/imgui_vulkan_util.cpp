@@ -382,22 +382,23 @@ bool ImGuiVulkanUtil::newFrame() {
 	if (ImGui::Button("Click me!")) {
 		// Handle button click
 	}
+
 	ImGui::End();
 
-	// End the frame
-	ImGui::EndFrame();
+	//// End the frame
+	//ImGui::EndFrame();
 
-	// Render to generate draw data
-	ImGui::Render();
+	//// Render to generate draw data
+	//ImGui::Render();
 
-	// Check if buffers need updating
-	ImDrawData* drawData = ImGui::GetDrawData();
-	if (drawData && drawData->CmdListsCount > 0) {
-		if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
-			needsUpdateBuffers = true;
-			return true;
-		}
-	}
+	//// Check if buffers need updating
+	//ImDrawData* drawData = ImGui::GetDrawData();
+	//if (drawData && drawData->CmdListsCount > 0) {
+	//	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
+	//		needsUpdateBuffers = true;
+	//		return true;
+	//	}
+	//}
 
 	return false;
 }

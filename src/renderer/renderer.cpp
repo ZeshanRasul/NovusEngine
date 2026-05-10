@@ -97,7 +97,7 @@ void Renderer::mainLoop()
 		float       deltaTime = time - lastFrameTime;
 		lastFrameTime = time;
 		InputSystem::Update(deltaTime);
-	
+
 		camera.processInput(window, camera, deltaTime);
 		drawFrame();
 	}
@@ -1497,8 +1497,42 @@ void Renderer::drawFrame()
 	}
 
 	if (imGui->newFrame()) {
-		imGui->updateBuffers();
 	}
+
+	// Create a window for camera controls
+	ImGui::Begin("Camera Controls");
+
+	// Add a button to reset camera position
+	if (ImGui::Button("Reset Camera")) {
+		camera.setPosition(glm::vec3(0.0f, 0.0f, 3.0f));
+		camera.setYaw(-90.0f);
+		camera.setPitch(0.0f);
+	}
+
+	// Add sliders for camera settings
+	float movementSpeed = camera.getMovementSpeed();
+	if (ImGui::SliderFloat("Movement Speed", &movementSpeed, 1.0f, 10.0f)) {
+		camera.setMovementSpeed(movementSpeed);
+	}
+
+	float sensitivity = camera.getMouseSensitivity();
+	if (ImGui::SliderFloat("Mouse Sensitivity", &sensitivity, 0.1f, 1.0f)) {
+		camera.setMouseSensitivity(sensitivity);
+	}
+
+	float zoom = camera.getZoom();
+	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 45.0f)) {
+		camera.setZoom(zoom);
+	}
+
+	ImGui::End();
+
+	// End the frame
+	ImGui::EndFrame();
+
+	// Render to generate draw data
+	ImGui::Render();
+	imGui->updateBuffers();
 
 	device.resetFences(*inFlightFences[frameIndex]);
 	commandBuffers[frameIndex].reset();

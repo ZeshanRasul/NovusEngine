@@ -201,10 +201,28 @@ struct GameObject {
 	vk::raii::DeviceMemory indexBufferMemory = nullptr;
 	void* indexBufferMapped = nullptr;
 
-	vk::raii::Image        textureImage = nullptr;
-	vk::raii::DeviceMemory textureImageMemory = nullptr;
-	vk::raii::ImageView    textureImageView = nullptr;
-	std::string			   textureFilename;
+	// PBR textures - 5 texture slots for complete PBR rendering
+	struct PBRTextures {
+		vk::raii::Image        baseColorImage = nullptr;
+		vk::raii::DeviceMemory baseColorMemory = nullptr;
+		vk::raii::ImageView    baseColorView = nullptr;
+
+		vk::raii::Image        metallicRoughnessImage = nullptr;
+		vk::raii::DeviceMemory metallicRoughnessMemory = nullptr;
+		vk::raii::ImageView    metallicRoughnessView = nullptr;
+
+		vk::raii::Image        normalImage = nullptr;
+		vk::raii::DeviceMemory normalMemory = nullptr;
+		vk::raii::ImageView    normalView = nullptr;
+
+		vk::raii::Image        occlusionImage = nullptr;
+		vk::raii::DeviceMemory occlusionMemory = nullptr;
+		vk::raii::ImageView    occlusionView = nullptr;
+
+		vk::raii::Image        emissiveImage = nullptr;
+		vk::raii::DeviceMemory emissiveMemory = nullptr;
+		vk::raii::ImageView    emissiveView = nullptr;
+	} pbrTextures;
 
 	// Descriptor sets for this object (one per frame in flight)
 	std::vector<vk::raii::DescriptorSet> descriptorSets;
@@ -252,7 +270,7 @@ private:
 		createImageViews();
 		createDescriptorSetLayout();
 		createGraphicsPipeline();
-		
+
 		if (!createPBRPipeline()) {
 			std::cerr << "Failed to create PBR pipeline" << std::endl;
 		}
@@ -260,6 +278,7 @@ private:
 		createCommandPool();
 		createDepthResources();
 		createTextureSampler();
+		createDefaultTextures();
 		setupGameObjects();
 		createVertexBuffer(gameObjects[0]);
 		createVertexBuffer(gameObjects[0]);
@@ -323,41 +342,32 @@ private:
 
 	// Initialize the game objects with different positions, rotations, and scales
 	void setupGameObjects() {
-		// Object 1 - Center
+		// Object 1 - Flight Helmet (Center)
 		gameObjects[0].position = { -1.0f, 0.0f, 0.0f };
 		gameObjects[0].rotation = { 0.0f, 0.0f, 0.0f };
 		gameObjects[0].scale = { 1.0f, 1.0f, 1.0f };
 		gameObjects[0].vertexBuffer = nullptr;
 		gameObjects[0].indexBuffer = nullptr;
-		gameObjects[0].textureFilename = "../textures/FlightHelmet_Materials_MetalPartsMat_BaseColor.ktx";
 		loadModel("../models/FlightHelmet.gltf", gameObjects[0]);
-		createTextureImage(gameObjects[0]);
-		createTextureImageView(gameObjects[0]);
+		loadPBRTextures(gameObjects[0]);
 
-		// Object 2 - Left
+		// Object 2 - Damaged Helmet (Left)
 		gameObjects[1].position = { 1.0f, 0.0f, 0.0f };
 		gameObjects[1].rotation = { 0.0f, glm::radians(45.0f), 0.0f };
 		gameObjects[1].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[1].vertexBuffer = nullptr;
 		gameObjects[1].indexBuffer = nullptr;
-		gameObjects[1].textureFilename = "../textures/Default_albedo.ktx";
-
 		loadModel("../models/DamagedHelmet.gltf", gameObjects[1]);
-		createTextureImage(gameObjects[1]);
-		createTextureImageView(gameObjects[1]);
+		loadPBRTextures(gameObjects[1]);
 
-		// Object 3 - Right
+		// Object 3 - Flight Helmet (Right)
 		gameObjects[2].position = { -5.0f, 0.0f, 0.0f };
 		gameObjects[2].rotation = { 0.0f, glm::radians(-45.0f), 0.0f };
 		gameObjects[2].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[2].vertexBuffer = nullptr;
 		gameObjects[2].indexBuffer = nullptr;
-		gameObjects[2].textureFilename = "../textures/FlightHelmet_Materials_MetalPartsMat_BaseColor.ktx";
-
 		loadModel("../models/FlightHelmet.gltf", gameObjects[2]);
-		createTextureImage(gameObjects[2]);
-		createTextureImageView(gameObjects[2]);
-
+		loadPBRTextures(gameObjects[2]);
 	}
 
 	void recreateSwapChain()
@@ -686,9 +696,21 @@ private:
 
 	void createDescriptorSetLayout()
 	{
-		std::array<vk::DescriptorSetLayoutBinding, 2> bindings{
-			{{.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex},
-			 {.binding = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment}} };
+		// Create descriptor set layout for PBR rendering
+		// Binding 0: Uniform buffer (vertex shader)
+		// Binding 1: Base color texture (fragment shader)
+		// Binding 2: Metallic-roughness texture (fragment shader)
+		// Binding 3: Normal map (fragment shader)
+		// Binding 4: Occlusion map (fragment shader)
+		// Binding 5: Emissive map (fragment shader)
+		std::array<vk::DescriptorSetLayoutBinding, 6> bindings{
+			{{.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment},
+			 {.binding = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment},
+			 {.binding = 2, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment},
+			 {.binding = 3, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment},
+			 {.binding = 4, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment},
+			 {.binding = 5, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment}} 
+		};
 
 		vk::DescriptorSetLayoutCreateInfo layoutInfo{ .bindingCount = static_cast<uint32_t>(bindings.size()), .pBindings = bindings.data() };
 		descriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
@@ -900,55 +922,212 @@ private:
 		depthImageView = createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
 	}
 
-	void createTextureImage(GameObject& gameObj)
-	{
-		ktxTexture* kTexture;
-		KTX_error_code result = ktxTexture_CreateFromNamedFile(
-			gameObj.textureFilename.c_str(),
-			KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
-			&kTexture);
-
-		if (result != KTX_SUCCESS) {
-			throw std::runtime_error("failed to load ktx texture image!");
+	// Load a single texture from file path
+	void loadTextureFromFile(const std::string& filepath, vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory, vk::raii::ImageView& imageView, bool isSRGB = true) {
+		// Check if file exists
+		std::ifstream file(filepath);
+		if (!file.good()) {
+			std::cout << "Warning: Texture file not found: " << filepath << " - using placeholder" << std::endl;
+			return;
 		}
+		file.close();
 
-		// Get texture dimensions and data
-		uint32_t texWidth = kTexture->baseWidth;
-		uint32_t texHeight = kTexture->baseHeight;
-		ktx_size_t imageSize = ktxTexture_GetImageSize(kTexture, 0);
-		ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
+		// Determine file extension
+		std::string extension = filepath.substr(filepath.find_last_of('.') + 1);
+		std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+		uint32_t texWidth, texHeight;
+		vk::DeviceSize imageSize;
+		unsigned char* textureData = nullptr;
+		int texChannels;
+
+		// Load based on file extension
+		if (extension == "ktx") {
+			ktxTexture* kTexture;
+			KTX_error_code result = ktxTexture_CreateFromNamedFile(
+				filepath.c_str(),
+				KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+				&kTexture);
+
+			if (result != KTX_SUCCESS) {
+				std::cout << "Warning: Failed to load KTX texture: " << filepath << std::endl;
+				return;
+			}
+
+			texWidth = kTexture->baseWidth;
+			texHeight = kTexture->baseHeight;
+			imageSize = ktxTexture_GetImageSize(kTexture, 0);
+			ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
+
+			// Copy KTX data to temporary buffer
+			textureData = new unsigned char[imageSize];
+			memcpy(textureData, ktxTextureData, imageSize);
+
+			ktxTexture_Destroy(kTexture);
+		}
+		else if (extension == "png" || extension == "jpg" || extension == "jpeg") {
+			// Use stb_image for PNG/JPG
+			int texWidth_i, texHeight_i;
+			textureData = stbi_load(filepath.c_str(), &texWidth_i, &texHeight_i, &texChannels, STBI_rgb_alpha);
+
+			if (!textureData) {
+				std::cout << "Warning: Failed to load image texture: " << filepath << std::endl;
+				return;
+			}
+
+			texWidth = static_cast<uint32_t>(texWidth_i);
+			texHeight = static_cast<uint32_t>(texHeight_i);
+			imageSize = texWidth * texHeight * 4; // RGBA
+		}
+		else {
+			std::cout << "Warning: Unsupported texture format: " << extension << " for file: " << filepath << std::endl;
+			return;
+		}
 
 		// Create staging buffer
 		vk::raii::Buffer stagingBuffer({});
 		vk::raii::DeviceMemory stagingBufferMemory({});
-		createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+		createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, 
+			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, 
+			stagingBuffer, stagingBufferMemory);
 
-		// Copy texture data to staging buffer
 		void* data = stagingBufferMemory.mapMemory(0, imageSize);
-		memcpy(data, ktxTextureData, imageSize);
+		memcpy(data, textureData, imageSize);
 		stagingBufferMemory.unmapMemory();
 
-		// Determine the Vulkan format from KTX format
-		vk::Format textureFormat = vk::Format::eR8G8B8A8Srgb; // Default format, should be determined from KTX metadata
+		// Free texture data
+		if (extension == "ktx") {
+			delete[] textureData;
+		} else {
+			stbi_image_free(textureData);
+		}
 
-		// Create the texture image
+		// Determine format - normal maps and data textures should be linear, color should be sRGB
+		vk::Format textureFormat = isSRGB ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
+
 		createImage(texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal, gameObj.textureImage, gameObj.textureImageMemory);
+			vk::MemoryPropertyFlagBits::eDeviceLocal, image, imageMemory);
 
 		vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
-		transitionImageLayout(commandBuffer, gameObj.textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		copyBufferToImage(commandBuffer, stagingBuffer, gameObj.textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-		transitionImageLayout(commandBuffer, gameObj.textureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+		copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
+		transitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		endSingleTimeCommands(std::move(commandBuffer));
 
-		// Cleanup KTX resources
-		ktxTexture_Destroy(kTexture);
+		// Create image view
+		imageView = createImageView(*image, textureFormat, vk::ImageAspectFlagBits::eColor);
+
+		std::cout << "Successfully loaded texture: " << filepath << " (" << texWidth << "x" << texHeight << ")" << std::endl;
 	}
 
-	void createTextureImageView(GameObject& gameObj)
-	{
-		gameObj.textureImageView = createImageView(*gameObj.textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
+	// Load all PBR textures for a game object based on material data
+	void loadPBRTextures(GameObject& gameObj) {
+		std::cout << "Loading PBR textures for object..." << std::endl;
+
+		// Base color / albedo (sRGB)
+		if (!gameObj.material.albedoTexturePath.empty()) {
+			loadTextureFromFile(gameObj.material.albedoTexturePath, 
+				gameObj.pbrTextures.baseColorImage, 
+				gameObj.pbrTextures.baseColorMemory, 
+				gameObj.pbrTextures.baseColorView, 
+				true);
+		}
+
+		// Metallic-roughness (linear)
+		if (!gameObj.material.metallicRoughnessTexturePath.empty()) {
+			loadTextureFromFile(gameObj.material.metallicRoughnessTexturePath, 
+				gameObj.pbrTextures.metallicRoughnessImage, 
+				gameObj.pbrTextures.metallicRoughnessMemory, 
+				gameObj.pbrTextures.metallicRoughnessView, 
+				false);
+		}
+
+		// Normal map (linear)
+		if (!gameObj.material.normalTexturePath.empty()) {
+			loadTextureFromFile(gameObj.material.normalTexturePath, 
+				gameObj.pbrTextures.normalImage, 
+				gameObj.pbrTextures.normalMemory, 
+				gameObj.pbrTextures.normalView, 
+				false);
+		}
+
+		// Occlusion (linear)
+		if (!gameObj.material.occlusionTexturePath.empty()) {
+			loadTextureFromFile(gameObj.material.occlusionTexturePath, 
+				gameObj.pbrTextures.occlusionImage, 
+				gameObj.pbrTextures.occlusionMemory, 
+				gameObj.pbrTextures.occlusionView, 
+				false);
+		}
+
+		// Emissive (sRGB)
+		if (!gameObj.material.emissiveTexturePath.empty()) {
+			loadTextureFromFile(gameObj.material.emissiveTexturePath, 
+				gameObj.pbrTextures.emissiveImage, 
+				gameObj.pbrTextures.emissiveMemory, 
+				gameObj.pbrTextures.emissiveView, 
+				true);
+		}
+	}
+
+	// Create default fallback textures for missing PBR slots
+	void createDefaultTextures() {
+		// Create 1x1 white texture for base color/metallic-roughness/occlusion/emissive fallback
+		{
+			const uint32_t white = 0xFFFFFFFF;
+			vk::DeviceSize imageSize = sizeof(uint32_t);
+
+			vk::raii::Buffer stagingBuffer({});
+			vk::raii::DeviceMemory stagingBufferMemory({});
+			createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+				vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+				stagingBuffer, stagingBufferMemory);
+
+			void* data = stagingBufferMemory.mapMemory(0, imageSize);
+			memcpy(data, &white, imageSize);
+			stagingBufferMemory.unmapMemory();
+
+			createImage(1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+				vk::MemoryPropertyFlagBits::eDeviceLocal, defaultTextureImage, defaultTextureMemory);
+
+			vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
+			transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+			copyBufferToImage(commandBuffer, stagingBuffer, defaultTextureImage, 1, 1);
+			transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+			endSingleTimeCommands(std::move(commandBuffer));
+
+			defaultTextureView = createImageView(*defaultTextureImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+		}
+
+		// Create 1x1 normal map with (0.5, 0.5, 1.0, 1.0) (flat normal pointing up in tangent space)
+		{
+			const uint32_t flatNormal = 0xFFFF7F7F; // RGBA: 127, 127, 255, 255 -> (0, 0, 1) in normal space
+			vk::DeviceSize imageSize = sizeof(uint32_t);
+
+			vk::raii::Buffer stagingBuffer({});
+			vk::raii::DeviceMemory stagingBufferMemory({});
+			createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+				vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+				stagingBuffer, stagingBufferMemory);
+
+			void* data = stagingBufferMemory.mapMemory(0, imageSize);
+			memcpy(data, &flatNormal, imageSize);
+			stagingBufferMemory.unmapMemory();
+
+			createImage(1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+				vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+				vk::MemoryPropertyFlagBits::eDeviceLocal, defaultNormalImage, defaultNormalMemory);
+
+			vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
+			transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+			copyBufferToImage(commandBuffer, stagingBuffer, defaultNormalImage, 1, 1);
+			transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+			endSingleTimeCommands(std::move(commandBuffer));
+
+			defaultNormalView = createImageView(*defaultNormalImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+		}
 	}
 
 	void createTextureSampler()
@@ -1021,7 +1200,90 @@ private:
 		gameObj.indices.clear();
 		gameObj.meshes.clear();
 
-		// Process all meshes in the model
+		// Extract base directory from model filename for texture loading
+		std::string baseDir = modelFilename.substr(0, modelFilename.find_last_of("/\\") + 1);
+
+		// Load material data from the first material (if exists)
+		if (!model.materials.empty()) {
+			const auto& mat = model.materials[0];
+			gameObj.material = Material(mat.name);
+
+			// Extract PBR metallic-roughness properties
+			if (mat.pbrMetallicRoughness.baseColorFactor.size() == 4) {
+				gameObj.material.baseColorFactor = glm::vec4(
+					mat.pbrMetallicRoughness.baseColorFactor[0],
+					mat.pbrMetallicRoughness.baseColorFactor[1],
+					mat.pbrMetallicRoughness.baseColorFactor[2],
+					mat.pbrMetallicRoughness.baseColorFactor[3]
+				);
+			}
+
+			gameObj.material.metallicFactor = static_cast<float>(mat.pbrMetallicRoughness.metallicFactor);
+			gameObj.material.roughnessFactor = static_cast<float>(mat.pbrMetallicRoughness.roughnessFactor);
+
+			// Extract texture indices and paths
+			if (mat.pbrMetallicRoughness.baseColorTexture.index >= 0) {
+				int texIndex = mat.pbrMetallicRoughness.baseColorTexture.index;
+				if (texIndex < model.textures.size()) {
+					int imageIndex = model.textures[texIndex].source;
+					if (imageIndex >= 0 && imageIndex < model.images.size()) {
+						gameObj.material.albedoTexturePath = baseDir + model.images[imageIndex].uri;
+						gameObj.material.baseColorTextureIndex = 0.0f; // Texture is available
+					}
+				}
+			}
+
+			if (mat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) {
+				int texIndex = mat.pbrMetallicRoughness.metallicRoughnessTexture.index;
+				if (texIndex < model.textures.size()) {
+					int imageIndex = model.textures[texIndex].source;
+					if (imageIndex >= 0 && imageIndex < model.images.size()) {
+						gameObj.material.metallicRoughnessTexturePath = baseDir + model.images[imageIndex].uri;
+						gameObj.material.metallicRoughnessTextureIndex = 0.0f;
+					}
+				}
+			}
+
+			if (mat.normalTexture.index >= 0) {
+				int texIndex = mat.normalTexture.index;
+				if (texIndex < model.textures.size()) {
+					int imageIndex = model.textures[texIndex].source;
+					if (imageIndex >= 0 && imageIndex < model.images.size()) {
+						gameObj.material.normalTexturePath = baseDir + model.images[imageIndex].uri;
+						gameObj.material.normalTextureIndex = 0.0f;
+					}
+				}
+			}
+
+			if (mat.occlusionTexture.index >= 0) {
+				int texIndex = mat.occlusionTexture.index;
+				if (texIndex < model.textures.size()) {
+					int imageIndex = model.textures[texIndex].source;
+					if (imageIndex >= 0 && imageIndex < model.images.size()) {
+						gameObj.material.occlusionTexturePath = baseDir + model.images[imageIndex].uri;
+						gameObj.material.occlusionTextureIndex = 0.0f;
+					}
+				}
+			}
+
+			if (mat.emissiveTexture.index >= 0) {
+				int texIndex = mat.emissiveTexture.index;
+				if (texIndex < model.textures.size()) {
+					int imageIndex = model.textures[texIndex].source;
+					if (imageIndex >= 0 && imageIndex < model.images.size()) {
+						gameObj.material.emissiveTexturePath = baseDir + model.images[imageIndex].uri;
+						gameObj.material.emissiveTextureIndex = 0.0f;
+					}
+				}
+			}
+
+			std::cout << "Loaded material: " << mat.name << std::endl;
+			std::cout << "  Base color texture: " << gameObj.material.albedoTexturePath << std::endl;
+			std::cout << "  Metallic-roughness texture: " << gameObj.material.metallicRoughnessTexturePath << std::endl;
+			std::cout << "  Normal texture: " << gameObj.material.normalTexturePath << std::endl;
+		}
+
+		// Process all meshes in the model (geometry loading - unchanged)
 		for (const auto& mesh : model.meshes)
 		{
 			for (const auto& primitive : mesh.primitives)
@@ -1063,7 +1325,7 @@ private:
 					texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
 					texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
 				}
-				
+
 				if (hasNormals)
 				{
 					normalAccessor = &model.accessors[primitive.attributes.at("NORMAL")];
@@ -1085,9 +1347,6 @@ private:
 					Vertex vertex{};
 
 					const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset + i * 12]);
-					// glTF uses a right-handed coordinate system with Y-up
-					// Vulkan uses a right-handed coordinate system with Y-down
-					// We need to flip the Y coordinate
 					vertex.pos = { pos[0], -pos[1], pos[2] };
 
 					if (hasTexCoords)
@@ -1261,8 +1520,9 @@ private:
 
 	void createDescriptorPool()
 	{
+		// Pool for PBR descriptors: 1 uniform buffer + 5 combined image samplers per object
 		std::array<vk::DescriptorPoolSize, 2> poolSize{ {{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT},
-														{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT}} };
+														{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 5 * MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT}} };
 		vk::DescriptorPoolCreateInfo          poolInfo{ .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
 													   .maxSets = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT,
 													   .poolSizeCount = static_cast<uint32_t>(poolSize.size()),
@@ -1291,12 +1551,40 @@ private:
 					.offset = 0,
 					.range = sizeof(UniformBufferObject)
 				};
-				vk::DescriptorImageInfo imageInfo{
+
+				// Create image infos for each PBR texture slot
+				vk::DescriptorImageInfo baseColorInfo{
 					.sampler = *textureSampler,
-					.imageView = *gameObject.textureImageView,
+					.imageView = *gameObject.pbrTextures.baseColorView ? *gameObject.pbrTextures.baseColorView : *defaultTextureView,
 					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
 				};
+
+				vk::DescriptorImageInfo metallicRoughnessInfo{
+					.sampler = *textureSampler,
+					.imageView = *gameObject.pbrTextures.metallicRoughnessView ? *gameObject.pbrTextures.metallicRoughnessView : *defaultTextureView,
+					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+				};
+
+				vk::DescriptorImageInfo normalInfo{
+					.sampler = *textureSampler,
+					.imageView = *gameObject.pbrTextures.normalView ? *gameObject.pbrTextures.normalView : *defaultNormalView,
+					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+				};
+
+				vk::DescriptorImageInfo occlusionInfo{
+					.sampler = *textureSampler,
+					.imageView = *gameObject.pbrTextures.occlusionView ? *gameObject.pbrTextures.occlusionView : *defaultTextureView,
+					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+				};
+
+				vk::DescriptorImageInfo emissiveInfo{
+					.sampler = *textureSampler,
+					.imageView = *gameObject.pbrTextures.emissiveView ? *gameObject.pbrTextures.emissiveView : *defaultTextureView,
+					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+				};
+
 				std::array descriptorWrites{
+					// Binding 0: Uniform buffer
 					vk::WriteDescriptorSet{
 						.dstSet = *gameObject.descriptorSets[i],
 						.dstBinding = 0,
@@ -1305,13 +1593,50 @@ private:
 						.descriptorType = vk::DescriptorType::eUniformBuffer,
 						.pBufferInfo = &bufferInfo
 					},
+					// Binding 1: Base color texture
 					vk::WriteDescriptorSet{
 						.dstSet = *gameObject.descriptorSets[i],
 						.dstBinding = 1,
 						.dstArrayElement = 0,
 						.descriptorCount = 1,
 						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-						.pImageInfo = &imageInfo
+						.pImageInfo = &baseColorInfo
+					},
+					// Binding 2: Metallic-roughness texture
+					vk::WriteDescriptorSet{
+						.dstSet = *gameObject.descriptorSets[i],
+						.dstBinding = 2,
+						.dstArrayElement = 0,
+						.descriptorCount = 1,
+						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+						.pImageInfo = &metallicRoughnessInfo
+					},
+					// Binding 3: Normal map
+					vk::WriteDescriptorSet{
+						.dstSet = *gameObject.descriptorSets[i],
+						.dstBinding = 3,
+						.dstArrayElement = 0,
+						.descriptorCount = 1,
+						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+						.pImageInfo = &normalInfo
+					},
+					// Binding 4: Occlusion map
+					vk::WriteDescriptorSet{
+						.dstSet = *gameObject.descriptorSets[i],
+						.dstBinding = 4,
+						.dstArrayElement = 0,
+						.descriptorCount = 1,
+						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+						.pImageInfo = &occlusionInfo
+					},
+					// Binding 5: Emissive map
+					vk::WriteDescriptorSet{
+						.dstSet = *gameObject.descriptorSets[i],
+						.dstBinding = 5,
+						.dstArrayElement = 0,
+						.descriptorCount = 1,
+						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+						.pImageInfo = &emissiveInfo
 					}
 				};
 				device.updateDescriptorSets(descriptorWrites, {});
@@ -1612,9 +1937,6 @@ private:
 
 		device.resetFences(*inFlightFences[frameIndex]);
 
-		// Update uniform buffers with current frame data
-//		updateUniformBuffer(frameIndex);
-
 		commandBuffers[frameIndex].reset();
 		recordCommandBuffer(imageIndex);
 
@@ -1846,31 +2168,31 @@ private:
 			ubo.proj[1][1] *= -1; // Flip Y coordinate for Vulkan
 		}
 
-		// Set up lights
-		// Light 1: White light from above
-		ubo.lightPositions[0] = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
-		ubo.lightColors[0] = glm::vec4(300.0f, 300.0f, 300.0f, 1.0f);
+		// Set up lights - positioned around the objects for better illumination
+		// Light 1: Strong white key light from front-top-right
+		ubo.lightPositions[0] = glm::vec4(5.0f, 8.0f, 5.0f, 1.0f);
+		ubo.lightColors[0] = glm::vec4(2800.0f, 800.0f, 800.0f, 1.0f);
 
-		// Light 2: Blue light from the left
-		ubo.lightPositions[1] = glm::vec4(-5.0f, 0.0f, 0.0f, 1.0f);
-		ubo.lightColors[1] = glm::vec4(0.0f, 0.0f, 300.0f, 1.0f);
+		// Light 2: Fill light from left
+		ubo.lightPositions[1] = glm::vec4(-8.0f, 3.0f, 2.0f, 1.0f);
+		ubo.lightColors[1] = glm::vec4(400.0f, 400.0f, 2400.0f, 1.0f);
 
-		// Light 3: Red light from the right
-		ubo.lightPositions[2] = glm::vec4(5.0f, 0.0f, 0.0f, 1.0f);
-		ubo.lightColors[2] = glm::vec4(300.0f, 0.0f, 0.0f, 1.0f);
+		// Light 3: Rim light from back-right
+		ubo.lightPositions[2] = glm::vec4(4.0f, 2.0f, -5.0f, 1.0f);
+		ubo.lightColors[2] = glm::vec4(500.0f, 1500.0f, 500.0f, 1.0f);
 
-		// Light 4: Green light from behind
-		ubo.lightPositions[3] = glm::vec4(0.0f, -5.0f, 0.0f, 1.0f);
-		ubo.lightColors[3] = glm::vec4(0.0f, 300.0f, 0.0f, 1.0f);
+		// Light 4: Ambient/bounce light from below
+		ubo.lightPositions[3] = glm::vec4(0.0f, -2.0f, 3.0f, 1.0f);
+		ubo.lightColors[3] = glm::vec4(200.0f, 200.0f, 200.0f, 1.0f);
 
 		// Set camera position for view-dependent effects
 		ubo.camPos = glm::vec4(camera ? camera->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
 
-		// Set PBR parameters
-		ubo.exposure = 4.5f;
+		// Set PBR parameters - increased exposure for brighter rendering
+		ubo.exposure = 1.5f;  // Adjusted from 4.5f - higher values make it brighter
 		ubo.gamma = 2.2f;
 		ubo.prefilteredCubeMipLevels = 1.0f;
-		ubo.scaleIBLAmbient = 1.0f;
+		ubo.scaleIBLAmbient = 0.03f;  // Add some ambient contribution
 
 		// Copy the uniform buffer object to the device memory using vk::raii
 		// With vk::raii, we can use the mapped memory directly
@@ -1928,6 +2250,15 @@ private:
 	vk::raii::Image depthImage = nullptr;
 	vk::raii::DeviceMemory depthImageMemory = nullptr;
 	vk::raii::ImageView depthImageView = nullptr;
+
+	// Default fallback textures
+	vk::raii::Image defaultTextureImage = nullptr;
+	vk::raii::DeviceMemory defaultTextureMemory = nullptr;
+	vk::raii::ImageView defaultTextureView = nullptr;
+
+	vk::raii::Image defaultNormalImage = nullptr;
+	vk::raii::DeviceMemory defaultNormalMemory = nullptr;
+	vk::raii::ImageView defaultNormalView = nullptr;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 

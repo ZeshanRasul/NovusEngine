@@ -979,16 +979,16 @@ void Renderer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* r
 	ubo.lightPositions[2] = glm::vec4(1.5f, 2.0f, -2.5f, 1.0f);
 	ubo.lightPositions[3] = glm::vec4(-2.0f, 4.5f, -1.0f, 1.0f);
 
-	ubo.lightColors[0] = glm::vec4(2.0f, 0.0f, 0.0f, 1.0f);
-	ubo.lightColors[1] = glm::vec4(0.0f, 0.0f, 4.0f, 1.0f);
-	ubo.lightColors[2] = glm::vec4(0.0f, 4.0f, 0.0f, 1.0f);
-	ubo.lightColors[3] = glm::vec4(6.0f, 0.1f, 0.0f, 1.0f);
+	ubo.lightColors[0] = glm::vec4(200.0f, 0.0f, 0.0f, 1.0f);
+	ubo.lightColors[1] = glm::vec4(0.0f, 0.0f, 400.0f, 1.0f);
+	ubo.lightColors[2] = glm::vec4(0.0f, 400.0f, 0.0f, 1.0f);
+	ubo.lightColors[3] = glm::vec4(600.0f, 10.0f, 0.0f, 1.0f);
 
 	ubo.camPos = glm::vec4(cam ? cam->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
 	ubo.exposure = 1.0f;
 	ubo.gamma = 2.2f;
 	ubo.prefilteredCubeMipLevels = 1.0f;
-	ubo.scaleIBLAmbient = 0.02f;
+	ubo.scaleIBLAmbient = 0.2f;
 
 	memcpy(renderable->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }

@@ -384,8 +384,6 @@ bool ImGuiVulkanUtil::newFrame() {
 	}
 	ImGui::End();
 
-	ImGui::ShowDemoWindow();
-
 	// End the frame
 	ImGui::EndFrame();
 

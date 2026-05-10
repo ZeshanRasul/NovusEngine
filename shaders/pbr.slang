@@ -133,20 +133,30 @@ VSOutput vertMain(VSInput input)
 float4 fragMain(VSOutput input) : SV_TARGET
 {
     // === MATERIAL PROPERTY SAMPLING ===
-    // Sample base color texture and apply material color factor
-    float4 baseColor = baseColorMap.Sample(baseColorSampler, input.UV) * material.baseColorFactor;
+    // Start from glTF defaults and only sample textures when they exist.
+    float4 baseColor = material.baseColorFactor;
+    if (material.baseColorTextureSet >= 0) {
+        baseColor *= baseColorMap.Sample(baseColorSampler, input.UV);
+    }
 
-    // Sample metallic-roughness texture (metallic=B channel, roughness=G channel)
     // glTF standard: metallic stored in blue, roughness in green
-    float2 metallicRoughness = metallicRoughnessMap.Sample(metallicRoughnessSampler, input.UV).bg;
-    float metallic = metallicRoughness.x * material.metallicFactor;
-    float roughness = metallicRoughness.y * material.roughnessFactor;
+    float metallic = saturate(material.metallicFactor);
+    float roughness = clamp(material.roughnessFactor, 0.04, 1.0);
+    if (material.physicalDescriptorTextureSet >= 0) {
+        float2 metallicRoughness = metallicRoughnessMap.Sample(metallicRoughnessSampler, input.UV).bg;
+        metallic = saturate(metallicRoughness.x * material.metallicFactor);
+        roughness = clamp(metallicRoughness.y * material.roughnessFactor, 0.04, 1.0);
+    }
 
-    // Sample ambient occlusion (typically stored in red channel)
-    float ao = occlusionMap.Sample(occlusionSampler, input.UV).r;
+    float ao = 1.0;
+    if (material.occlusionTextureSet >= 0) {
+        ao = occlusionMap.Sample(occlusionSampler, input.UV).r;
+    }
 
-    // Sample emissive texture for self-illuminating materials
-    float3 emissive = emissiveMap.Sample(emissiveSampler, input.UV).rgb;
+    float3 emissive = float3(0.0, 0.0, 0.0);
+    if (material.emissiveTextureSet >= 0) {
+        emissive = emissiveMap.Sample(emissiveSampler, input.UV).rgb;
+    }
 
     // === NORMAL CALCULATION ===
     // Start with interpolated surface normal
@@ -181,7 +191,6 @@ float4 fragMain(VSOutput input) : SV_TARGET
 
     // Initialize outgoing radiance accumulator
     float3 Lo = float3(0.0, 0.0, 0.0);
-
     // === DIRECT LIGHTING LOOP ===
     // Calculate contribution from each light source
     for (int i = 0; i < 4; i++) {
@@ -189,10 +198,15 @@ float4 fragMain(VSOutput input) : SV_TARGET
         float3 lightColor = ubo.lightColors[i].rgb;
 
         // Calculate light direction and attenuation
-        float3 L = normalize(lightPos - input.WorldPos);      // Light direction
-        float distance = length(lightPos - input.WorldPos);   // Distance for falloff
-        float attenuation = 1.0 / (distance * distance);     // Inverse square falloff
-        float3 radiance = lightColor * attenuation;           // Attenuated light color
+        float3 toLight = lightPos - input.WorldPos;
+        float distance = length(toLight);
+        float3 L = toLight / max(distance, 0.0001);
+
+        // Softer point-light attenuation than strict inverse-square.
+        // This makes authored light colors/intensities much easier to read 
+        // in a small test scene without requiring extremely large values.
+        float attenuation = 1.0 / (1.0 + 0.09 * distance + 0.032 * distance * distance);
+        float3 radiance = lightColor * attenuation;
 
         // Calculate half vector (between view and light directions)
         float3 H = normalize(V + L);
@@ -228,10 +242,13 @@ float4 fragMain(VSOutput input) : SV_TARGET
 
     // === AMBIENT AND EMISSIVE ===
     // Add simple ambient lighting (should be replaced with IBL in production)
-    float3 ambient = float3(0.03, 0.03, 0.03) * baseColor.rgb * ao;
+    float3 ambient = ubo.scaleIBLAmbient * baseColor.rgb * ao;
 
     // Combine all lighting contributions
     float3 color = ambient + Lo + emissive;
+
+    // Apply exposure before tone mapping
+    color *= ubo.exposure;
 
     // === HDR TONE MAPPING AND GAMMA CORRECTION ===
     // Apply Reinhard tone mapping to compress HDR values to [0,1] range

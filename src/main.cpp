@@ -122,8 +122,8 @@ public:
 
 	// PBR properties (Metallic-Roughness default)
 	glm::vec3 albedo = glm::vec3(1.0f);
-	float metallic = 0.0f;
-	float roughness = 1.0f;
+	float metallic = 0.0;
+	float roughness = 0.6;
 	float ao = 1.0f;
 	glm::vec3 emissive = glm::vec3(0.0f);
 	float ior = 1.5f; // Index of refraction
@@ -162,12 +162,11 @@ public:
 	glm::vec4 baseColorFactor = glm::vec4(1.0f);
 	float metallicFactor = 0.0f;
 	float roughnessFactor = 1.0f;
-	float baseColorTextureIndex = 0.0f;
-	float metallicRoughnessTextureIndex = 0.0f;
-	float normalTextureIndex = 0.0f;
-	float occlusionTextureIndex = 0.0f;
-	float emissiveTextureIndex = 0.0f;
-
+	float baseColorTextureIndex = -1.0f;
+	float metallicRoughnessTextureIndex = -1.0f;
+	float normalTextureIndex = -1.0f;
+	float occlusionTextureIndex = -1.0f;
+	float emissiveTextureIndex = -1.0f;
 
 private:
 	std::string name;
@@ -222,18 +221,17 @@ struct GameObject {
 		vk::raii::Image        emissiveImage = nullptr;
 		vk::raii::DeviceMemory emissiveMemory = nullptr;
 		vk::raii::ImageView    emissiveView = nullptr;
-	} pbrTextures;
+  };
 
-	// Descriptor sets for this object (one per frame in flight)
-	std::vector<vk::raii::DescriptorSet> descriptorSets;
+    std::vector<Material> materials;
+	std::vector<PBRTextures> materialTextures;
+	std::vector<std::vector<vk::raii::DescriptorSet>> materialDescriptorSets;
 
 	std::vector<Vertex>    vertices;
 	std::vector<uint32_t>  indices;
 
 	// Mesh information for submeshes
 	std::vector<Mesh>      meshes;
-
-	Material material = Material("DefaultMaterial");
 
 	// Calculate model matrix based on position, rotation, and scale
 	glm::mat4 getModelMatrix() const {
@@ -343,31 +341,38 @@ private:
 	// Initialize the game objects with different positions, rotations, and scales
 	void setupGameObjects() {
 		// Object 1 - Flight Helmet (Center)
-		gameObjects[0].position = { -1.0f, 0.0f, 0.0f };
+		gameObjects[0].position = { -3.0f, 0.0f, 0.0f };
 		gameObjects[0].rotation = { 0.0f, 0.0f, 0.0f };
-		gameObjects[0].scale = { 1.0f, 1.0f, 1.0f };
+		gameObjects[0].scale = { 3.0f, 3.0f, 3.0f };
 		gameObjects[0].vertexBuffer = nullptr;
 		gameObjects[0].indexBuffer = nullptr;
 		loadModel("../models/FlightHelmet.gltf", gameObjects[0]);
-		loadPBRTextures(gameObjects[0]);
+        for (size_t i = 0; i < gameObjects[0].materials.size(); ++i) {
+			loadPBRTextures(gameObjects[0].materials[i], gameObjects[0].materialTextures[i]);
+		}
 
 		// Object 2 - Damaged Helmet (Left)
-		gameObjects[1].position = { 1.0f, 0.0f, 0.0f };
-		gameObjects[1].rotation = { 0.0f, glm::radians(45.0f), 0.0f };
+		gameObjects[2].position = { 3.0f, 0.0f, 0.0f };
+		gameObjects[1].rotation = { 0.0f, 0.0f, 0.0f };
 		gameObjects[1].scale = { 0.75f, 0.75f, 0.75f };
 		gameObjects[1].vertexBuffer = nullptr;
 		gameObjects[1].indexBuffer = nullptr;
 		loadModel("../models/DamagedHelmet.gltf", gameObjects[1]);
-		loadPBRTextures(gameObjects[1]);
+        for (size_t i = 0; i < gameObjects[1].materials.size(); ++i) {
+			loadPBRTextures(gameObjects[1].materials[i], gameObjects[1].materialTextures[i]);
+		}
+		gameObjects[1].materials[0].metallicFactor = 1.0f; // Override metallic factor for a more pronounced metallic look
 
 		// Object 3 - Flight Helmet (Right)
-		gameObjects[2].position = { -5.0f, 0.0f, 0.0f };
+		gameObjects[1].position = { 0.0f, 0.0f, 0.0f };
 		gameObjects[2].rotation = { 0.0f, glm::radians(-45.0f), 0.0f };
-		gameObjects[2].scale = { 0.75f, 0.75f, 0.75f };
+		gameObjects[2].scale = { 3.0f, 3.0f, 3.0f };
 		gameObjects[2].vertexBuffer = nullptr;
 		gameObjects[2].indexBuffer = nullptr;
 		loadModel("../models/FlightHelmet.gltf", gameObjects[2]);
-		loadPBRTextures(gameObjects[2]);
+        for (size_t i = 0; i < gameObjects[2].materials.size(); ++i) {
+			loadPBRTextures(gameObjects[2].materials[i], gameObjects[2].materialTextures[i]);
+		}
 	}
 
 	void recreateSwapChain()
@@ -709,7 +714,7 @@ private:
 			 {.binding = 2, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment},
 			 {.binding = 3, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment},
 			 {.binding = 4, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment},
-			 {.binding = 5, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment}} 
+			 {.binding = 5, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment}}
 		};
 
 		vk::DescriptorSetLayoutCreateInfo layoutInfo{ .bindingCount = static_cast<uint32_t>(bindings.size()), .pBindings = bindings.data() };
@@ -987,8 +992,8 @@ private:
 		// Create staging buffer
 		vk::raii::Buffer stagingBuffer({});
 		vk::raii::DeviceMemory stagingBufferMemory({});
-		createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, 
-			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, 
+		createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 			stagingBuffer, stagingBufferMemory);
 
 		void* data = stagingBufferMemory.mapMemory(0, imageSize);
@@ -998,7 +1003,8 @@ private:
 		// Free texture data
 		if (extension == "ktx") {
 			delete[] textureData;
-		} else {
+		}
+		else {
 			stbi_image_free(textureData);
 		}
 
@@ -1021,52 +1027,52 @@ private:
 		std::cout << "Successfully loaded texture: " << filepath << " (" << texWidth << "x" << texHeight << ")" << std::endl;
 	}
 
-	// Load all PBR textures for a game object based on material data
-	void loadPBRTextures(GameObject& gameObj) {
-		std::cout << "Loading PBR textures for object..." << std::endl;
+   // Load all PBR textures for a material
+	void loadPBRTextures(const Material& material, GameObject::PBRTextures& textures) {
+		std::cout << "Loading PBR textures for material: " << material.GetName() << std::endl;
 
 		// Base color / albedo (sRGB)
-		if (!gameObj.material.albedoTexturePath.empty()) {
-			loadTextureFromFile(gameObj.material.albedoTexturePath, 
-				gameObj.pbrTextures.baseColorImage, 
-				gameObj.pbrTextures.baseColorMemory, 
-				gameObj.pbrTextures.baseColorView, 
+      if (!material.albedoTexturePath.empty()) {
+			loadTextureFromFile(material.albedoTexturePath,
+				textures.baseColorImage,
+				textures.baseColorMemory,
+				textures.baseColorView,
 				true);
 		}
 
 		// Metallic-roughness (linear)
-		if (!gameObj.material.metallicRoughnessTexturePath.empty()) {
-			loadTextureFromFile(gameObj.material.metallicRoughnessTexturePath, 
-				gameObj.pbrTextures.metallicRoughnessImage, 
-				gameObj.pbrTextures.metallicRoughnessMemory, 
-				gameObj.pbrTextures.metallicRoughnessView, 
+       if (!material.metallicRoughnessTexturePath.empty()) {
+			loadTextureFromFile(material.metallicRoughnessTexturePath,
+				textures.metallicRoughnessImage,
+				textures.metallicRoughnessMemory,
+				textures.metallicRoughnessView,
 				false);
 		}
 
 		// Normal map (linear)
-		if (!gameObj.material.normalTexturePath.empty()) {
-			loadTextureFromFile(gameObj.material.normalTexturePath, 
-				gameObj.pbrTextures.normalImage, 
-				gameObj.pbrTextures.normalMemory, 
-				gameObj.pbrTextures.normalView, 
+      if (!material.normalTexturePath.empty()) {
+			loadTextureFromFile(material.normalTexturePath,
+				textures.normalImage,
+				textures.normalMemory,
+				textures.normalView,
 				false);
 		}
 
 		// Occlusion (linear)
-		if (!gameObj.material.occlusionTexturePath.empty()) {
-			loadTextureFromFile(gameObj.material.occlusionTexturePath, 
-				gameObj.pbrTextures.occlusionImage, 
-				gameObj.pbrTextures.occlusionMemory, 
-				gameObj.pbrTextures.occlusionView, 
+       if (!material.occlusionTexturePath.empty()) {
+			loadTextureFromFile(material.occlusionTexturePath,
+				textures.occlusionImage,
+				textures.occlusionMemory,
+				textures.occlusionView,
 				false);
 		}
 
 		// Emissive (sRGB)
-		if (!gameObj.material.emissiveTexturePath.empty()) {
-			loadTextureFromFile(gameObj.material.emissiveTexturePath, 
-				gameObj.pbrTextures.emissiveImage, 
-				gameObj.pbrTextures.emissiveMemory, 
-				gameObj.pbrTextures.emissiveView, 
+        if (!material.emissiveTexturePath.empty()) {
+			loadTextureFromFile(material.emissiveTexturePath,
+				textures.emissiveImage,
+				textures.emissiveMemory,
+				textures.emissiveView,
 				true);
 		}
 	}
@@ -1075,7 +1081,7 @@ private:
 	void createDefaultTextures() {
 		// Create 1x1 white texture for base color/metallic-roughness/occlusion/emissive fallback
 		{
-			const uint32_t white = 0xFFFFFFFF;
+          const uint32_t white = 0xFFFFFFFF;
 			vk::DeviceSize imageSize = sizeof(uint32_t);
 
 			vk::raii::Buffer stagingBuffer({});
@@ -1199,18 +1205,18 @@ private:
 		gameObj.vertices.clear();
 		gameObj.indices.clear();
 		gameObj.meshes.clear();
+		gameObj.materials.clear();
+		gameObj.materialTextures.clear();
+		gameObj.materialDescriptorSets.clear();
 
 		// Extract base directory from model filename for texture loading
 		std::string baseDir = modelFilename.substr(0, modelFilename.find_last_of("/\\") + 1);
 
-		// Load material data from the first material (if exists)
-		if (!model.materials.empty()) {
-			const auto& mat = model.materials[0];
-			gameObj.material = Material(mat.name);
+       for (const auto& mat : model.materials) {
+			Material material(mat.name.empty() ? "Material" : mat.name);
 
-			// Extract PBR metallic-roughness properties
 			if (mat.pbrMetallicRoughness.baseColorFactor.size() == 4) {
-				gameObj.material.baseColorFactor = glm::vec4(
+				material.baseColorFactor = glm::vec4(
 					mat.pbrMetallicRoughness.baseColorFactor[0],
 					mat.pbrMetallicRoughness.baseColorFactor[1],
 					mat.pbrMetallicRoughness.baseColorFactor[2],
@@ -1218,69 +1224,76 @@ private:
 				);
 			}
 
-			gameObj.material.metallicFactor = static_cast<float>(mat.pbrMetallicRoughness.metallicFactor);
-			gameObj.material.roughnessFactor = static_cast<float>(mat.pbrMetallicRoughness.roughnessFactor);
+			material.metallicFactor = static_cast<float>(mat.pbrMetallicRoughness.metallicFactor);
+			material.roughnessFactor = static_cast<float>(mat.pbrMetallicRoughness.roughnessFactor);
 
-			// Extract texture indices and paths
 			if (mat.pbrMetallicRoughness.baseColorTexture.index >= 0) {
 				int texIndex = mat.pbrMetallicRoughness.baseColorTexture.index;
-				if (texIndex < model.textures.size()) {
+				if (texIndex < static_cast<int>(model.textures.size())) {
 					int imageIndex = model.textures[texIndex].source;
-					if (imageIndex >= 0 && imageIndex < model.images.size()) {
-						gameObj.material.albedoTexturePath = baseDir + model.images[imageIndex].uri;
-						gameObj.material.baseColorTextureIndex = 0.0f; // Texture is available
+					if (imageIndex >= 0 && imageIndex < static_cast<int>(model.images.size())) {
+						material.albedoTexturePath = baseDir + model.images[imageIndex].uri;
+						material.baseColorTextureIndex = 0.0f;
 					}
 				}
 			}
 
 			if (mat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0) {
 				int texIndex = mat.pbrMetallicRoughness.metallicRoughnessTexture.index;
-				if (texIndex < model.textures.size()) {
+				if (texIndex < static_cast<int>(model.textures.size())) {
 					int imageIndex = model.textures[texIndex].source;
-					if (imageIndex >= 0 && imageIndex < model.images.size()) {
-						gameObj.material.metallicRoughnessTexturePath = baseDir + model.images[imageIndex].uri;
-						gameObj.material.metallicRoughnessTextureIndex = 0.0f;
+					if (imageIndex >= 0 && imageIndex < static_cast<int>(model.images.size())) {
+						material.metallicRoughnessTexturePath = baseDir + model.images[imageIndex].uri;
+						material.metallicRoughnessTextureIndex = 0.0f;
 					}
 				}
 			}
 
 			if (mat.normalTexture.index >= 0) {
 				int texIndex = mat.normalTexture.index;
-				if (texIndex < model.textures.size()) {
+				if (texIndex < static_cast<int>(model.textures.size())) {
 					int imageIndex = model.textures[texIndex].source;
-					if (imageIndex >= 0 && imageIndex < model.images.size()) {
-						gameObj.material.normalTexturePath = baseDir + model.images[imageIndex].uri;
-						gameObj.material.normalTextureIndex = 0.0f;
+					if (imageIndex >= 0 && imageIndex < static_cast<int>(model.images.size())) {
+						material.normalTexturePath = baseDir + model.images[imageIndex].uri;
+						material.normalTextureIndex = 0.0f;
 					}
 				}
 			}
 
 			if (mat.occlusionTexture.index >= 0) {
 				int texIndex = mat.occlusionTexture.index;
-				if (texIndex < model.textures.size()) {
+				if (texIndex < static_cast<int>(model.textures.size())) {
 					int imageIndex = model.textures[texIndex].source;
-					if (imageIndex >= 0 && imageIndex < model.images.size()) {
-						gameObj.material.occlusionTexturePath = baseDir + model.images[imageIndex].uri;
-						gameObj.material.occlusionTextureIndex = 0.0f;
+					if (imageIndex >= 0 && imageIndex < static_cast<int>(model.images.size())) {
+						material.occlusionTexturePath = baseDir + model.images[imageIndex].uri;
+						material.occlusionTextureIndex = 0.0f;
 					}
 				}
 			}
 
 			if (mat.emissiveTexture.index >= 0) {
 				int texIndex = mat.emissiveTexture.index;
-				if (texIndex < model.textures.size()) {
+				if (texIndex < static_cast<int>(model.textures.size())) {
 					int imageIndex = model.textures[texIndex].source;
-					if (imageIndex >= 0 && imageIndex < model.images.size()) {
-						gameObj.material.emissiveTexturePath = baseDir + model.images[imageIndex].uri;
-						gameObj.material.emissiveTextureIndex = 0.0f;
+					if (imageIndex >= 0 && imageIndex < static_cast<int>(model.images.size())) {
+						material.emissiveTexturePath = baseDir + model.images[imageIndex].uri;
+						material.emissiveTextureIndex = 0.0f;
 					}
 				}
 			}
 
-			std::cout << "Loaded material: " << mat.name << std::endl;
-			std::cout << "  Base color texture: " << gameObj.material.albedoTexturePath << std::endl;
-			std::cout << "  Metallic-roughness texture: " << gameObj.material.metallicRoughnessTexturePath << std::endl;
-			std::cout << "  Normal texture: " << gameObj.material.normalTexturePath << std::endl;
+			std::cout << "Loaded material: " << material.GetName() << std::endl;
+			std::cout << "  Base color texture: " << material.albedoTexturePath << std::endl;
+			std::cout << "  Metallic-roughness texture: " << material.metallicRoughnessTexturePath << std::endl;
+			std::cout << "  Normal texture: " << material.normalTexturePath << std::endl;
+
+			gameObj.materials.push_back(std::move(material));
+			gameObj.materialTextures.emplace_back();
+		}
+
+		if (gameObj.materials.empty()) {
+			gameObj.materials.emplace_back("DefaultMaterial");
+			gameObj.materialTextures.emplace_back();
 		}
 
 		// Process all meshes in the model (geometry loading - unchanged)
@@ -1520,126 +1533,70 @@ private:
 
 	void createDescriptorPool()
 	{
-		// Pool for PBR descriptors: 1 uniform buffer + 5 combined image samplers per object
-		std::array<vk::DescriptorPoolSize, 2> poolSize{ {{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT},
-														{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 5 * MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT}} };
+        uint32_t materialCount = 0;
+		for (const auto& gameObject : gameObjects)
+		{
+			materialCount += static_cast<uint32_t>(std::max<size_t>(1, gameObject.materials.size()));
+		}
+
+		std::array<vk::DescriptorPoolSize, 2> poolSize{ {{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = materialCount * MAX_FRAMES_IN_FLIGHT},
+														{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 5 * materialCount * MAX_FRAMES_IN_FLIGHT}} };
 		vk::DescriptorPoolCreateInfo          poolInfo{ .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-													   .maxSets = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT,
+                                              .maxSets = materialCount * MAX_FRAMES_IN_FLIGHT,
 													   .poolSizeCount = static_cast<uint32_t>(poolSize.size()),
 													   .pPoolSizes = poolSize.data() };
 
 		descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	}
 
-	void createDescriptorSets() {
-		// For each game object
+   void createDescriptorSets() {
 		for (auto& gameObject : gameObjects) {
-			// Create descriptor sets for each frame in flight
-			std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
-			vk::DescriptorSetAllocateInfo allocInfo{
-				.descriptorPool = *descriptorPool,
-				.descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-				.pSetLayouts = layouts.data()
-			};
+			gameObject.materialDescriptorSets.clear();
+			gameObject.materialDescriptorSets.resize(gameObject.materials.size());
 
-			gameObject.descriptorSets.clear();
-			gameObject.descriptorSets = device.allocateDescriptorSets(allocInfo);
+			for (size_t materialIndex = 0; materialIndex < gameObject.materials.size(); ++materialIndex) {
+				auto& materialTextures = gameObject.materialTextures[materialIndex];
+				auto& descriptorSetsForMaterial = gameObject.materialDescriptorSets[materialIndex];
 
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				vk::DescriptorBufferInfo bufferInfo{
-					.buffer = *gameObject.uniformBuffers[i],
-					.offset = 0,
-					.range = sizeof(UniformBufferObject)
+				std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
+				vk::DescriptorSetAllocateInfo allocInfo{
+					.descriptorPool = *descriptorPool,
+					.descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+					.pSetLayouts = layouts.data()
 				};
 
-				// Create image infos for each PBR texture slot
-				vk::DescriptorImageInfo baseColorInfo{
-					.sampler = *textureSampler,
-					.imageView = *gameObject.pbrTextures.baseColorView ? *gameObject.pbrTextures.baseColorView : *defaultTextureView,
-					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-				};
+				descriptorSetsForMaterial = device.allocateDescriptorSets(allocInfo);
 
-				vk::DescriptorImageInfo metallicRoughnessInfo{
-					.sampler = *textureSampler,
-					.imageView = *gameObject.pbrTextures.metallicRoughnessView ? *gameObject.pbrTextures.metallicRoughnessView : *defaultTextureView,
-					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-				};
+				for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+					vk::DescriptorBufferInfo bufferInfo{
+						.buffer = *gameObject.uniformBuffers[i],
+						.offset = 0,
+						.range = sizeof(UniformBufferObject)
+					};
 
-				vk::DescriptorImageInfo normalInfo{
-					.sampler = *textureSampler,
-					.imageView = *gameObject.pbrTextures.normalView ? *gameObject.pbrTextures.normalView : *defaultNormalView,
-					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-				};
+                  vk::ImageView baseColorView = (*materialTextures.baseColorView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.baseColorView) : vk::ImageView(*defaultTextureView);
+					vk::ImageView metallicRoughnessView = (*materialTextures.metallicRoughnessView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.metallicRoughnessView) : vk::ImageView(*defaultTextureView);
+					vk::ImageView normalView = (*materialTextures.normalView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.normalView) : vk::ImageView(*defaultNormalView);
+					vk::ImageView occlusionView = (*materialTextures.occlusionView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.occlusionView) : vk::ImageView(*defaultTextureView);
+					vk::ImageView emissiveView = (*materialTextures.emissiveView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.emissiveView) : vk::ImageView(*defaultTextureView);
 
-				vk::DescriptorImageInfo occlusionInfo{
-					.sampler = *textureSampler,
-					.imageView = *gameObject.pbrTextures.occlusionView ? *gameObject.pbrTextures.occlusionView : *defaultTextureView,
-					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-				};
+					vk::DescriptorImageInfo baseColorInfo{ .sampler = *textureSampler, .imageView = baseColorView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+					vk::DescriptorImageInfo metallicRoughnessInfo{ .sampler = *textureSampler, .imageView = metallicRoughnessView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+					vk::DescriptorImageInfo normalInfo{ .sampler = *textureSampler, .imageView = normalView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+					vk::DescriptorImageInfo occlusionInfo{ .sampler = *textureSampler, .imageView = occlusionView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+					vk::DescriptorImageInfo emissiveInfo{ .sampler = *textureSampler, .imageView = emissiveView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
 
-				vk::DescriptorImageInfo emissiveInfo{
-					.sampler = *textureSampler,
-					.imageView = *gameObject.pbrTextures.emissiveView ? *gameObject.pbrTextures.emissiveView : *defaultTextureView,
-					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-				};
+					std::array descriptorWrites{
+						vk::WriteDescriptorSet{ .dstSet = *descriptorSetsForMaterial[i], .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBufferInfo = &bufferInfo },
+						vk::WriteDescriptorSet{ .dstSet = *descriptorSetsForMaterial[i], .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &baseColorInfo },
+						vk::WriteDescriptorSet{ .dstSet = *descriptorSetsForMaterial[i], .dstBinding = 2, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &metallicRoughnessInfo },
+						vk::WriteDescriptorSet{ .dstSet = *descriptorSetsForMaterial[i], .dstBinding = 3, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &normalInfo },
+						vk::WriteDescriptorSet{ .dstSet = *descriptorSetsForMaterial[i], .dstBinding = 4, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &occlusionInfo },
+						vk::WriteDescriptorSet{ .dstSet = *descriptorSetsForMaterial[i], .dstBinding = 5, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &emissiveInfo }
+					};
 
-				std::array descriptorWrites{
-					// Binding 0: Uniform buffer
-					vk::WriteDescriptorSet{
-						.dstSet = *gameObject.descriptorSets[i],
-						.dstBinding = 0,
-						.dstArrayElement = 0,
-						.descriptorCount = 1,
-						.descriptorType = vk::DescriptorType::eUniformBuffer,
-						.pBufferInfo = &bufferInfo
-					},
-					// Binding 1: Base color texture
-					vk::WriteDescriptorSet{
-						.dstSet = *gameObject.descriptorSets[i],
-						.dstBinding = 1,
-						.dstArrayElement = 0,
-						.descriptorCount = 1,
-						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-						.pImageInfo = &baseColorInfo
-					},
-					// Binding 2: Metallic-roughness texture
-					vk::WriteDescriptorSet{
-						.dstSet = *gameObject.descriptorSets[i],
-						.dstBinding = 2,
-						.dstArrayElement = 0,
-						.descriptorCount = 1,
-						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-						.pImageInfo = &metallicRoughnessInfo
-					},
-					// Binding 3: Normal map
-					vk::WriteDescriptorSet{
-						.dstSet = *gameObject.descriptorSets[i],
-						.dstBinding = 3,
-						.dstArrayElement = 0,
-						.descriptorCount = 1,
-						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-						.pImageInfo = &normalInfo
-					},
-					// Binding 4: Occlusion map
-					vk::WriteDescriptorSet{
-						.dstSet = *gameObject.descriptorSets[i],
-						.dstBinding = 4,
-						.dstArrayElement = 0,
-						.descriptorCount = 1,
-						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-						.pImageInfo = &occlusionInfo
-					},
-					// Binding 5: Emissive map
-					vk::WriteDescriptorSet{
-						.dstSet = *gameObject.descriptorSets[i],
-						.dstBinding = 5,
-						.dstArrayElement = 0,
-						.descriptorCount = 1,
-						.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-						.pImageInfo = &emissiveInfo
-					}
-				};
-				device.updateDescriptorSets(descriptorWrites, {});
+					device.updateDescriptorSets(descriptorWrites, {});
+				}
 			}
 		}
 	}
@@ -1712,7 +1669,7 @@ private:
 
 	void pushMaterialProperties(vk::CommandBuffer commandBuffer, const GameObject* model, uint32_t materialIndex) {
 		// Get material from the model
-		const Material& material = model->material;
+     const Material& material = model->materials[materialIndex < model->materials.size() ? materialIndex : 0];
 
 		// Define push constants
 		PushConstantBlock pushConstants{};
@@ -1823,7 +1780,7 @@ private:
 
 		commandBuffer.beginRendering(renderingInfo);
 
-	//	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+		//	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
 		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pbrPipeline);
 
 		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
@@ -1864,13 +1821,14 @@ private:
 			for (const auto& mesh : model.meshes) {
 				// Push material properties for this mesh
 				pushMaterialProperties(commandBuffer, &model, mesh.materialIndex);
+				uint32_t descriptorMaterialIndex = mesh.materialIndex < model.materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
 				// Bind descriptor sets
 				commandBuffer.bindDescriptorSets(
 					vk::PipelineBindPoint::eGraphics,
 					*pbrPipelineLayout,
 					0,
-					*model.descriptorSets[frameIndex],
+                  *model.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
 					nullptr
 				);
 
@@ -2168,31 +2126,27 @@ private:
 			ubo.proj[1][1] *= -1; // Flip Y coordinate for Vulkan
 		}
 
-		// Set up lights - positioned around the objects for better illumination
-		// Light 1: Strong white key light from front-top-right
-		ubo.lightPositions[0] = glm::vec4(5.0f, 8.0f, 5.0f, 1.0f);
-		ubo.lightColors[0] = glm::vec4(2800.0f, 800.0f, 800.0f, 1.0f);
+        // Set up lights in a tighter studio arrangement around the actual scene bounds.
+		// The objects span roughly x:[-5,1], so keep lights close enough to affect all of them.
+		ubo.lightPositions[0] = glm::vec4(-1.5f, 3.5f, 3.0f, 1.0f);  // front key
+		ubo.lightPositions[1] = glm::vec4(-4.5f, 2.5f, 2.0f, 1.0f);  // left fill
+		ubo.lightPositions[2] = glm::vec4(1.5f, 2.0f, -2.5f, 1.0f);  // right rim
+		ubo.lightPositions[3] = glm::vec4(-2.0f, 4.5f, -1.0f, 1.0f); // top back
 
-		// Light 2: Fill light from left
-		ubo.lightPositions[1] = glm::vec4(-8.0f, 3.0f, 2.0f, 1.0f);
-		ubo.lightColors[1] = glm::vec4(400.0f, 400.0f, 2400.0f, 1.0f);
-
-		// Light 3: Rim light from back-right
-		ubo.lightPositions[2] = glm::vec4(4.0f, 2.0f, -5.0f, 1.0f);
-		ubo.lightColors[2] = glm::vec4(500.0f, 1500.0f, 500.0f, 1.0f);
-
-		// Light 4: Ambient/bounce light from below
-		ubo.lightPositions[3] = glm::vec4(0.0f, -2.0f, 3.0f, 1.0f);
-		ubo.lightColors[3] = glm::vec4(200.0f, 200.0f, 200.0f, 1.0f);
+		// Use balanced white lights first so material response is easier to judge.
+		ubo.lightColors[0] = glm::vec4(2.0f, 0.0f, 0.0f, 1.0f);
+		ubo.lightColors[1] = glm::vec4(0.0f, 0.0f, 4.0f, 1.0f);
+		ubo.lightColors[2] = glm::vec4(0.0f, 4.0f, 0.0f, 1.0f);
+		ubo.lightColors[3] = glm::vec4(6.0f, 0.1f, 0.0f, 1.0f);
 
 		// Set camera position for view-dependent effects
 		ubo.camPos = glm::vec4(camera ? camera->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
 
 		// Set PBR parameters - increased exposure for brighter rendering
-		ubo.exposure = 1.5f;  // Adjusted from 4.5f - higher values make it brighter
+		ubo.exposure = 1.0f;
 		ubo.gamma = 2.2f;
 		ubo.prefilteredCubeMipLevels = 1.0f;
-		ubo.scaleIBLAmbient = 0.03f;  // Add some ambient contribution
+      ubo.scaleIBLAmbient = 0.02f;
 
 		// Copy the uniform buffer object to the device memory using vk::raii
 		// With vk::raii, we can use the mapped memory directly

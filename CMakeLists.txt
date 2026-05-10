@@ -6,8 +6,29 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
+# ImGui files
+set(IMGUI_SOURCES
+    include/imgui.cpp
+    include/imgui_draw.cpp
+    include/imgui_widgets.cpp
+    include/imgui_tables.cpp
+    include/imgui_demo.cpp
+    include/imgui.h
+    include/imconfig.h
+    include/imgui_internal.h
+)
+
+# Our custom ImGui Vulkan integration
+set(IMGUI_VULKAN_SOURCES
+    src/imgui_vulkan_util.cpp
+)
+
 add_executable(NovusEngine
-    src/main.cpp "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h" "src/ECS/components/mesh_component.h" "src/ECS/components/camera_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h")
+    src/main.cpp
+    src/renderer/renderer.cpp
+    "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h" "src/ECS/components/mesh_component.h" "src/ECS/components/camera_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h"
+    ${IMGUI_SOURCES}
+    ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -42,6 +63,10 @@ endfunction()
 add_slang_shader_target(shaders)
 add_dependencies(NovusEngine shaders)
 
+target_include_directories(NovusEngine PRIVATE src)
+
+
+
 target_link_libraries(NovusEngine PRIVATE
     glfw
     glm::glm
@@ -54,3 +79,4 @@ target_compile_definitions(NovusEngine PRIVATE
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1
     VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS=1
 )
+

@@ -57,7 +57,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.lightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
 
 	ubo.camPos = glm::vec4(cam ? cam->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
-	ubo.exposure = 1.0f;
+	ubo.exposure = 2.0f;
 	ubo.gamma = 2.2f;
 	ubo.prefilteredCubeMipLevels = 1.0f;
 	ubo.scaleIBLAmbient = 0.02f;

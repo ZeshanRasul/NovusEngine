@@ -18,6 +18,8 @@ struct UniformBufferObject
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
 
+	glm::vec4 directionalLightDirection;
+	glm::vec4 directionalLightColor;
 	glm::vec4 lightPositions[4];
 	glm::vec4 lightColors[4];
 	glm::vec4 camPos;

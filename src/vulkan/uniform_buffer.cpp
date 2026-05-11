@@ -43,6 +43,9 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 		ubo.proj[1][1] *= -1;
 	}
 
+	ubo.directionalLightDirection = glm::vec4(-0.05f, -1.0f, -0.05f, 0.0f);
+	ubo.directionalLightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
 	ubo.lightPositions[0] = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
 	ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 5.0f, 1.0f);
 	ubo.lightPositions[2] = glm::vec4(10.0f, 10.0f, -5.0f, 1.0f);
@@ -57,7 +60,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.exposure = 1.0f;
 	ubo.gamma = 2.2f;
 	ubo.prefilteredCubeMipLevels = 1.0f;
-	ubo.scaleIBLAmbient = 0.2f;
+	ubo.scaleIBLAmbient = 0.02f;
 
 	memcpy(renderable->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }

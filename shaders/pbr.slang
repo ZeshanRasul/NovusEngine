@@ -22,6 +22,8 @@ struct UniformBufferObject {
     float4x4 model;                     // Model-to-world transformation matrix
     float4x4 view;                      // World-to-camera transformation matrix
     float4x4 proj;                      // Camera-to-clip space projection matrix
+    float4 directionalLightDirection;   // Direction of the main directional light (normalized)
+    float4 directionalLightColor;       // Color and intensity of the directional light
     float4 lightPositions[4];           // Light positions in world space
     float4 lightColors[4];              // Light intensities and colors
     float4 camPos;                      // Camera position for view-dependent effects
@@ -239,6 +241,18 @@ float4 fragMain(VSOutput input) : SV_TARGET
         // Multiply by incident radiance and cosine foreshortening
         Lo += (kD * baseColor.rgb / PI + specular) * radiance * NdotL;
     }
+    
+    // === DIRECTIONAL LIGHTING ===
+    float3 dirLightDir = normalize(ubo.directionalLightDirection.xyz);
+    float3 dirLightColor = ubo.directionalLightColor.rgb;
+    float NdotL = max(dot(N, dirLightDir), 0.0);
+    float3 H = normalize(V + dirLightDir);
+    float3 diffuse = baseColor.rgb / PI; // Lambertian diffuse
+    float D = DistributionGGX(max(dot(N, H), 0.0), roughness);
+    float G = GeometrySmith(max(dot(N, V), 0.0), NdotL, roughness);
+    float F = FresnelSchlick(max(dot(H, V), 0.0), F0).r; // Assuming grayscale F0 for simplicity
+    float3 specular = (D * G * F) / max(4.0 * max(dot(N, V), 0.0) * NdotL, 0.001);
+    Lo += (diffuse * (1.0 - metallic) + specular) * dirLightColor * NdotL;
 
     // === AMBIENT AND EMISSIVE ===
     // Add simple ambient lighting (should be replaced with IBL in production)

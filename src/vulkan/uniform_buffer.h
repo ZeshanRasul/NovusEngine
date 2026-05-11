@@ -26,6 +26,8 @@ struct ShadowSettings
 	float shadowPadding = 15.0f;
 	float coveragePaddingFactor = 0.08f;
 	float depthPaddingFactor = 0.2f;
+  float casterPadding = 60.0f;
+  float farCascadeExpansion = 2.0f;
 };
 
 struct UniformBufferObject

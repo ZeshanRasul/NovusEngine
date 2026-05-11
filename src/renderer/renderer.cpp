@@ -217,6 +217,8 @@ void Renderer::renderImgui()
 	ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
 	ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
 	ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
+    ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
+    ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
 	ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
 	ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
 	ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
@@ -1000,12 +1002,12 @@ void Renderer::setupGameObjects()
 		};
 
 	makeEntity("FlightHelmet_Left",
-		{ -13.0f, -10.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
+		{ -13.0f, -10.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
 		"../models/FlightHelmet.gltf");
 
 	{
 		Entity& e = makeEntity("DamagedHelmet",
-			{ 13.0f, -5.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
+			{ 13.0f, -5.0f, 10.0f }, { -90.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
 			"../models/DamagedHelmet.gltf");
 	}
 

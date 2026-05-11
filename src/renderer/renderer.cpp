@@ -61,8 +61,11 @@ void Renderer::initVulkan()
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
 	}
 
+	ShadowPass::createPipeline(device, physicalDevice, shadowPipelineLayout, shadowPipeline);
+
 	CommandPool::init(device, queueIndex, commandPool);
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
+ ShadowPass::createResources(device, physicalDevice, shadowImage, shadowImageMemory, shadowImageView, shadowSampler);
 	createTextureSampler();
 	createDefaultTextures();
 	setupGameObjects();
@@ -477,7 +480,21 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 {
 	auto& commandBuffer = commandBuffers[frameIndex];
 	commandBuffer.begin({});
+	beginMainPass(commandBuffer, imageIndex);
+	recordScenePass(commandBuffer);
+	commandBuffer.endRendering();
+	recordImguiPass(commandBuffer, imageIndex);
+	endMainPass(commandBuffer, imageIndex);
+	commandBuffer.end();
+}
 
+
+
+
+
+
+void Renderer::beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+{
 	transition_image_layout(swapChainImages[imageIndex],
 		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eColorAttachmentOptimal,
@@ -527,7 +544,13 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pbrPipeline);
 	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
+}
 
+
+
+
+void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
+{
 	for (auto& entityPtr : entities)
 	{
 		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
@@ -557,13 +580,21 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
 		}
 	}
+}
 
-	commandBuffer.endRendering();
 
-	// ↓ ImGui draws on top, image still in eColorAttachmentOptimal
+
+
+void Renderer::recordImguiPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+{
 	imGui->drawFrame(commandBuffer, *swapChainImageViews[imageIndex]);
+}
 
-	// ↓ then transition to present
+
+
+
+void Renderer::endMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+{
 	transition_image_layout(swapChainImages[imageIndex],
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::ePresentSrcKHR,
@@ -572,8 +603,6 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
 		vk::PipelineStageFlagBits2::eBottomOfPipe,
 		vk::ImageAspectFlagBits::eColor);
-
-	commandBuffer.end();
 }
 
 // ---------------------------------------------------------------------------

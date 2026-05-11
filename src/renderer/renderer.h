@@ -33,6 +33,7 @@ import vulkan_hpp;
 #include "ECS/components/transform_component.h"
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"
+#include "renderer/shadow_pass.h"
 #include "../imgui_vulkan_util.h"
 #include "../input/input_system.h"
 
@@ -86,6 +87,10 @@ private:
 
 	// Commands
 	void                    recordCommandBuffer(uint32_t imageIndex);
+    void                    beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
+	void                    recordScenePass(vk::raii::CommandBuffer& commandBuffer);
+	void                    recordImguiPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
+	void                    endMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
 	// Buffers
 	void     copyBuffer(vk::raii::Buffer& src, vk::raii::Buffer& dst, vk::DeviceSize size);
@@ -153,6 +158,8 @@ private:
 
 	vk::raii::PipelineLayout pbrPipelineLayout = nullptr;
 	vk::raii::Pipeline       pbrPipeline       = nullptr;
+	vk::raii::PipelineLayout shadowPipelineLayout = nullptr;
+	vk::raii::Pipeline       shadowPipeline       = nullptr;
 
 	vk::raii::CommandPool                commandPool = nullptr;
 	std::vector<vk::raii::CommandBuffer> commandBuffers;
@@ -187,6 +194,11 @@ private:
 	vk::raii::Image        defaultNormalImage  = nullptr;
 	vk::raii::DeviceMemory defaultNormalMemory = nullptr;
 	vk::raii::ImageView    defaultNormalView   = nullptr;
+
+	vk::raii::Image        shadowImage       = nullptr;
+	vk::raii::DeviceMemory shadowImageMemory = nullptr;
+	vk::raii::ImageView    shadowImageView   = nullptr;
+	vk::raii::Sampler      shadowSampler     = nullptr;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 

@@ -38,8 +38,12 @@ namespace Pipeline
         if (config.shaderStages.empty())
             throw std::runtime_error("PipelineConfig requires at least one shader stage.");
 
-        if (config.colorAttachmentFormats.empty())
-            throw std::runtime_error("PipelineConfig requires at least one color attachment format.");
+        if (config.colorAttachmentFormats.empty() &&
+            config.depthAttachmentFormat == vk::Format::eUndefined &&
+            config.stencilAttachmentFormat == vk::Format::eUndefined)
+        {
+            throw std::runtime_error("PipelineConfig requires at least one attachment format.");
+        }
 
         std::vector<vk::raii::ShaderModule> shaderModules;
         shaderModules.reserve(config.shaderStages.size());
@@ -84,7 +88,10 @@ namespace Pipeline
             .polygonMode = config.polygonMode,
             .cullMode = config.cullMode,
             .frontFace = config.frontFace,
-            .depthBiasEnable = vk::False,
+            .depthBiasEnable = config.depthBiasEnable,
+            .depthBiasConstantFactor = config.depthBiasConstantFactor,
+            .depthBiasClamp = config.depthBiasClamp,
+            .depthBiasSlopeFactor = config.depthBiasSlopeFactor,
             .lineWidth = 1.0f
         };
 
@@ -126,7 +133,7 @@ namespace Pipeline
             .logicOpEnable = vk::False,
             .logicOp = vk::LogicOp::eCopy,
             .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
-            .pAttachments = colorBlendAttachments.data()
+            .pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data()
         };
 
         vk::PipelineDynamicStateCreateInfo dynamicState{
@@ -146,7 +153,7 @@ namespace Pipeline
 
         vk::PipelineRenderingCreateInfo renderingInfo{
             .colorAttachmentCount = static_cast<uint32_t>(config.colorAttachmentFormats.size()),
-            .pColorAttachmentFormats = config.colorAttachmentFormats.data(),
+            .pColorAttachmentFormats = config.colorAttachmentFormats.empty() ? nullptr : config.colorAttachmentFormats.data(),
             .depthAttachmentFormat = config.depthAttachmentFormat,
             .stencilAttachmentFormat = config.stencilAttachmentFormat
         };

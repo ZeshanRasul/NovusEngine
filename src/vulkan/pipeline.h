@@ -37,6 +37,10 @@ namespace Pipeline
         vk::CullModeFlags cullMode = vk::CullModeFlagBits::eBack;
         vk::FrontFace frontFace = vk::FrontFace::eCounterClockwise;
         vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1;
+        bool depthBiasEnable = false;
+        float depthBiasConstantFactor = 0.0f;
+        float depthBiasClamp = 0.0f;
+        float depthBiasSlopeFactor = 0.0f;
 
         bool depthTestEnable = true;
         bool depthWriteEnable = true;

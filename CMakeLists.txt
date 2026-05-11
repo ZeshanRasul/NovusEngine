@@ -26,7 +26,7 @@ set(IMGUI_VULKAN_SOURCES
 add_executable(NovusEngine
     src/main.cpp
     src/renderer/renderer.cpp
-    "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h" "src/ECS/components/mesh_component.h" "src/ECS/components/camera_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h"
+    "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h" "src/ECS/components/mesh_component.h" "src/ECS/components/camera_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h" "src/renderer/shadow_pass.h" "src/renderer/shadow_pass.cpp"
     ${IMGUI_SOURCES}
     ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h" "src/input/input_system.h" "src/input/input_system.cpp" "src/vulkan/command_pool.h" "src/vulkan/command_pool.cpp" "src/vulkan/command_buffer.h" "src/vulkan/command_buffer.cpp" "src/vulkan/texture.h" "src/vulkan/texture.cpp" "src/vulkan/buffer.h" "src/vulkan/buffer.cpp" "src/vulkan/utils.h" "src/vulkan/utils.cpp" "src/vulkan/image.h" "src/vulkan/image.cpp" "src/vulkan/image_view.h" "src/vulkan/image_view.cpp" "src/vulkan/pipeline.h" "src/vulkan/pipeline.cpp" "src/model/model.h" "src/model/model.cpp" "src/vulkan/uniform_buffer.h" "src/vulkan/uniform_buffer.cpp" "src/vulkan/descriptors.h" "src/vulkan/descriptors.cpp" "src/vulkan/swap_chain.h" "src/vulkan/swap_chain.cpp" "src/vulkan/depth_target.h" "src/vulkan/depth_target.cpp" "src/vulkan/sync.h" "src/vulkan/sync.cpp" "src/vulkan/material.h" "src/vulkan/material.cpp")
 
@@ -50,16 +50,17 @@ function (add_slang_shader_target TARGET)
           COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_DIR}
   )
   add_custom_command (
-          OUTPUT  ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv
+          OUTPUT  ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv
           COMMAND ${SLANGC_EXECUTABLE} ${SLANG_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
           COMMAND ${SLANGC_EXECUTABLE} ${PBR_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o pbr.spv
           COMMAND ${SLANGC_EXECUTABLE} ${IMGUI_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o imgui.spv
+          COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -o shadow.spv
           WORKING_DIRECTORY ${SHADERS_DIR}
-          DEPENDS ${SHADERS_DIR} ${SLANG_SHADER_SOURCE} ${PBR_SHADER_SOURCE} ${IMGUI_SHADER_SOURCE}
+          DEPENDS ${SHADERS_DIR} ${SLANG_SHADER_SOURCE} ${PBR_SHADER_SOURCE} ${IMGUI_SHADER_SOURCE} ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.slang
           COMMENT "Compiling Slang Shaders"
           VERBATIM
   )
-  add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv)
+  add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv)
 endfunction()
 
 add_slang_shader_target(shaders)

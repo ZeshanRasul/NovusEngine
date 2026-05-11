@@ -8,6 +8,8 @@ import vulkan_hpp;
 
 #include "../ECS/entity.h"
 #include "../ECS/components/renderable_component.h"
+#include "../ECS/components/transform_component.h"
+#include "../ECS/components/camera_component.h"
 #include "buffer.h"
 
 struct UniformBufferObject
@@ -28,27 +30,8 @@ struct UniformBufferObject
 class UniformBuffer
 {
 public:
-	static void createUniformBuffers(std::vector<std::unique_ptr<Entity>>& entities, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight)
-	{
-		for (auto& entityPtr : entities)
-		{
-			auto& gameObject = *entityPtr->GetComponent<RenderableComponent>();
-			gameObject.uniformBuffers.clear();
-			gameObject.uniformBuffersMemory.clear();
-			gameObject.uniformBuffersMapped.clear();
+	static void createUniformBuffers(std::vector<std::unique_ptr<Entity>>& entities, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight);
 
-			for (size_t i = 0; i < framesInFlight; i++)
-			{
-				vk::DeviceSize         bufferSize = sizeof(UniformBufferObject);
-				vk::raii::Buffer       buffer({});
-				vk::raii::DeviceMemory bufferMem({});
-				Buffer::createBuffer(device, physicalDevice, bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
-					vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-					buffer, bufferMem);
-				gameObject.uniformBuffers.emplace_back(std::move(buffer));
-				gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
-				gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));
-			}
-		}
-	}
+	static void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
+		TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent);
 };

@@ -482,16 +482,6 @@ void Renderer::recreateSwapChain()
 // Image views
 // ---------------------------------------------------------------------------
 
-//vk::raii::ImageView Renderer::createImageView(vk::Image const& image, vk::Format format, vk::ImageAspectFlags aspectFlags)
-//{
-//	vk::ImageViewCreateInfo viewInfo{
-//		.image = image,
-//		.viewType = vk::ImageViewType::e2D,
-//		.format = format,
-//		.subresourceRange = {.aspectMask = aspectFlags, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 } };
-//	return vk::raii::ImageView(device, viewInfo);
-//}
-
 void Renderer::createSwapChainImageViews()
 {
 	assert(swapChainImageViews.empty());
@@ -675,7 +665,7 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 		if (!renderable || !transform)
 			continue;
 
-		updateUniformBuffer(frameIndex, renderable, transform, &camera);
+		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent);
 		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -768,44 +758,6 @@ void Renderer::createIndexBuffer(RenderableComponent& gameObj)
 		gameObj.indexBuffer, gameObj.indexBufferMemory);
 
 	copyBuffer(stagingBuffer, gameObj.indexBuffer, bufferSize);
-}
-
-void Renderer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
-	TransformComponent* transform, Camera* cam)
-{
-	UniformBufferObject ubo{};
-
-	ubo.model = transform ? transform->GetTransformMatrix() : glm::mat4(1.0f);
-
-	if (cam)
-	{
-		ubo.view = cam->getViewMatrix();
-		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10000.0f);
-	}
-	else
-	{
-		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 10000.0f);
-		ubo.proj[1][1] *= -1;
-	}
-
-	ubo.lightPositions[0] = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
-	ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 5.0f, 1.0f);
-	ubo.lightPositions[2] = glm::vec4(10.0f, 10.0f, -5.0f, 1.0f);
-	ubo.lightPositions[3] = glm::vec4(0.0f, 10.0f, -10.0f, 1.0f);
-
-	ubo.lightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
-	ubo.lightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
-	ubo.lightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
-	ubo.lightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
-
-	ubo.camPos = glm::vec4(cam ? cam->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
-	ubo.exposure = 1.0f;
-	ubo.gamma = 2.2f;
-	ubo.prefilteredCubeMipLevels = 1.0f;
-	ubo.scaleIBLAmbient = 0.2f;
-
-	memcpy(renderable->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 
 // ---------------------------------------------------------------------------

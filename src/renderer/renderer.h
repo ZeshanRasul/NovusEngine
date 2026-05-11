@@ -128,10 +128,6 @@ private:
 	void     copyBuffer(vk::raii::Buffer& src, vk::raii::Buffer& dst, vk::DeviceSize size);
 	void     createVertexBuffer(RenderableComponent& gameObj);
 	void     createIndexBuffer(RenderableComponent& gameObj);
-	void     createUniformBuffers();
-	void     updateUniformBuffers();
-	void     updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
-								 TransformComponent* transform, Camera* camera);
 
 	// Images
 	void transition_image_layout(vk::Image image,
@@ -148,9 +144,6 @@ private:
 	void       createDepthResources();
 
 	// Textures / samplers
-	void loadTextureFromFile(const std::string& filepath,
-							 vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory,
-							 vk::raii::ImageView& imageView, bool isSRGB = true);
 	void loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures);
 	void createDefaultTextures();
 	void createTextureSampler();
@@ -168,7 +161,6 @@ private:
 								const RenderableComponent* model, uint32_t materialIndex);
 
 	// Scene
-	void loadModel(std::string modelFilename, RenderableComponent& gameObj);
 	void setupGameObjects();
 
 	// Callbacks

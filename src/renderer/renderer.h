@@ -37,6 +37,8 @@ import vulkan_hpp;
 #include "../imgui_vulkan_util.h"
 #include "../input/input_system.h"
 
+#include "vulkan/uniform_buffer.h"
+
 constexpr uint32_t WIDTH               = 1920;
 constexpr uint32_t HEIGHT              = 1080;
 constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
@@ -88,7 +90,7 @@ private:
 	// Commands
 	void                    recordCommandBuffer(uint32_t imageIndex);
     void                    beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
-	void                    recordShadowPass(vk::raii::CommandBuffer& commandBuffer);
+	void                    recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex);
 	void                    recordScenePass(vk::raii::CommandBuffer& commandBuffer);
 	void                    recordImguiPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
 	void                    endMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
@@ -196,12 +198,12 @@ private:
 	vk::raii::DeviceMemory defaultNormalMemory = nullptr;
 	vk::raii::ImageView    defaultNormalView   = nullptr;
 
-	vk::raii::Image        shadowImage       = nullptr;
-	vk::raii::DeviceMemory shadowImageMemory = nullptr;
-	vk::raii::ImageView    shadowImageView   = nullptr;
-	vk::raii::Sampler      shadowSampler     = nullptr;
+   std::array<vk::raii::Image,        SHADOW_CASCADE_COUNT> shadowImages        = { nullptr, nullptr, nullptr, nullptr, nullptr };
+	std::array<vk::raii::DeviceMemory, SHADOW_CASCADE_COUNT> shadowImageMemories = { nullptr, nullptr, nullptr, nullptr, nullptr };
+	std::array<vk::raii::ImageView,    SHADOW_CASCADE_COUNT> shadowImageViews    = { nullptr, nullptr, nullptr, nullptr, nullptr };
+	std::array<vk::ImageLayout,        SHADOW_CASCADE_COUNT> shadowImageLayouts  = { vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined };
+	vk::raii::Sampler                    shadowSampler             = nullptr;
 	vk::raii::DescriptorSetLayout        shadowDescriptorSetLayout = nullptr;
-	vk::ImageLayout        shadowImageLayout = vk::ImageLayout::eUndefined;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 

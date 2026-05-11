@@ -9,12 +9,13 @@ struct UniformBufferObject {
     float4x4 model;
     float4x4 view;
     float4x4 proj;
-    float4x4 lightSpaceMatrix;
+    float4x4 lightSpaceMatrices[5];
     float4 directionalLightDirection;
     float4 directionalLightColor;    
     float4 lightPositions[4];
     float4 lightColors[4];
     float4 camPos;
+    float4 cascadeSplits;
     float exposure;
     float gamma;
     float prefilteredCubeMipLevels;
@@ -23,8 +24,11 @@ struct UniformBufferObject {
 
 [[vk::binding(0, 0)]] ConstantBuffer<UniformBufferObject> ubo;
 
+struct ShadowPushConstants { int cascadeIndex; };
+[[vk::push_constant]] ShadowPushConstants pc;
+
 [shader("vertex")]
 float4 vertMain(VSInput input) : SV_POSITION
 {
-    return mul(ubo.lightSpaceMatrix, mul(ubo.model, float4(input.Position, 1.0)));
+    return mul(ubo.lightSpaceMatrices[pc.cascadeIndex], mul(ubo.model, float4(input.Position, 1.0)));
 }

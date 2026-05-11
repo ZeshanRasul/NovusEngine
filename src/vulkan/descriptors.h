@@ -6,7 +6,9 @@
 import vulkan_hpp;
 #endif
 
+#include <array>
 #include "../ECS/entity.h"
+#include "uniform_buffer.h"
 
 class DescriptorPool
 {
@@ -18,7 +20,8 @@ class DescriptorSet
 {
 public:
 	static void createDescriptorSets(vk::raii::Device& device, std::vector<std::unique_ptr<Entity>>& entities, vk::raii::DescriptorPool& descriptorPool, vk::raii::DescriptorSetLayout& descriptorSetLayout,
-		vk::raii::ImageView& defaultTextureView, vk::raii::ImageView& defaultNormalView, vk::raii::Sampler& textureSampler, vk::raii::ImageView& shadowImageView, vk::raii::Sampler& shadowSampler, uint32_t framesInFlight);
+		vk::raii::ImageView& defaultTextureView, vk::raii::ImageView& defaultNormalView, vk::raii::Sampler& textureSampler,
+		std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowImageViews, vk::raii::Sampler& shadowSampler, uint32_t framesInFlight);
 };
 
 class DescriptorSetLayout

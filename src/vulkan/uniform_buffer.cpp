@@ -1,6 +1,8 @@
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include "../renderer/shadow_pass.h"
 #include "uniform_buffer.h"
 
 void UniformBuffer::createUniformBuffers(std::vector<std::unique_ptr<Entity>>& entities, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight)
@@ -36,27 +38,117 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	if (cam)
 	{
 		ubo.view = cam->getViewMatrix();
-		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10000.0f);
+		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.01f, 1000.0f);
 	}
 	else
 	{
 		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 10000.0f);
+		ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.01f, 1000.0f);
 		ubo.proj[1][1] *= -1;
 	}
 
+	// ---------------------------------------------------------------------------
+	// Cascaded Shadow Maps
+	// ---------------------------------------------------------------------------
+	// Camera frustum parameters (must match the projection built above)
+	const float camNear  = 0.01f;
+    const float camFar   = 1000.0f;
+    const float shadowMaxDistance = camFar;
+	const float cascadeFar = glm::min(camFar, shadowMaxDistance);
+	const float lambda   = 0.75f; // blend between log and uniform splits
 
-	// Angled sun light: elevated and offset to hit both floor and walls naturally.
-	const glm::vec3 lightPos(300.0f, -900.0f, 800.0f);
+	// Compute cascade split distances in view space
+	float splits[SHADOW_CASCADE_COUNT];
+	for (uint32_t i = 0; i < SHADOW_CASCADE_COUNT; ++i)
+	{
+		float p       = static_cast<float>(i + 1) / static_cast<float>(SHADOW_CASCADE_COUNT);
+       float logSplit = camNear * std::pow(cascadeFar / camNear, p);
+		float uniSplit = camNear + (cascadeFar - camNear) * p;
+		splits[i]     = lambda * logSplit + (1.0f - lambda) * uniSplit;
+	}
+   ubo.cascadeSplits = glm::vec4(splits[0], splits[1], splits[2], splits[3]);
+
+	// Shared light direction
+	const glm::vec3 lightPos(23.0f, -90.0f, 8.0f);
 	const glm::vec3 lightTarget(0.0f, 0.0f, 0.0f);
-	const glm::vec3 lightDir = glm::normalize(lightTarget - lightPos);
-	glm::mat4 lightView = glm::lookAtRH(lightPos, lightTarget, glm::vec3(0.0f, 0.0f, 1.0f));
-	glm::mat4 lightProj = glm::orthoRH_ZO(-5000.0f, 5000.0f, -5000.0f, 2000.0f, 1.0f, 10000.0f);
-	glm::mat4 lightSpace = lightProj * lightView;
-
-	ubo.lightSpaceMatrix = lightSpace;
+	const glm::vec3 lightDir    = glm::normalize(lightTarget - lightPos);
 	ubo.directionalLightDirection = glm::vec4(lightDir, 0.0f);
-	ubo.directionalLightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	ubo.directionalLightColor     = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+	const float aspectRatio = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
+	const float tanHalfFov = std::tan(glm::radians(cam ? cam->getZoom() : 45.0f) * 0.5f);
+	const glm::mat4 invView = glm::inverse(ubo.view);
+	const glm::vec3 camPosition = glm::vec3(invView[3]);
+	const glm::vec3 camRight = glm::normalize(glm::vec3(invView[0]));
+	const glm::vec3 camUp = glm::normalize(glm::vec3(invView[1]));
+	const glm::vec3 camForward = glm::normalize(-glm::vec3(invView[2]));
+
+	// Build a light-space matrix per cascade
+	float prevSplit = camNear;
+	for (uint32_t cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade)
+	{
+		float nearDist = prevSplit;
+		float farDist  = splits[cascade];
+		prevSplit      = farDist;
+
+     const float nearHalfHeight = tanHalfFov * nearDist;
+		const float nearHalfWidth = nearHalfHeight * aspectRatio;
+		const float farHalfHeight = tanHalfFov * farDist;
+		const float farHalfWidth = farHalfHeight * aspectRatio;
+
+		const glm::vec3 nearCenter = camPosition + camForward * nearDist;
+		const glm::vec3 farCenter = camPosition + camForward * farDist;
+
+		glm::vec3 frustumCorners[8] = {
+			nearCenter + camUp * nearHalfHeight - camRight * nearHalfWidth,
+			nearCenter + camUp * nearHalfHeight + camRight * nearHalfWidth,
+			nearCenter - camUp * nearHalfHeight + camRight * nearHalfWidth,
+			nearCenter - camUp * nearHalfHeight - camRight * nearHalfWidth,
+			farCenter + camUp * farHalfHeight - camRight * farHalfWidth,
+			farCenter + camUp * farHalfHeight + camRight * farHalfWidth,
+			farCenter - camUp * farHalfHeight + camRight * farHalfWidth,
+			farCenter - camUp * farHalfHeight - camRight * farHalfWidth,
+		};
+
+		// Frustum centre for the light-view lookat
+		glm::vec3 center(0.0f);
+		for (const auto& c : frustumCorners) center += c;
+		center /= 8.0f;
+
+      float radius = 0.0f;
+		for (const auto& c : frustumCorners)
+		{
+			radius = glm::max(radius, glm::length(c - center));
+		}
+
+		radius = std::ceil(radius * 16.0f) / 16.0f;
+
+		glm::mat4 lightView = glm::lookAtRH(center - lightDir * (radius * 2.0f), center, glm::vec3(0.0f, 0.0f, 1.0f));
+
+		// Compute AABB in light space around the frustum corners
+		glm::vec3 mn( 1e9f), mx(-1e9f);
+		for (const auto& c : frustumCorners)
+		{
+			glm::vec3 lc = glm::vec3(lightView * glm::vec4(c, 1.0f));
+			mn = glm::min(mn, lc);
+			mx = glm::max(mx, lc);
+		}
+
+		glm::vec3 centerLS = glm::vec3(lightView * glm::vec4(center, 1.0f));
+		const float texelSize = (radius * 2.0f) / static_cast<float>(ShadowPass::ShadowMapWidth);
+		centerLS.x = std::floor(centerLS.x / texelSize) * texelSize;
+		centerLS.y = std::floor(centerLS.y / texelSize) * texelSize;
+
+		// Small padding to avoid shadow edge clipping
+		constexpr float padding = 50.0f;
+      const float coveragePadding = glm::max(100.0f, radius * 0.15f);
+		const float depthPadding = glm::max(200.0f, radius * 0.5f);
+		glm::mat4 lightProj = glm::orthoRH_ZO(centerLS.x - radius - coveragePadding, centerLS.x + radius + coveragePadding,
+										   centerLS.y - radius - coveragePadding, centerLS.y + radius + coveragePadding,
+										   -mx.z - padding - depthPadding, -mn.z + padding + depthPadding);
+
+		ubo.lightSpaceMatrices[cascade] = lightProj * lightView;
+	}
 
 	ubo.lightPositions[0] = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
 	ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 5.0f, 1.0f);

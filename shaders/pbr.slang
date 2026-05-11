@@ -15,24 +15,25 @@ struct VSOutput {
     float3 Normal : NORMAL;        // World space normal (interpolated)
     float2 UV : TEXCOORD0;         // Texture coordinates (interpolated)
     float4 Tangent : TANGENT;      // World space tangent (interpolated)
-    float4 LightSpacePos : TEXCOORD1; // Position in light space for shadow mapping
+    float  ViewDepth : TEXCOORD1;  // View-space depth for cascade selection
 };
 
 // Uniform buffer - Global data shared across all vertices/fragments
 struct UniformBufferObject {
-    float4x4 model;                     // Model-to-world transformation matrix
-    float4x4 view;                      // World-to-camera transformation matrix
-    float4x4 proj;                      // Camera-to-clip space projection matrix
-    float4x4 lightSpaceMatrix;          // World-to-light space matrix for shadow mapping
-    float4 directionalLightDirection;   // Direction of the main directional light (normalized)
-    float4 directionalLightColor;       // Color and intensity of the directional light
-    float4 lightPositions[4];           // Light positions in world space
-    float4 lightColors[4];              // Light intensities and colors
-    float4 camPos;                      // Camera position for view-dependent effects
-    float exposure;                     // HDR exposure control
-    float gamma;                        // Gamma correction value (typically 2.2)
-    float prefilteredCubeMipLevels;     // IBL prefiltered environment map mip levels
-    float scaleIBLAmbient;              // IBL ambient contribution scale
+    float4x4 model;
+    float4x4 view;
+    float4x4 proj;
+    float4x4 lightSpaceMatrices[5];     // One per shadow cascade
+    float4 directionalLightDirection;
+    float4 directionalLightColor;
+    float4 lightPositions[4];
+    float4 lightColors[4];
+    float4 camPos;
+    float4 cascadeSplits;               // xyz = split distances, w unused (float4 avoids std140 padding issues)
+    float exposure;
+    float gamma;
+    float prefilteredCubeMipLevels;
+    float scaleIBLAmbient;
 };
 
 // Push constants - Fast, small data updated frequently per material/object
@@ -64,8 +65,16 @@ static const float PI = 3.14159265359;
 [[vk::binding(4, 0)]] SamplerState occlusionSampler;
 [[vk::binding(5, 0)]] Texture2D emissiveMap;
 [[vk::binding(5, 0)]] SamplerState emissiveSampler;
-[[vk::binding(6, 0)]] Texture2D shadowMap;
-[[vk::binding(6, 0)]] SamplerState shadowSampler;
+[[vk::binding(6, 0)]] Texture2D shadowMap0;
+[[vk::binding(6, 0)]] SamplerState shadowSampler0;
+[[vk::binding(7, 0)]] Texture2D shadowMap1;
+[[vk::binding(7, 0)]] SamplerState shadowSampler1;
+[[vk::binding(8, 0)]] Texture2D shadowMap2;
+[[vk::binding(8, 0)]] SamplerState shadowSampler2;
+[[vk::binding(9, 0)]] Texture2D shadowMap3;
+[[vk::binding(9, 0)]] SamplerState shadowSampler3;
+[[vk::binding(10, 0)]] Texture2D shadowMap4;
+[[vk::binding(10, 0)]] SamplerState shadowSampler4;
 
 [[vk::push_constant]] PushConstants material;
 
@@ -103,25 +112,73 @@ float3 FresnelSchlick(float cosTheta, float3 F0) {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
-float ShadowCalculation(float4 fragPosLightSpace, float3 normal, float3 lightDir)
+float SampleShadowMap(int cascadeIndex, float2 uv)
 {
-	float3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-	// Only remap XY from NDC [-1,1] to UV [0,1].
-	// Z is already in [0,1] with GLM_FORCE_DEPTH_ZERO_TO_ONE / Vulkan conventions.
-	projCoords.xy = projCoords.xy * 0.5 + 0.5;
+   if      (cascadeIndex == 0) return shadowMap0.Sample(shadowSampler0, uv).r;
+    else if (cascadeIndex == 1) return shadowMap1.Sample(shadowSampler1, uv).r;
+    else if (cascadeIndex == 2) return shadowMap2.Sample(shadowSampler2, uv).r;
+    else if (cascadeIndex == 3) return shadowMap3.Sample(shadowSampler3, uv).r;
+    else                        return shadowMap4.Sample(shadowSampler4, uv).r;
+}
 
-	// Discard fragments outside the shadow frustum.
-	if (projCoords.z > 1.0 || projCoords.z < 0.0)
-		return 0.0;
-	if (any(projCoords.xy < 0.0) || any(projCoords.xy > 1.0))
-		return 0.0;
+float ComputeCascadeShadow(int cascadeIndex, float3 worldPos, float3 normal, float3 lightDir)
+{
+    float4x4 lightSpaceMat = ubo.lightSpaceMatrices[cascadeIndex];
+    float4 fragPosLightSpace = mul(lightSpaceMat, float4(worldPos, 1.0));
+    float3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
-	float closestDepth = shadowMap.Sample(shadowSampler, projCoords.xy).r;
-	float currentDepth = projCoords.z;
+    if (projCoords.z > 1.0 || projCoords.z < 0.0) return 0.0;
+    if (any(projCoords.xy < 0.0) || any(projCoords.xy > 1.0)) return 0.0;
 
-	float bias = max(0.001 * (1.0 - dot(normal, lightDir)), 0.0001);
+    float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.0002);
+    float currentDepth = projCoords.z;
+    float2 texelSize = float2(1.0 / 2048.0, 1.0 / 2048.0);
+    float shadow = 0.0;
 
-	return currentDepth - bias > closestDepth ? 1.0 : 0.0;
+    [unroll]
+    for (int y = -1; y <= 1; ++y) {
+        [unroll]
+        for (int x = -1; x <= 1; ++x) {
+            float2 offset = float2(x, y) * texelSize;
+            float closestDepth = SampleShadowMap(cascadeIndex, projCoords.xy + offset);
+            shadow += currentDepth - bias > closestDepth ? 1.0 : 0.0;
+        }
+    }
+
+    return shadow / 9.0;
+}
+
+float ShadowCalculation(float viewDepth, float3 worldPos, float3 normal, float3 lightDir)
+{
+    int cascadeIndex = 4;
+    if      (viewDepth < ubo.cascadeSplits.x) cascadeIndex = 0;
+    else if (viewDepth < ubo.cascadeSplits.y) cascadeIndex = 1;
+    else if (viewDepth < ubo.cascadeSplits.z) cascadeIndex = 2;
+    else if (viewDepth < ubo.cascadeSplits.w) cascadeIndex = 3;
+
+    float shadow = ComputeCascadeShadow(cascadeIndex, worldPos, normal, lightDir);
+
+    if (cascadeIndex < 4) {
+        float splitDepth = cascadeIndex == 0 ? ubo.cascadeSplits.x
+            : cascadeIndex == 1 ? ubo.cascadeSplits.y
+            : cascadeIndex == 2 ? ubo.cascadeSplits.z
+            : ubo.cascadeSplits.w;
+        float previousSplit = cascadeIndex == 0 ? 0.0
+            : cascadeIndex == 1 ? ubo.cascadeSplits.x
+            : cascadeIndex == 2 ? ubo.cascadeSplits.y
+            : ubo.cascadeSplits.z;
+        float transitionRange = max((splitDepth - previousSplit) * 0.15, 10.0);
+        float blendStart = splitDepth - transitionRange;
+
+        if (viewDepth > blendStart) {
+            float nextShadow = ComputeCascadeShadow(cascadeIndex + 1, worldPos, normal, lightDir);
+            float blend = saturate((viewDepth - blendStart) / transitionRange);
+            shadow = lerp(shadow, nextShadow, blend);
+        }
+    }
+
+  return shadow;
 }
 
 
@@ -137,24 +194,15 @@ VSOutput vertMain(VSInput input)
     output.Position = mul(ubo.proj, mul(ubo.view, worldPos));
 
     // Pass world position for fragment lighting calculations
-    // Fragment shader needs world space position to calculate light vectors
     output.WorldPos = worldPos.xyz;
 
-    // Transform normal from model space to world space
-    // Use only rotation/scale part of model matrix (upper-left 3x3)
-    // Normalize to ensure unit length after transformation
     output.Normal = normalize(mul((float3x3)ubo.model, input.Normal));
-
-    // Pass through texture coordinates unchanged
-    // UV coordinates are typically in [0,1] range and don't need transformation
     output.UV = input.UV;
-
-    // Pass tangent vector for normal mapping
-    // Will be used in fragment shader to construct tangent-space basis
     output.Tangent = input.Tangent;
 
-    // Calculate position in light space for shadow mapping
-    output.LightSpacePos = mul(ubo.lightSpaceMatrix, worldPos);
+    // Store view-space Z for cascade selection in the fragment shader
+    float4 viewPos = mul(ubo.view, worldPos);
+    output.ViewDepth = -viewPos.z; // Negate: view space Z is negative in front of camera
 
     return output;
 }
@@ -282,7 +330,7 @@ float4 fragMain(VSOutput input) : SV_TARGET
     float G = GeometrySmith(max(dot(N, V), 0.0), NdotL, roughness);
     float F = FresnelSchlick(max(dot(H, V), 0.0), F0).r; // Assuming grayscale F0 for simplicity
     float3 specular = (D * G * F) / max(4.0 * max(dot(N, V), 0.0) * NdotL, 0.001);
-    float shadow = ShadowCalculation(input.LightSpacePos, N, L);
+    float shadow = ShadowCalculation(input.ViewDepth, input.WorldPos, N, L);
 
     Lo += (1.0 - shadow) * (diffuse * (1.0 - metallic) + specular) * dirLightColor * NdotL;
 

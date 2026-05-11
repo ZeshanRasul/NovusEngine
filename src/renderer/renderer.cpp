@@ -66,7 +66,8 @@ void Renderer::initVulkan()
 
 	CommandPool::init(device, queueIndex, commandPool);
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
-	ShadowPass::createResources(device, physicalDevice, shadowImage, shadowImageMemory, shadowImageView, shadowSampler);
+	for (uint32_t i = 0; i < SHADOW_CASCADE_COUNT; ++i)
+		ShadowPass::createResources(device, physicalDevice, shadowImages[i], shadowImageMemories[i], shadowImageViews[i], shadowSampler);
 	createTextureSampler();
 	createDefaultTextures();
 	setupGameObjects();
@@ -77,7 +78,10 @@ void Renderer::initVulkan()
 	}
 	UniformBuffer::createUniformBuffers(entities, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createDescriptorPool(device, entities, descriptorPool, MAX_FRAMES_IN_FLIGHT);
-	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowImageView, shadowSampler, MAX_FRAMES_IN_FLIGHT);
+ std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
+		*shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
+	};
+	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
     Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
@@ -481,28 +485,33 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 {
 	auto& commandBuffer = commandBuffers[frameIndex];
 	commandBuffer.begin({});
-	transition_image_layout(*shadowImage,
-        shadowImageLayout,
-		vk::ImageLayout::eDepthAttachmentOptimal,
-       vk::AccessFlags2{},
-		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-      vk::PipelineStageFlagBits2::eTopOfPipe,
-		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-		vk::ImageAspectFlagBits::eDepth);
-	shadowImageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
 
-	recordShadowPass(commandBuffer);
-	commandBuffer.endRendering();
+	// Transition all cascade shadow maps to depth attachment, render each, then transition to shader read
+	for (uint32_t cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade)
+	{
+		transition_image_layout(*shadowImages[cascade],
+			shadowImageLayouts[cascade],
+			vk::ImageLayout::eDepthAttachmentOptimal,
+			vk::AccessFlags2{},
+			vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+			vk::PipelineStageFlagBits2::eTopOfPipe,
+			vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+			vk::ImageAspectFlagBits::eDepth);
+		shadowImageLayouts[cascade] = vk::ImageLayout::eDepthAttachmentOptimal;
 
-	transition_image_layout(*shadowImage,
-		vk::ImageLayout::eDepthAttachmentOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-		vk::AccessFlagBits2::eShaderSampledRead,
-		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-		vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eFragmentShader,
-		vk::ImageAspectFlagBits::eDepth);
-   shadowImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+		recordShadowPass(commandBuffer, cascade);
+		commandBuffer.endRendering();
+
+		transition_image_layout(*shadowImages[cascade],
+			vk::ImageLayout::eDepthAttachmentOptimal,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+			vk::AccessFlagBits2::eShaderSampledRead,
+			vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+			vk::PipelineStageFlagBits2::eFragmentShader,
+			vk::ImageAspectFlagBits::eDepth);
+		shadowImageLayouts[cascade] = vk::ImageLayout::eShaderReadOnlyOptimal;
+	}
 	beginMainPass(commandBuffer, imageIndex);
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
@@ -565,13 +574,11 @@ void Renderer::beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t im
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 }
 
-void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer) 
+void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex)
 {
-
-
 	vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
 	vk::RenderingAttachmentInfo depthAttachmentInfo = {
-	.imageView = shadowImageView,
+	.imageView = shadowImageViews[cascadeIndex],
 	.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
 	.loadOp = vk::AttachmentLoadOp::eClear,
 	.storeOp = vk::AttachmentStoreOp::eStore,
@@ -590,6 +597,10 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer)
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadowPipeline);
 	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(2048), static_cast<float>(2048), 0.0f, 1.0f));
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(2048, 2048)));
+
+	// Push the cascade index so the shadow vertex shader picks the right light matrix
+	int cascadeIndexInt = static_cast<int>(cascadeIndex);
+	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
 
 	for (auto& entityPtr : entities)
 	{
@@ -967,18 +978,17 @@ void Renderer::setupGameObjects()
 		};
 
 	makeEntity("FlightHelmet_Left",
-		{ -13.0f, 100.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 330.0f, 330.0f, 330.0f },
+		{ -13.0f, 100.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
 		"../models/FlightHelmet.gltf");
 
 	{
 		Entity& e = makeEntity("DamagedHelmet",
-			{ 13.0f, -502.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 110.5f, 110.5f, 110.5f },
+			{ 13.0f, -502.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
 			"../models/DamagedHelmet.gltf");
-		e.GetComponent<RenderableComponent>()->materials[0].metallicFactor = 1.0f;
 	}
 
 	makeEntity("Sponza",
-		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3.0f, 3.0f, 3.0f },
+		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.3f, 0.3f, 0.3f },
 		"../models/Sponza.gltf");
 }
 

@@ -23,4 +23,6 @@ public:
 
 class DescriptorSetLayout
 {
+public:
+	static void createEntityDescriptorSetLayout(vk::raii::Device& device, vk::raii::DescriptorSetLayout& descriptorSetLayout, size_t numBindings);
 };

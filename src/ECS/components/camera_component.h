@@ -42,7 +42,7 @@ public:
 		float pitch = 0.0f
 	)
 		: position(position), worldUp(up), yaw(yaw), pitch(pitch),
-		movementSpeed(30.0f), mouseSensitivity(0.1f), zoom(45.0f)
+		movementSpeed(100.0f), mouseSensitivity(0.1f), zoom(45.0f)
 	{
 		updateCameraVectors();
 	};

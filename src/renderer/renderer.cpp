@@ -40,7 +40,7 @@ void Renderer::initWindow()
 	camera.setupInputCallbacks(window);
 	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
-	camera.setPosition(glm::vec3(0.0f, 20.0f, 43.0f));
+	camera.setPosition(glm::vec3(0.0f, -120.0f, 43.0f));
 	camera.getViewMatrix();
 	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 }
@@ -50,7 +50,7 @@ void Renderer::initVulkan()
 	deviceInit();
 	createSwapChain();
 	createSwapChainImageViews();
-	createDescriptorSetLayout();
+	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 6);
 
 	if (!createPBRPipeline())
 	{
@@ -174,14 +174,14 @@ void Renderer::renderImgui()
 
 	// Add a button to reset camera position
 	if (ImGui::Button("Reset Camera")) {
-		camera.setPosition(glm::vec3(0.0f, 20.0f, 23.0f));
+		camera.setPosition(glm::vec3(0.0f, -120.0f, 23.0f));
 		camera.setYaw(-90.0f);
 		camera.setPitch(0.0f);
 	}
 
 	// Add sliders for camera settings
 	float movementSpeed = camera.getMovementSpeed();
-	if (ImGui::SliderFloat("Movement Speed", &movementSpeed, 1.0f, 10.0f)) {
+	if (ImGui::SliderFloat("Movement Speed", &movementSpeed, 1.0f, 100.0f)) {
 		camera.setMovementSpeed(movementSpeed);
 	}
 
@@ -513,22 +513,6 @@ vk::raii::ShaderModule Renderer::createShaderModule(const std::vector<char>& cod
 	vk::ShaderModuleCreateInfo createInfo{ .codeSize = code.size() * sizeof(char),
 										   .pCode = reinterpret_cast<const uint32_t*>(code.data()) };
 	return vk::raii::ShaderModule{ device, createInfo };
-}
-
-void Renderer::createDescriptorSetLayout()
-{
-	std::array<vk::DescriptorSetLayoutBinding, 6> bindings{ {
-		{.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment },
-		{.binding = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
-		{.binding = 2, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
-		{.binding = 3, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
-		{.binding = 4, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
-		{.binding = 5, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
-	} };
-
-	vk::DescriptorSetLayoutCreateInfo layoutInfo{ .bindingCount = static_cast<uint32_t>(bindings.size()),
-												  .pBindings = bindings.data() };
-	descriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
 }
 
 void Renderer::createGraphicsPipeline()
@@ -1079,12 +1063,12 @@ void Renderer::setupGameObjects()
 		};
 
 	makeEntity("FlightHelmet_Left",
-		{ -3.0f, 10.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 33.0f, 33.0f, 33.0f },
+		{ -13.0f, 10.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 33.0f, 33.0f, 33.0f },
 		"../models/FlightHelmet.gltf");
 
 	{
 		Entity& e = makeEntity("DamagedHelmet",
-			{ 3.0f, 52.0f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 11.5f, 11.5f, 11.5f },
+			{ 13.0f, -52.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 11.5f, 11.5f, 11.5f },
 			"../models/DamagedHelmet.gltf");
 		e.GetComponent<RenderableComponent>()->materials[0].metallicFactor = 1.0f;
 	}

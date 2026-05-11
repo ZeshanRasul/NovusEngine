@@ -110,21 +110,13 @@ private:
 	// Shaders / pipelines
 	static std::vector<char> readFile(const std::string& filename);
 	vk::raii::ShaderModule   createShaderModule(const std::vector<char>& code) const;
-	void                     createDescriptorSetLayout();
 	void                     createGraphicsPipeline();
 	bool                     createPBRPipeline();
 
 	// Commands
-	void                    createCommandPool();
-	void                    createCommandBuffers();
-	vk::raii::CommandBuffer beginSingleTimeCommands();
-	void                    endSingleTimeCommands(vk::raii::CommandBuffer&& commandBuffer);
 	void                    recordCommandBuffer(uint32_t imageIndex);
 
 	// Buffers
-	void     createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
-						  vk::MemoryPropertyFlags properties,
-						  vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
 	void     copyBuffer(vk::raii::Buffer& src, vk::raii::Buffer& dst, vk::DeviceSize size);
 	void     createVertexBuffer(RenderableComponent& gameObj);
 	void     createIndexBuffer(RenderableComponent& gameObj);
@@ -147,10 +139,6 @@ private:
 	void loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures);
 	void createDefaultTextures();
 	void createTextureSampler();
-
-	// Descriptors
-	void createDescriptorPool();
-	void createDescriptorSets();
 
 	// Sync
 	void createSyncObjects();

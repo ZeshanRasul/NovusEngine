@@ -1001,15 +1001,15 @@ void Renderer::setupGameObjects()
 			return entity;
 		};
 
-	makeEntity("FlightHelmet_Left",
-		{ -13.0f, -10.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
-		"../models/FlightHelmet.gltf");
+	//makeEntity("FlightHelmet_Left",
+	//	{ -13.0f, -10.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
+	//	"../models/FlightHelmet.gltf");
 
-	{
-		Entity& e = makeEntity("DamagedHelmet",
-			{ 13.0f, -5.0f, 10.0f }, { -90.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
-			"../models/DamagedHelmet.gltf");
-	}
+	//{
+	//	Entity& e = makeEntity("DamagedHelmet",
+	//		{ 13.0f, -5.0f, 10.0f }, { -90.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
+	//		"../models/DamagedHelmet.gltf");
+	//}
 
 	makeEntity("Sponza",
 		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.3f, 0.3f, 0.3f },

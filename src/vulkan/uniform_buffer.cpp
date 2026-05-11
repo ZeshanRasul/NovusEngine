@@ -46,6 +46,12 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.directionalLightDirection = glm::vec4(-0.05f, -1.0f, -0.05f, 0.0f);
 	ubo.directionalLightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
+	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f, 150.0f, 0.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 lightProj = glm::ortho(-150.0f, 150.0f, 150.0f, -150.0f, 0.1f, 3000.0f);
+	glm::mat4 lightSpace = lightProj * lightView;
+	
+	ubo.lightSpaceMatrix = lightSpace;
+
 	ubo.lightPositions[0] = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
 	ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 5.0f, 1.0f);
 	ubo.lightPositions[2] = glm::vec4(10.0f, 10.0f, -5.0f, 1.0f);

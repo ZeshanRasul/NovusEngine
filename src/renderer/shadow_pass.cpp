@@ -5,6 +5,7 @@
 #include "../vulkan/image_view.h"
 #include "../vulkan/material.h"
 #include "../vulkan/pipeline.h"
+#include "../vulkan/descriptors.h"
 #include "renderer_types.h"
 
 void ShadowPass::createResources(vk::raii::Device& device,
@@ -47,7 +48,8 @@ void ShadowPass::createResources(vk::raii::Device& device,
 void ShadowPass::createPipeline(vk::raii::Device& device,
     vk::raii::PhysicalDevice& physicalDevice,
     vk::raii::PipelineLayout& shadowPipelineLayout,
-    vk::raii::Pipeline& shadowPipeline)
+    vk::raii::Pipeline& shadowPipeline,
+    vk::raii::DescriptorSetLayout& shadowDescriptorLayout)
 {
   auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
@@ -66,7 +68,9 @@ void ShadowPass::createPipeline(vk::raii::Device& device,
     config.depthBiasConstantFactor = 1.25f;
     config.depthBiasSlopeFactor = 1.75f;
     config.blendEnable = false;
-
+    config.descriptorSetLayouts = {
+        {shadowDescriptorLayout}
+	};
     auto pipelineBundle = Pipeline::createPipeline(device, config);
     shadowPipelineLayout = std::move(pipelineBundle.layout);
     shadowPipeline = std::move(pipelineBundle.pipeline);

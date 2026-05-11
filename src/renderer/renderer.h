@@ -88,6 +88,7 @@ private:
 	// Commands
 	void                    recordCommandBuffer(uint32_t imageIndex);
     void                    beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
+	void                    recordShadowPass(vk::raii::CommandBuffer& commandBuffer);
 	void                    recordScenePass(vk::raii::CommandBuffer& commandBuffer);
 	void                    recordImguiPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
 	void                    endMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
@@ -199,6 +200,7 @@ private:
 	vk::raii::DeviceMemory shadowImageMemory = nullptr;
 	vk::raii::ImageView    shadowImageView   = nullptr;
 	vk::raii::Sampler      shadowSampler     = nullptr;
+	vk::raii::DescriptorSetLayout        shadowDescriptorSetLayout = nullptr;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 

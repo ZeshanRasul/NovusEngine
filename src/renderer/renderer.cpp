@@ -52,20 +52,21 @@ void Renderer::initWindow()
 void Renderer::initVulkan()
 {
 	deviceInit();
-  SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
+    SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
-	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 6);
+	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 7);
+	DescriptorSetLayout::createEntityDescriptorSetLayout(device, shadowDescriptorSetLayout, 7);
 
 	if (!createPBRPipeline())
 	{
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
 	}
 
-	ShadowPass::createPipeline(device, physicalDevice, shadowPipelineLayout, shadowPipeline);
+	ShadowPass::createPipeline(device, physicalDevice, shadowPipelineLayout, shadowPipeline, shadowDescriptorSetLayout);
 
 	CommandPool::init(device, queueIndex, commandPool);
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
- ShadowPass::createResources(device, physicalDevice, shadowImage, shadowImageMemory, shadowImageView, shadowSampler);
+	ShadowPass::createResources(device, physicalDevice, shadowImage, shadowImageMemory, shadowImageView, shadowSampler);
 	createTextureSampler();
 	createDefaultTextures();
 	setupGameObjects();
@@ -76,7 +77,7 @@ void Renderer::initVulkan()
 	}
 	UniformBuffer::createUniformBuffers(entities, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createDescriptorPool(device, entities, descriptorPool, MAX_FRAMES_IN_FLIGHT);
-	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, MAX_FRAMES_IN_FLIGHT);
+	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowImageView, shadowSampler, MAX_FRAMES_IN_FLIGHT);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
     Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
@@ -397,7 +398,7 @@ void Renderer::recreateSwapChain()
 	}
 
 	device.waitIdle();
- SwapChain::cleanupSwapChain(swapChainImageViews, swapChain);
+	SwapChain::cleanupSwapChain(swapChainImageViews, swapChain);
 	SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
@@ -422,7 +423,7 @@ void Renderer::createGraphicsPipeline()
 
 	config.descriptorSetLayouts = { *descriptorSetLayout };
 	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
-   config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 
 	auto pipelineBundle = Pipeline::createPipeline(device, config);
 	pipelineLayout = std::move(pipelineBundle.layout);
@@ -480,6 +481,26 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 {
 	auto& commandBuffer = commandBuffers[frameIndex];
 	commandBuffer.begin({});
+	transition_image_layout(*shadowImage,
+		vk::ImageLayout::eUndefined,
+		vk::ImageLayout::eDepthAttachmentOptimal,
+		vk::AccessFlagBits2::eDepthStencilAttachmentRead,
+		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+		vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eFragmentShader,
+		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+		vk::ImageAspectFlagBits::eDepth);
+
+	recordShadowPass(commandBuffer);
+	commandBuffer.endRendering();
+
+	transition_image_layout(*shadowImage,
+		vk::ImageLayout::eDepthAttachmentOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+		vk::AccessFlagBits2::eDepthStencilAttachmentRead,
+		vk::PipelineStageFlagBits2::eLateFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+		vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eFragmentShader,
+		vk::ImageAspectFlagBits::eDepth);
 	beginMainPass(commandBuffer, imageIndex);
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
@@ -488,13 +509,9 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	commandBuffer.end();
 }
 
-
-
-
-
-
 void Renderer::beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
 {
+
 	transition_image_layout(swapChainImages[imageIndex],
 		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eColorAttachmentOptimal,
@@ -546,6 +563,63 @@ void Renderer::beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t im
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 }
 
+void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer) 
+{
+
+
+	vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+	vk::RenderingAttachmentInfo depthAttachmentInfo = {
+	.imageView = shadowImageView,
+	.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+	.loadOp = vk::AttachmentLoadOp::eClear,
+	.storeOp = vk::AttachmentStoreOp::eStore,
+	.clearValue = clearDepth
+	};
+
+	vk::RenderingInfo renderingInfo = {
+		.renderArea = {.offset = { 0, 0 }, .extent = swapChainExtent },
+		.layerCount = 1,
+		.colorAttachmentCount = 0,
+		.pColorAttachments = nullptr,
+		.pDepthAttachment = &depthAttachmentInfo
+	};
+
+	commandBuffer.beginRendering(renderingInfo);
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadowPipeline);
+	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(2048), static_cast<float>(2048), 0.0f, 1.0f));
+	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(2048, 2048)));
+
+	for (auto& entityPtr : entities)
+	{
+		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
+		auto* transform = entityPtr->GetComponent<TransformComponent>();
+		if (!renderable || !transform)
+			continue;
+
+		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent);
+		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
+		vk::DeviceSize offsets[] = { 0 };
+		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
+		commandBuffer.bindIndexBuffer(*renderable->indexBuffer, 0, vk::IndexType::eUint32);
+
+		for (const auto& mesh : renderable->meshes)
+		{
+		//	const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
+		//	MaterialPushConstants::push(commandBuffer, *shadowPipelineLayout, material);
+			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
+
+			commandBuffer.bindDescriptorSets(
+				vk::PipelineBindPoint::eGraphics,
+				*shadowPipelineLayout,
+				0,
+				*renderable->materialDescriptorSets[descriptorMaterialIndex][frameIndex],
+				nullptr);
+
+			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
+		}
+	}
+
+}
 
 
 
@@ -603,6 +677,15 @@ void Renderer::endMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imag
 		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
 		vk::PipelineStageFlagBits2::eBottomOfPipe,
 		vk::ImageAspectFlagBits::eColor);
+
+	transition_image_layout(*shadowImage,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::ImageLayout::eDepthAttachmentOptimal,
+		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+		vk::ImageAspectFlagBits::eDepth);
 }
 
 // ---------------------------------------------------------------------------

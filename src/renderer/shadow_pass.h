@@ -22,5 +22,6 @@ public:
     static void createPipeline(vk::raii::Device& device,
         vk::raii::PhysicalDevice& physicalDevice,
         vk::raii::PipelineLayout& shadowPipelineLayout,
-        vk::raii::Pipeline& shadowPipeline);
+        vk::raii::Pipeline& shadowPipeline,
+        vk::raii::DescriptorSetLayout& shadowDescriptorLayout);
 };

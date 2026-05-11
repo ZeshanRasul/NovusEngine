@@ -15,6 +15,7 @@ struct VSOutput {
     float3 Normal : NORMAL;        // World space normal (interpolated)
     float2 UV : TEXCOORD0;         // Texture coordinates (interpolated)
     float4 Tangent : TANGENT;      // World space tangent (interpolated)
+    float4 LightSpacePos : TEXCOORD1; // Position in light space for shadow mapping
 };
 
 // Uniform buffer - Global data shared across all vertices/fragments
@@ -22,6 +23,7 @@ struct UniformBufferObject {
     float4x4 model;                     // Model-to-world transformation matrix
     float4x4 view;                      // World-to-camera transformation matrix
     float4x4 proj;                      // Camera-to-clip space projection matrix
+    float4x4 lightSpaceMatrix;          // World-to-light space matrix for shadow mapping
     float4 directionalLightDirection;   // Direction of the main directional light (normalized)
     float4 directionalLightColor;       // Color and intensity of the directional light
     float4 lightPositions[4];           // Light positions in world space
@@ -62,6 +64,8 @@ static const float PI = 3.14159265359;
 [[vk::binding(4, 0)]] SamplerState occlusionSampler;
 [[vk::binding(5, 0)]] Texture2D emissiveMap;
 [[vk::binding(5, 0)]] SamplerState emissiveSampler;
+[[vk::binding(6, 0)]] Texture2D shadowMap;
+[[vk::binding(6, 0)]] SamplerState shadowSampler;
 
 [[vk::push_constant]] PushConstants material;
 
@@ -99,6 +103,28 @@ float3 FresnelSchlick(float cosTheta, float3 F0) {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
+float ShadowCalculation(float4 fragPosLightSpace, float3 normal, float3 lightDir)
+{
+    float3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;
+    
+    float closestDepth = shadowMap.Sample(shadowSampler, projCoords.xy).r;
+
+    float currentDepth = projCoords.z;
+          
+    float bias = max(0.01 * (1.0 - dot(normal, lightDir)), 0.0005);
+
+    float shadow = 0.0;
+
+    shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
+  
+    if (projCoords.z > 1.0)
+		shadow = 0.0;
+
+    return shadow;
+}
+
+
 // Vertex shader entry point - Executes once per vertex
 [[shader("vertex")]]
 VSOutput vertMain(VSInput input)
@@ -126,6 +152,9 @@ VSOutput vertMain(VSInput input)
     // Pass tangent vector for normal mapping
     // Will be used in fragment shader to construct tangent-space basis
     output.Tangent = input.Tangent;
+
+    // Calculate position in light space for shadow mapping
+    output.LightSpacePos = mul(ubo.lightSpaceMatrix, worldPos);
 
     return output;
 }
@@ -252,7 +281,9 @@ float4 fragMain(VSOutput input) : SV_TARGET
     float G = GeometrySmith(max(dot(N, V), 0.0), NdotL, roughness);
     float F = FresnelSchlick(max(dot(H, V), 0.0), F0).r; // Assuming grayscale F0 for simplicity
     float3 specular = (D * G * F) / max(4.0 * max(dot(N, V), 0.0) * NdotL, 0.001);
-    Lo += (diffuse * (1.0 - metallic) + specular) * dirLightColor * NdotL;
+    float shadow = ShadowCalculation(input.LightSpacePos, N, dirLightDir);
+
+    Lo += (1.0 - shadow) * (diffuse * (1.0 - metallic) + specular) * dirLightColor * NdotL;
 
     // === AMBIENT AND EMISSIVE ===
     // Add simple ambient lighting (should be replaced with IBL in production)

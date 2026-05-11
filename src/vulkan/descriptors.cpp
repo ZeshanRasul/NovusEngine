@@ -16,7 +16,7 @@ void DescriptorPool::createDescriptorPool(vk::raii::Device& device, std::vector<
 
 	std::array<vk::DescriptorPoolSize, 2> poolSize{ {
 		{.type = vk::DescriptorType::eUniformBuffer, .descriptorCount = materialCount * framesInFlight },
-		{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 5 * materialCount * framesInFlight }
+		{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 6 * materialCount * framesInFlight }
 	} };
 
 	vk::DescriptorPoolCreateInfo poolInfo{
@@ -31,7 +31,7 @@ void DescriptorPool::createDescriptorPool(vk::raii::Device& device, std::vector<
 }
 
 void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<std::unique_ptr<Entity>>& entities, vk::raii::DescriptorPool& descriptorPool, vk::raii::DescriptorSetLayout& descriptorSetLayout,
-	vk::raii::ImageView& defaultTextureView, vk::raii::ImageView& defaultNormalView, vk::raii::Sampler& textureSampler, uint32_t framesInFlight)
+	vk::raii::ImageView& defaultTextureView, vk::raii::ImageView& defaultNormalView, vk::raii::Sampler& textureSampler, vk::raii::ImageView& shadowImageView, vk::raii::Sampler& shadowSampler, uint32_t framesInFlight)
 {
 	for (auto& entityPtr : entities)
 	{
@@ -66,12 +66,15 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 				vk::ImageView normalView = (*materialTextures.normalView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.normalView) : vk::ImageView(*defaultNormalView);
 				vk::ImageView occlusionView = (*materialTextures.occlusionView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.occlusionView) : vk::ImageView(*defaultTextureView);
 				vk::ImageView emissiveView = (*materialTextures.emissiveView != VK_NULL_HANDLE) ? vk::ImageView(*materialTextures.emissiveView) : vk::ImageView(*defaultTextureView);
+				vk::ImageView shadowMapView = vk::ImageView(shadowImageView);
 
 				vk::DescriptorImageInfo baseColorInfo{ .sampler = *textureSampler, .imageView = baseColorView,        .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
 				vk::DescriptorImageInfo metallicRoughnessInfo{ .sampler = *textureSampler, .imageView = metallicRoughnessView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
 				vk::DescriptorImageInfo normalInfo{ .sampler = *textureSampler, .imageView = normalView,            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
 				vk::DescriptorImageInfo occlusionInfo{ .sampler = *textureSampler, .imageView = occlusionView,         .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
 				vk::DescriptorImageInfo emissiveInfo{ .sampler = *textureSampler, .imageView = emissiveView,          .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+				vk::DescriptorImageInfo shadowInfo{ .sampler = *shadowSampler, .imageView = shadowMapView,          .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+
 
 				std::array descriptorWrites{
 					vk::WriteDescriptorSet{.dstSet = *descriptorSetsForMaterial[i], .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eUniformBuffer,        .pBufferInfo = &bufferInfo },
@@ -79,7 +82,8 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 					vk::WriteDescriptorSet{.dstSet = *descriptorSetsForMaterial[i], .dstBinding = 2, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &metallicRoughnessInfo },
 					vk::WriteDescriptorSet{.dstSet = *descriptorSetsForMaterial[i], .dstBinding = 3, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &normalInfo },
 					vk::WriteDescriptorSet{.dstSet = *descriptorSetsForMaterial[i], .dstBinding = 4, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &occlusionInfo },
-					vk::WriteDescriptorSet{.dstSet = *descriptorSetsForMaterial[i], .dstBinding = 5, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &emissiveInfo }
+					vk::WriteDescriptorSet{.dstSet = *descriptorSetsForMaterial[i], .dstBinding = 5, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &emissiveInfo },
+					vk::WriteDescriptorSet{.dstSet = *descriptorSetsForMaterial[i], .dstBinding = 6, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &shadowInfo }
 				};
 
 				device.updateDescriptorSets(descriptorWrites, {});
@@ -91,7 +95,7 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 
 void DescriptorSetLayout::createEntityDescriptorSetLayout(vk::raii::Device& device, vk::raii::DescriptorSetLayout& descriptorSetLayout, size_t numBindings)
 {
-	const int expectedBindings = 6;
+	const int expectedBindings = 7;
     (void)numBindings;
 	std::array<vk::DescriptorSetLayoutBinding, expectedBindings> bindings{ {
 	{.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment },
@@ -100,6 +104,7 @@ void DescriptorSetLayout::createEntityDescriptorSetLayout(vk::raii::Device& devi
 	{.binding = 3, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
 	{.binding = 4, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
 	{.binding = 5, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
+	{.binding = 6, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
 	} };
 
 	vk::DescriptorSetLayoutCreateInfo layoutInfo{ .bindingCount = static_cast<uint32_t>(bindings.size()),

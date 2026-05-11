@@ -48,21 +48,6 @@ constexpr bool enableValidationLayers = false;
 constexpr bool enableValidationLayers = true;
 #endif
 
-struct UniformBufferObject
-{
-	alignas(16) glm::mat4 model;
-	alignas(16) glm::mat4 view;
-	alignas(16) glm::mat4 proj;
-
-	glm::vec4 lightPositions[4];
-	glm::vec4 lightColors[4];
-	glm::vec4 camPos;
-	float     exposure;
-	float     gamma;
-	float     prefilteredCubeMipLevels;
-	float     scaleIBLAmbient;
-};
-
 class Renderer
 {
 public:

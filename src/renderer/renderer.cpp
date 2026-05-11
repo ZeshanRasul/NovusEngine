@@ -9,7 +9,8 @@
 #include "../vulkan/image_view.h"
 #include "../vulkan/pipeline.h"
 #include "../model/model.h"
-
+#include "../vulkan/uniform_buffer.h"
+#include "../ECS/entity.h"
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
@@ -65,7 +66,7 @@ void Renderer::initVulkan()
 		createVertexBuffer(*entityPtr->GetComponent<RenderableComponent>());
 		createIndexBuffer(*entityPtr->GetComponent<RenderableComponent>());
 	}
-	createUniformBuffers();
+	UniformBuffer::createUniformBuffers(entities, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
 	createDescriptorPool();
 	createDescriptorSets();
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
@@ -767,47 +768,6 @@ void Renderer::createIndexBuffer(RenderableComponent& gameObj)
 		gameObj.indexBuffer, gameObj.indexBufferMemory);
 
 	copyBuffer(stagingBuffer, gameObj.indexBuffer, bufferSize);
-}
-
-void Renderer::createUniformBuffers()
-{
-	for (auto& entityPtr : entities)
-	{
-		auto& gameObject = *entityPtr->GetComponent<RenderableComponent>();
-		gameObject.uniformBuffers.clear();
-		gameObject.uniformBuffersMemory.clear();
-		gameObject.uniformBuffersMapped.clear();
-
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		{
-			vk::DeviceSize         bufferSize = sizeof(UniformBufferObject);
-			vk::raii::Buffer       buffer({});
-			vk::raii::DeviceMemory bufferMem({});
-			Buffer::createBuffer(device, physicalDevice, bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
-				vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-				buffer, bufferMem);
-			gameObject.uniformBuffers.emplace_back(std::move(buffer));
-			gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
-			gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));
-		}
-	}
-}
-
-void Renderer::updateUniformBuffers()
-{
-	glm::mat4 view = camera.getViewMatrix();
-	glm::mat4 proj = camera.getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 10000.0f);
-
-	for (auto& entityPtr : entities)
-	{
-		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
-		auto* transform = entityPtr->GetComponent<TransformComponent>();
-
-		glm::mat4 model = transform ? transform->GetTransformMatrix() : glm::mat4(1.0f);
-
-		UniformBufferObject ubo{ .model = model, .view = view, .proj = proj };
-		memcpy(renderable->uniformBuffersMapped[frameIndex], &ubo, sizeof(ubo));
-	}
 }
 
 void Renderer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,

@@ -8,10 +8,14 @@
 #include "../vulkan/image.h"
 #include "../vulkan/image_view.h"
 #include "../vulkan/pipeline.h"
+#include "../vulkan/swap_chain.h"
+#include "../vulkan/depth_target.h"
+#include "../vulkan/sync.h"
+#include "../vulkan/material.h"
 #include "../model/model.h"
 #include "../vulkan/uniform_buffer.h"
-#include "../ECS/entity.h"
 #include "../vulkan/descriptors.h"
+#include "../ECS/entity.h"
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
@@ -48,8 +52,8 @@ void Renderer::initWindow()
 void Renderer::initVulkan()
 {
 	deviceInit();
-	createSwapChain();
-	createSwapChainImageViews();
+  SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
+	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 6);
 
 	if (!createPBRPipeline())
@@ -58,7 +62,7 @@ void Renderer::initVulkan()
 	}
 
 	CommandPool::init(device, queueIndex, commandPool);
-	createDepthResources();
+	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
 	createTextureSampler();
 	createDefaultTextures();
 	setupGameObjects();
@@ -71,7 +75,7 @@ void Renderer::initVulkan()
 	DescriptorPool::createDescriptorPool(device, entities, descriptorPool, MAX_FRAMES_IN_FLIGHT);
 	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, MAX_FRAMES_IN_FLIGHT);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
-	createSyncObjects();
+    Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
 	imGui = new ImGuiVulkanUtil(
 		device,
@@ -101,12 +105,6 @@ void Renderer::mainLoop()
 	}
 
 	device.waitIdle();
-}
-
-void Renderer::cleanupSwapChain()
-{
-	swapChainImageViews.clear();
-	swapChain = nullptr;
 }
 
 void Renderer::cleanup()
@@ -385,83 +383,6 @@ void Renderer::createLogicalDevice()
 	device = vk::raii::Device(physicalDevice, deviceCreateInfo);
 	queue = vk::raii::Queue(device, queueIndex, 0);
 }
-
-// ---------------------------------------------------------------------------
-// Swap chain
-// ---------------------------------------------------------------------------
-
-vk::SurfaceFormatKHR Renderer::chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const& availableFormats)
-{
-	assert(!availableFormats.empty());
-	const auto it = std::ranges::find_if(availableFormats, [](const auto& f) {
-		return f.format == vk::Format::eB8G8R8A8Unorm && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-		});
-	return it != availableFormats.end() ? *it : availableFormats[0];
-}
-
-vk::PresentModeKHR Renderer::chooseSwapPresentMode(std::vector<vk::PresentModeKHR> const& availablePresentModes)
-{
-	assert(std::ranges::any_of(availablePresentModes, [](auto pm) { return pm == vk::PresentModeKHR::eFifo; }));
-	return std::ranges::any_of(availablePresentModes, [](const vk::PresentModeKHR v) {
-		return vk::PresentModeKHR::eMailbox == v;
-		}) ?
-		vk::PresentModeKHR::eMailbox :
-			vk::PresentModeKHR::eFifo;
-}
-
-vk::Extent2D Renderer::chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities)
-{
-	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-		return capabilities.currentExtent;
-
-	int width, height;
-	glfwGetFramebufferSize(window, &width, &height);
-
-	return {
-		std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-		std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
-	};
-}
-
-uint32_t Renderer::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities)
-{
-	auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
-	if ((0 < surfaceCapabilities.maxImageCount) && (surfaceCapabilities.maxImageCount < minImageCount))
-		minImageCount = surfaceCapabilities.maxImageCount;
-	return minImageCount;
-}
-
-void Renderer::createSwapChain()
-{
-	auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
-
-	swapChainExtent = chooseSwapExtent(surfaceCapabilities);
-	uint32_t minImageCount = chooseSwapMinImageCount(surfaceCapabilities);
-
-	std::vector<vk::SurfaceFormatKHR> availableFormats = physicalDevice.getSurfaceFormatsKHR(surface);
-	std::vector<vk::PresentModeKHR>   availablePresentModes = physicalDevice.getSurfacePresentModesKHR(surface);
-	swapChainSurfaceFormat = chooseSwapSurfaceFormat(availableFormats);
-
-	vk::SwapchainCreateInfoKHR swapChainCreateInfo{
-		.surface = *surface,
-		.minImageCount = minImageCount,
-		.imageFormat = swapChainSurfaceFormat.format,
-		.imageColorSpace = swapChainSurfaceFormat.colorSpace,
-		.imageExtent = swapChainExtent,
-		.imageArrayLayers = 1,
-		.imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
-		.imageSharingMode = vk::SharingMode::eExclusive,
-		.preTransform = surfaceCapabilities.currentTransform,
-		.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
-		.presentMode = chooseSwapPresentMode(availablePresentModes),
-		.clipped = true,
-		.oldSwapchain = nullptr
-	};
-
-	swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
-	swapChainImages = swapChain.getImages();
-}
-
 void Renderer::recreateSwapChain()
 {
 	int width = 0, height = 0;
@@ -473,46 +394,10 @@ void Renderer::recreateSwapChain()
 	}
 
 	device.waitIdle();
-	cleanupSwapChain();
-	createSwapChain();
-	createSwapChainImageViews();
-	createDepthResources();
-}
-
-// ---------------------------------------------------------------------------
-// Image views
-// ---------------------------------------------------------------------------
-
-void Renderer::createSwapChainImageViews()
-{
-	assert(swapChainImageViews.empty());
-	swapChainImageViews.reserve(swapChainImages.size());
-	for (auto& image : swapChainImages)
-		swapChainImageViews.emplace_back(ImageView::createImageView(device, image, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor));
-}
-
-// ---------------------------------------------------------------------------
-// Shaders / pipelines
-// ---------------------------------------------------------------------------
-
-std::vector<char> Renderer::readFile(const std::string& filename)
-{
-	std::ifstream file(filename, std::ios::ate | std::ios::binary);
-	if (!file.is_open())
-		throw std::runtime_error("failed to open file!");
-
-	std::vector<char> buffer(file.tellg());
-	file.seekg(0, std::ios::beg);
-	file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-	file.close();
-	return buffer;
-}
-
-vk::raii::ShaderModule Renderer::createShaderModule(const std::vector<char>& code) const
-{
-	vk::ShaderModuleCreateInfo createInfo{ .codeSize = code.size() * sizeof(char),
-										   .pCode = reinterpret_cast<const uint32_t*>(code.data()) };
-	return vk::raii::ShaderModule{ device, createInfo };
+ SwapChain::cleanupSwapChain(swapChainImageViews, swapChain);
+	SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
+	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
+	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
 }
 
 void Renderer::createGraphicsPipeline()
@@ -534,7 +419,7 @@ void Renderer::createGraphicsPipeline()
 
 	config.descriptorSetLayouts = { *descriptorSetLayout };
 	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
-	config.depthAttachmentFormat = findDepthFormat();
+   config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 
 	auto pipelineBundle = Pipeline::createPipeline(device, config);
 	pipelineLayout = std::move(pipelineBundle.layout);
@@ -548,10 +433,10 @@ bool Renderer::createPBRPipeline()
 		auto bindingDescription = Vertex::getBindingDescription();
 		auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
-		vk::PushConstantRange pushConstantRange{
+        vk::PushConstantRange pushConstantRange{
 			.stageFlags = vk::ShaderStageFlagBits::eFragment,
 			.offset = 0,
-			.size = sizeof(PushConstantBlock)
+           .size = sizeof(::PushConstantBlock)
 		};
 
 		Pipeline::PipelineConfig config{};
@@ -569,7 +454,7 @@ bool Renderer::createPBRPipeline()
 		config.descriptorSetLayouts = { *descriptorSetLayout };
 		config.pushConstantRanges = { pushConstantRange };
 		config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
-		config.depthAttachmentFormat = findDepthFormat();
+       config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 
 		auto pipelineBundle = Pipeline::createPipeline(device, config);
 		pbrPipelineLayout = std::move(pipelineBundle.layout);
@@ -656,9 +541,10 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
 		commandBuffer.bindIndexBuffer(*renderable->indexBuffer, 0, vk::IndexType::eUint32);
 
-		for (const auto& mesh : renderable->meshes)
+     for (const auto& mesh : renderable->meshes)
 		{
-			pushMaterialProperties(commandBuffer, renderable, mesh.materialIndex);
+          const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
+			MaterialPushConstants::push(commandBuffer, *pbrPipelineLayout, material);
 			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
 			commandBuffer.bindDescriptorSets(
@@ -785,47 +671,6 @@ void Renderer::transition_image_layout(vk::Image               image,
 }
 
 // ---------------------------------------------------------------------------
-// Depth
-// ---------------------------------------------------------------------------
-
-vk::Format Renderer::findSupportedFormat(const std::vector<vk::Format>& candidates,
-	vk::ImageTiling tiling, vk::FormatFeatureFlags features)
-{
-	for (const auto format : candidates)
-	{
-		vk::FormatProperties props = physicalDevice.getFormatProperties(format);
-
-		if (tiling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features) == features)
-			return format;
-		if (tiling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features) == features)
-			return format;
-	}
-	throw std::runtime_error("failed to find supported format!");
-}
-
-vk::Format Renderer::findDepthFormat()
-{
-	return findSupportedFormat(
-		{ vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint },
-		vk::ImageTiling::eOptimal,
-		vk::FormatFeatureFlagBits::eDepthStencilAttachment);
-}
-
-bool Renderer::hasStencilComponent(vk::Format format)
-{
-	return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
-}
-
-void Renderer::createDepthResources()
-{
-	vk::Format depthFormat = findDepthFormat();
-	Image::createImage(device, physicalDevice, swapChainExtent.width, swapChainExtent.height, depthFormat,
-		vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
-		vk::MemoryPropertyFlagBits::eDeviceLocal, depthImage, depthImageMemory);
-	depthImageView = ImageView::createImageView(device, depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
-}
-
-// ---------------------------------------------------------------------------
 // Textures
 // ---------------------------------------------------------------------------
 
@@ -926,52 +771,6 @@ void Renderer::createTextureSampler()
 		.unnormalizedCoordinates = vk::False
 	};
 	textureSampler = vk::raii::Sampler(device, samplerInfo);
-}
-
-// ---------------------------------------------------------------------------
-// Descriptors
-// ----------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Sync
-// ---------------------------------------------------------------------------
-
-void Renderer::createSyncObjects()
-{
-	assert(presentCompleteSemaphores.empty() && renderFinishedSemaphores.empty() && inFlightFences.empty());
-
-	for (size_t i = 0; i < swapChainImages.size(); i++)
-		renderFinishedSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
-
-	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-	{
-		presentCompleteSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
-		inFlightFences.emplace_back(device, vk::FenceCreateInfo{ .flags = vk::FenceCreateFlagBits::eSignaled });
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Frame
-// ---------------------------------------------------------------------------
-
-void Renderer::pushMaterialProperties(vk::CommandBuffer commandBuffer,
-	const RenderableComponent* model, uint32_t materialIndex)
-{
-	const Material& material = model->materials[materialIndex < model->materials.size() ? materialIndex : 0];
-
-	PushConstantBlock pushConstants{};
-	pushConstants.baseColorFactor = material.baseColorFactor;
-	pushConstants.metallicFactor = material.metallicFactor;
-	pushConstants.roughnessFactor = material.roughnessFactor;
-	pushConstants.baseColorTextureSet = material.baseColorTextureIndex;
-	pushConstants.physicalDescriptorTextureSet = material.metallicRoughnessTextureIndex;
-	pushConstants.normalTextureSet = material.normalTextureIndex;
-	pushConstants.occlusionTextureSet = material.occlusionTextureIndex;
-	pushConstants.emissiveTextureSet = material.emissiveTextureIndex;
-	pushConstants.alphaMask = 0.0f;
-	pushConstants.alphaMaskCutoff = material.alphaCutoff;
-
-	commandBuffer.pushConstants(*pbrPipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(PushConstantBlock), &pushConstants);
 }
 
 void Renderer::drawFrame()

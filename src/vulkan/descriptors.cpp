@@ -1,6 +1,8 @@
 #include "descriptors.h"
+#include <array>
+#include <algorithm>
 #include "../ECS/components/renderable_component.h"
-#include "uniform_buffer.h""
+#include "uniform_buffer.h"
 
 void DescriptorPool::createDescriptorPool(vk::raii::Device& device, std::vector<std::unique_ptr<Entity>>& entities, vk::raii::DescriptorPool& descriptorPool, uint32_t framesInFlight)
 {
@@ -90,6 +92,7 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 void DescriptorSetLayout::createEntityDescriptorSetLayout(vk::raii::Device& device, vk::raii::DescriptorSetLayout& descriptorSetLayout, size_t numBindings)
 {
 	const int expectedBindings = 6;
+    (void)numBindings;
 	std::array<vk::DescriptorSetLayoutBinding, expectedBindings> bindings{ {
 	{.binding = 0, .descriptorType = vk::DescriptorType::eUniformBuffer, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment },
 	{.binding = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },

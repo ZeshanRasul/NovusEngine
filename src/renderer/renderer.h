@@ -58,23 +58,6 @@ public:
 
 private:
 	// -------------------------------------------------------------------------
-	// Nested types
-	// -------------------------------------------------------------------------
-	struct PushConstantBlock
-	{
-		glm::vec4 baseColorFactor;
-		float     metallicFactor;
-		float     roughnessFactor;
-		int       baseColorTextureSet;
-		int       physicalDescriptorTextureSet;
-		int       normalTextureSet;
-		int       occlusionTextureSet;
-		int       emissiveTextureSet;
-		float     alphaMask;
-		float     alphaMaskCutoff;
-	};
-
-	// -------------------------------------------------------------------------
 	// Initialisation / shutdown
 	// -------------------------------------------------------------------------
 	void initWindow();
@@ -95,23 +78,11 @@ private:
 
 	bool deviceInit();
 
-	// Swap chain
-	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const& formats);
-	vk::PresentModeKHR   chooseSwapPresentMode(std::vector<vk::PresentModeKHR> const& modes);
-	vk::Extent2D         chooseSwapExtent(vk::SurfaceCapabilitiesKHR const& capabilities);
-	uint32_t             chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& caps);
-	void                 createSwapChain();
-	void                 recreateSwapChain();
-	void                 cleanupSwapChain();
-
-	// Image views
-	void                createSwapChainImageViews();
+   void recreateSwapChain();
 
 	// Shaders / pipelines
-	static std::vector<char> readFile(const std::string& filename);
-	vk::raii::ShaderModule   createShaderModule(const std::vector<char>& code) const;
-	void                     createGraphicsPipeline();
-	bool                     createPBRPipeline();
+	void createGraphicsPipeline();
+	bool createPBRPipeline();
 
 	// Commands
 	void                    recordCommandBuffer(uint32_t imageIndex);
@@ -128,25 +99,13 @@ private:
 								 vk::PipelineStageFlags2 src_stage_mask, vk::PipelineStageFlags2 dst_stage_mask,
 								 vk::ImageAspectFlags image_aspect_flags);
 
-	// Depth
-	vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
-								   vk::ImageTiling tiling, vk::FormatFeatureFlags features);
-	vk::Format findDepthFormat();
-	bool       hasStencilComponent(vk::Format format);
-	void       createDepthResources();
-
 	// Textures / samplers
 	void loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures);
 	void createDefaultTextures();
 	void createTextureSampler();
 
-	// Sync
-	void createSyncObjects();
-
 	// Frame
 	void drawFrame();
-	void pushMaterialProperties(vk::CommandBuffer commandBuffer,
-								const RenderableComponent* model, uint32_t materialIndex);
 
 	// Scene
 	void setupGameObjects();

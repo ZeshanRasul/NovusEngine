@@ -46,15 +46,12 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	}
 
 
-   // Light positioned above and to the side of Sponza.
-	// The scene uses Z-up, so keep the shadow view aligned to that axis.
-   const glm::vec3 lightPos(150.0f, -50.0f, 500.0f);
+	// Angled sun light: elevated and offset to hit both floor and walls naturally.
+	const glm::vec3 lightPos(300.0f, -900.0f, 800.0f);
 	const glm::vec3 lightTarget(0.0f, 0.0f, 0.0f);
 	const glm::vec3 lightDir = glm::normalize(lightTarget - lightPos);
 	glm::mat4 lightView = glm::lookAtRH(lightPos, lightTarget, glm::vec3(0.0f, 0.0f, 1.0f));
-	// ±350 covers Sponza (scale 3) with some margin; near/far kept tight to
-	// maximise NDC depth precision so small objects like the helmets cast shadows.
-	glm::mat4 lightProj = glm::orthoRH_ZO(-1350.0f, 1350.0f, -1350.0f, 1350.0f, 1.0f, 8000.0f);
+	glm::mat4 lightProj = glm::orthoRH_ZO(-5000.0f, 5000.0f, -5000.0f, 2000.0f, 1.0f, 10000.0f);
 	glm::mat4 lightSpace = lightProj * lightView;
 
 	ubo.lightSpaceMatrix = lightSpace;

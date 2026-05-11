@@ -10,6 +10,7 @@
 #include "../vulkan/texture.h"
 #include "../vulkan/image.h"
 #include "../vulkan/image_view.h"
+#include "../vulkan/pipeline.h"
 
 // ---------------------------------------------------------------------------
 // Public
@@ -50,7 +51,6 @@ void Renderer::initVulkan()
 	createSwapChain();
 	createSwapChainImageViews();
 	createDescriptorSetLayout();
-	createGraphicsPipeline();
 
 	if (!createPBRPipeline())
 	{
@@ -162,6 +162,47 @@ Renderer::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT  severity,
 		std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
 	}
 	return vk::False;
+}
+
+void Renderer::renderImgui()
+{
+	if (imGui->newFrame()) {
+	}
+
+	// Create a window for camera controls
+	ImGui::Begin("Camera Controls");
+
+	// Add a button to reset camera position
+	if (ImGui::Button("Reset Camera")) {
+		camera.setPosition(glm::vec3(0.0f, 20.0f, 23.0f));
+		camera.setYaw(-90.0f);
+		camera.setPitch(0.0f);
+	}
+
+	// Add sliders for camera settings
+	float movementSpeed = camera.getMovementSpeed();
+	if (ImGui::SliderFloat("Movement Speed", &movementSpeed, 1.0f, 10.0f)) {
+		camera.setMovementSpeed(movementSpeed);
+	}
+
+	float sensitivity = camera.getMouseSensitivity();
+	if (ImGui::SliderFloat("Mouse Sensitivity", &sensitivity, 0.1f, 1.0f)) {
+		camera.setMouseSensitivity(sensitivity);
+	}
+
+	float zoom = camera.getZoom();
+	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 45.0f)) {
+		camera.setZoom(zoom);
+	}
+
+	ImGui::End();
+
+	// End the frame
+	ImGui::EndFrame();
+
+	// Render to generate draw data
+	ImGui::Render();
+	imGui->updateBuffers();
 }
 
 // ---------------------------------------------------------------------------
@@ -502,199 +543,67 @@ void Renderer::createDescriptorSetLayout()
 
 void Renderer::createGraphicsPipeline()
 {
-	auto shaderCode = readFile("../shaders/slang.spv");
-
-	vk::raii::ShaderModule shaderModule = createShaderModule(shaderCode);
-
-	vk::PipelineShaderStageCreateInfo vertShaderStageInfo{ .stage = vk::ShaderStageFlagBits::eVertex, .module = shaderModule, .pName = "vertMain" };
-	vk::PipelineShaderStageCreateInfo fragShaderStageInfo{ .stage = vk::ShaderStageFlagBits::eFragment, .module = shaderModule, .pName = "fragMain" };
-
-	vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-	std::vector<vk::DynamicState>     dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-	vk::PipelineDynamicStateCreateInfo dynamicState{ .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
-													  .pDynamicStates = dynamicStates.data() };
-
 	auto bindingDescription = Vertex::getBindingDescription();
 	auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
-	vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
-		.vertexBindingDescriptionCount = 1,
-		.pVertexBindingDescriptions = &bindingDescription,
-		.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
-		.pVertexAttributeDescriptions = attributeDescriptions.data()
+	Pipeline::PipelineConfig config{};
+	config.shaderStages = {
+		{ "../shaders/slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "../shaders/slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 
-	vk::PipelineInputAssemblyStateCreateInfo inputAssembly{ .topology = vk::PrimitiveTopology::eTriangleList };
-
-	vk::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f };
-	vk::Rect2D   scissor{ vk::Offset2D{ 0, 0 }, swapChainExtent };
-
-	vk::PipelineViewportStateCreateInfo viewportState{ .viewportCount = 1, .pViewports = &viewport, .scissorCount = 1, .pScissors = &scissor };
-
-	vk::PipelineRasterizationStateCreateInfo rasterizer{
-		.depthClampEnable = vk::False,
-		.rasterizerDiscardEnable = vk::False,
-		.polygonMode = vk::PolygonMode::eFill,
-		.cullMode = vk::CullModeFlagBits::eBack,
-		.frontFace = vk::FrontFace::eCounterClockwise,
-		.depthBiasEnable = vk::False,
-		.lineWidth = 1.0f
+	config.vertexBindings = { bindingDescription };
+	config.vertexAttributes = {
+		attributeDescriptions.begin(),
+		attributeDescriptions.end()
 	};
 
-	vk::PipelineMultisampleStateCreateInfo multisampling{ .rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = vk::False };
+	config.descriptorSetLayouts = { *descriptorSetLayout };
+	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+	config.depthAttachmentFormat = findDepthFormat();
 
-	vk::PipelineDepthStencilStateCreateInfo depthStencil{
-		.depthTestEnable = vk::True,
-		.depthWriteEnable = vk::True,
-		.depthCompareOp = vk::CompareOp::eLess,
-		.depthBoundsTestEnable = vk::False,
-		.stencilTestEnable = vk::False
-	};
-
-	vk::PipelineColorBlendAttachmentState colorBlendAttachment{
-		.blendEnable = vk::True,
-		.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
-		.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
-		.colorBlendOp = vk::BlendOp::eAdd,
-		.srcAlphaBlendFactor = vk::BlendFactor::eOne,
-		.dstAlphaBlendFactor = vk::BlendFactor::eZero,
-		.alphaBlendOp = vk::BlendOp::eAdd,
-		.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
-	};
-
-	vk::PipelineColorBlendStateCreateInfo colorBlending{ .logicOpEnable = vk::False, .logicOp = vk::LogicOp::eCopy, .attachmentCount = 1, .pAttachments = &colorBlendAttachment };
-
-	vk::PipelineLayoutCreateInfo pipelineLayoutInfo{ .setLayoutCount = 1, .pSetLayouts = &*descriptorSetLayout, .pushConstantRangeCount = 0 };
-	pipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
-
-	vk::Format depthFormat = findDepthFormat();
-
-	vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = {
-		{.stageCount = 2,
-		  .pStages = shaderStages,
-		  .pVertexInputState = &vertexInputInfo,
-		  .pInputAssemblyState = &inputAssembly,
-		  .pViewportState = &viewportState,
-		  .pRasterizationState = &rasterizer,
-		  .pMultisampleState = &multisampling,
-		  .pDepthStencilState = &depthStencil,
-		  .pColorBlendState = &colorBlending,
-		  .pDynamicState = &dynamicState,
-		  .layout = pipelineLayout,
-		  .renderPass = nullptr },
-		{.colorAttachmentCount = 1, .pColorAttachmentFormats = &swapChainSurfaceFormat.format, .depthAttachmentFormat = depthFormat }
-	};
-
-	graphicsPipeline = vk::raii::Pipeline(device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>());
+	auto pipelineBundle = Pipeline::createPipeline(device, config);
+	pipelineLayout = std::move(pipelineBundle.layout);
+	graphicsPipeline = std::move(pipelineBundle.pipeline);
 }
 
 bool Renderer::createPBRPipeline()
 {
 	try
 	{
-		auto shaderCode = readFile("../shaders/pbr.spv");
+		auto bindingDescription = Vertex::getBindingDescription();
+		auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
-		vk::raii::ShaderModule shaderModule = createShaderModule(shaderCode);
+		vk::PushConstantRange pushConstantRange{
+			.stageFlags = vk::ShaderStageFlagBits::eFragment,
+			.offset = 0,
+			.size = sizeof(PushConstantBlock)
+		};
 
-		vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
-		vertShaderStageInfo.setStage(vk::ShaderStageFlagBits::eVertex).setModule(*shaderModule).setPName("vertMain");
+		Pipeline::PipelineConfig config{};
+		config.shaderStages = {
+			{ "../shaders/pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+			{ "../shaders/pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		};
 
-		vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
-		fragShaderStageInfo.setStage(vk::ShaderStageFlagBits::eFragment).setModule(*shaderModule).setPName("fragMain");
+		config.vertexBindings = { bindingDescription };
+		config.vertexAttributes = {
+			attributeDescriptions.begin(),
+			attributeDescriptions.end()
+		};
 
-		std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = { vertShaderStageInfo, fragShaderStageInfo };
+		config.descriptorSetLayouts = { *descriptorSetLayout };
+		config.pushConstantRanges = { pushConstantRange };
+		config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+		config.depthAttachmentFormat = findDepthFormat();
 
-		vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-		auto                                   bindingDescription = Vertex::getBindingDescription();
-		auto                                   attributeDescriptions = Vertex::getAttributeDescriptions();
-		vertexInputInfo.setVertexBindingDescriptionCount(1)
-			.setPVertexBindingDescriptions(&bindingDescription)
-			.setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributeDescriptions.size()))
-			.setPVertexAttributeDescriptions(attributeDescriptions.data());
-
-		vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
-		inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList).setPrimitiveRestartEnable(false);
-
-		vk::PipelineViewportStateCreateInfo viewportState;
-		viewportState.setViewportCount(1).setScissorCount(1);
-
-		std::vector<vk::DynamicState>      dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
-		vk::PipelineDynamicStateCreateInfo dynamicState;
-		dynamicState.setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size())).setPDynamicStates(dynamicStates.data());
-
-		vk::PipelineRasterizationStateCreateInfo rasterizer;
-		rasterizer.setDepthClampEnable(false)
-			.setRasterizerDiscardEnable(false)
-			.setPolygonMode(vk::PolygonMode::eFill)
-			.setLineWidth(1.0f)
-			.setCullMode(vk::CullModeFlagBits::eBack)
-			.setFrontFace(vk::FrontFace::eCounterClockwise)
-			.setDepthBiasEnable(false);
-
-		vk::PipelineMultisampleStateCreateInfo multisampling;
-		multisampling.setSampleShadingEnable(false).setRasterizationSamples(vk::SampleCountFlagBits::e1);
-
-		vk::PipelineDepthStencilStateCreateInfo depthStencil;
-		depthStencil.setDepthTestEnable(true)
-			.setDepthWriteEnable(true)
-			.setDepthCompareOp(vk::CompareOp::eLess)
-			.setDepthBoundsTestEnable(false)
-			.setStencilTestEnable(false);
-
-		vk::PipelineColorBlendAttachmentState colorBlendAttachment;
-		colorBlendAttachment
-			.setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-				vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
-			.setBlendEnable(true)
-			.setSrcColorBlendFactor(vk::BlendFactor::eSrcAlpha)
-			.setDstColorBlendFactor(vk::BlendFactor::eOneMinusSrcAlpha)
-			.setColorBlendOp(vk::BlendOp::eAdd)
-			.setSrcAlphaBlendFactor(vk::BlendFactor::eOne)
-			.setDstAlphaBlendFactor(vk::BlendFactor::eZero)
-			.setAlphaBlendOp(vk::BlendOp::eAdd);
-
-		vk::PipelineColorBlendStateCreateInfo colorBlending;
-		colorBlending.setLogicOpEnable(false).setAttachmentCount(1).setPAttachments(&colorBlendAttachment);
-
-		vk::PushConstantRange pushConstantRange;
-		pushConstantRange.setStageFlags(vk::ShaderStageFlagBits::eFragment).setOffset(0).setSize(sizeof(PushConstantBlock));
-
-		vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
-		pipelineLayoutInfo.setSetLayoutCount(1)
-			.setPSetLayouts(&*descriptorSetLayout)
-			.setPushConstantRangeCount(1)
-			.setPPushConstantRanges(&pushConstantRange);
-
-		pbrPipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
-
-		vk::GraphicsPipelineCreateInfo pipelineInfo;
-		pipelineInfo.setStageCount(static_cast<uint32_t>(shaderStages.size()))
-			.setPStages(shaderStages.data())
-			.setPVertexInputState(&vertexInputInfo)
-			.setPInputAssemblyState(&inputAssembly)
-			.setPViewportState(&viewportState)
-			.setPRasterizationState(&rasterizer)
-			.setPMultisampleState(&multisampling)
-			.setPDepthStencilState(&depthStencil)
-			.setPColorBlendState(&colorBlending)
-			.setPDynamicState(&dynamicState)
-			.setLayout(*pbrPipelineLayout)
-			.setRenderPass(nullptr)
-			.setSubpass(0)
-			.setBasePipelineHandle(nullptr);
-
-		vk::PipelineRenderingCreateInfo renderingInfo;
-		renderingInfo.setColorAttachmentCount(1)
-			.setPColorAttachmentFormats(&swapChainSurfaceFormat.format)
-			.setDepthAttachmentFormat(findDepthFormat());
-		pipelineInfo.setPNext(&renderingInfo);
-
-		pbrPipeline = device.createGraphicsPipeline(nullptr, pipelineInfo);
+		auto pipelineBundle = Pipeline::createPipeline(device, config);
+		pbrPipelineLayout = std::move(pipelineBundle.layout);
+		pbrPipeline = std::move(pipelineBundle.pipeline);
 
 		return true;
 	}
-	catch (const std::exception& e)
+	catch (std::exception const& e)
 	{
 		std::cerr << "Error creating PBR pipeline: " << e.what() << std::endl;
 		return false;
@@ -945,85 +854,6 @@ void Renderer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* r
 // Images
 // ---------------------------------------------------------------------------
 
-//void Renderer::createImage(uint32_t width, uint32_t height, vk::Format format,
-//	vk::ImageTiling tiling, vk::ImageUsageFlags usage,
-//	vk::MemoryPropertyFlags properties,
-//	vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory)
-//{
-//	vk::ImageCreateInfo imageInfo{
-//		.imageType = vk::ImageType::e2D,
-//		.format = format,
-//		.extent = { width, height, 1 },
-//		.mipLevels = 1,
-//		.arrayLayers = 1,
-//		.samples = vk::SampleCountFlagBits::e1,
-//		.tiling = tiling,
-//		.usage = usage,
-//		.sharingMode = vk::SharingMode::eExclusive,
-//		.initialLayout = vk::ImageLayout::eUndefined
-//	};
-//	image = vk::raii::Image(device, imageInfo);
-//
-//	vk::MemoryRequirements memRequirements = image.getMemoryRequirements();
-//	vk::MemoryAllocateInfo allocInfo{
-//		.allocationSize = memRequirements.size,
-//		.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)
-//	};
-//	imageMemory = vk::raii::DeviceMemory(device, allocInfo);
-//	image.bindMemory(imageMemory, 0);
-//}
-
-//void Renderer::copyBufferToImage(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Buffer& buffer,
-//	vk::raii::Image& image, uint32_t width, uint32_t height)
-//{
-//	vk::BufferImageCopy region{
-//		.bufferOffset = 0,
-//		.bufferRowLength = 0,
-//		.bufferImageHeight = 0,
-//		.imageSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
-//		.imageOffset = { 0, 0, 0 },
-//		.imageExtent = { width, height, 1 }
-//	};
-//	commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
-//}
-
-//void Renderer::transitionImageLayout(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image& image,
-//	vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
-//{
-//	vk::ImageMemoryBarrier barrier{
-//		.oldLayout = oldLayout,
-//		.newLayout = newLayout,
-//		.srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-//		.dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-//		.image = image,
-//		.subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor, .levelCount = 1, .layerCount = 1 }
-//	};
-//
-//	vk::PipelineStageFlags sourceStage;
-//	vk::PipelineStageFlags destinationStage;
-//
-//	if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal)
-//	{
-//		barrier.srcAccessMask = {};
-//		barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-//		sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-//		destinationStage = vk::PipelineStageFlagBits::eTransfer;
-//	}
-//	else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal)
-//	{
-//		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-//		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-//		sourceStage = vk::PipelineStageFlagBits::eTransfer;
-//		destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-//	}
-//	else
-//	{
-//		throw std::invalid_argument("unsupported layout transition!");
-//	}
-//
-//	commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, {}, barrier);
-//}
-
 void Renderer::transition_image_layout(vk::Image               image,
 	vk::ImageLayout         old_layout,
 	vk::ImageLayout         new_layout,
@@ -1103,104 +933,6 @@ void Renderer::createDepthResources()
 // ---------------------------------------------------------------------------
 // Textures
 // ---------------------------------------------------------------------------
-
-//void Renderer::loadTextureFromFile(const std::string& filepath,
-//	vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory,
-//	vk::raii::ImageView& imageView, bool isSRGB)
-//{
-//	std::ifstream file(filepath);
-//	if (!file.good())
-//	{
-//		std::cout << "Warning: Texture file not found: " << filepath << " - using placeholder" << std::endl;
-//		return;
-//	}
-//	file.close();
-//
-//	std::string extension = filepath.substr(filepath.find_last_of('.') + 1);
-//	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-//
-//	uint32_t       texWidth, texHeight;
-//	vk::DeviceSize imageSize;
-//	unsigned char* textureData = nullptr;
-//	int            texChannels;
-//
-//	if (extension == "ktx")
-//	{
-//		ktxTexture* kTexture;
-//		KTX_error_code result = ktxTexture_CreateFromNamedFile(
-//			filepath.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
-//
-//		if (result != KTX_SUCCESS)
-//		{
-//			std::cout << "Warning: Failed to load KTX texture: " << filepath << std::endl;
-//			return;
-//		}
-//
-//		texWidth = kTexture->baseWidth;
-//		texHeight = kTexture->baseHeight;
-//		imageSize = ktxTexture_GetImageSize(kTexture, 0);
-//		auto* ktxData = ktxTexture_GetData(kTexture);
-//
-//		textureData = new unsigned char[imageSize];
-//		memcpy(textureData, ktxData, imageSize);
-//		ktxTexture_Destroy(kTexture);
-//	}
-//	else if (extension == "png" || extension == "jpg" || extension == "jpeg")
-//	{
-//		int texWidth_i, texHeight_i;
-//		textureData = stbi_load(filepath.c_str(), &texWidth_i, &texHeight_i, &texChannels, STBI_rgb_alpha);
-//
-//		if (!textureData)
-//		{
-//			std::cout << "Warning: Failed to load image texture: " << filepath << std::endl;
-//			return;
-//		}
-//
-//		texWidth = static_cast<uint32_t>(texWidth_i);
-//		texHeight = static_cast<uint32_t>(texHeight_i);
-//		imageSize = texWidth * texHeight * 4;
-//	}
-//	else
-//	{
-//		std::cout << "Warning: Unsupported texture format: " << extension << " for file: " << filepath << std::endl;
-//		return;
-//	}
-//
-//	vk::raii::Buffer       stagingBuffer({});
-//	vk::raii::DeviceMemory stagingBufferMemory({});
-//	Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
-//		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-//		stagingBuffer, stagingBufferMemory);
-//
-//	void* data = stagingBufferMemory.mapMemory(0, imageSize);
-//	memcpy(data, textureData, imageSize);
-//	stagingBufferMemory.unmapMemory();
-//
-//	if (extension == "ktx")
-//		delete[] textureData;
-//	else
-//		stbi_image_free(textureData);
-//
-//	vk::Format textureFormat = isSRGB ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
-//
-//	createImage(texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
-//		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-//		vk::MemoryPropertyFlagBits::eDeviceLocal, image, imageMemory);
-//
-//	// Delay staging buffer cleanup until command execution is complete
-//	// In a real application, you would queue these for deletion after idle
-//	// But for our simplified start-up use single time commands already waitIdle
-//	// Just make sure endSingleTimeCommands actually waits
-//	vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
-//	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-//	copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
-//	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-//	CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
-//
-//	imageView = createImageView(*image, textureFormat, vk::ImageAspectFlagBits::eColor);
-//
-//	std::cout << "Successfully loaded texture: " << filepath << " (" << texWidth << "x" << texHeight << ")" << std::endl;
-//}
 
 void Renderer::loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures)
 {
@@ -1448,43 +1180,7 @@ void Renderer::drawFrame()
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
-	if (imGui->newFrame()) {
-	}
-
-	// Create a window for camera controls
-	ImGui::Begin("Camera Controls");
-
-	// Add a button to reset camera position
-	if (ImGui::Button("Reset Camera")) {
-		camera.setPosition(glm::vec3(0.0f, 20.0f, 23.0f));
-		camera.setYaw(-90.0f);
-		camera.setPitch(0.0f);
-	}
-
-	// Add sliders for camera settings
-	float movementSpeed = camera.getMovementSpeed();
-	if (ImGui::SliderFloat("Movement Speed", &movementSpeed, 1.0f, 10.0f)) {
-		camera.setMovementSpeed(movementSpeed);
-	}
-
-	float sensitivity = camera.getMouseSensitivity();
-	if (ImGui::SliderFloat("Mouse Sensitivity", &sensitivity, 0.1f, 1.0f)) {
-		camera.setMouseSensitivity(sensitivity);
-	}
-
-	float zoom = camera.getZoom();
-	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 45.0f)) {
-		camera.setZoom(zoom);
-	}
-
-	ImGui::End();
-
-	// End the frame
-	ImGui::EndFrame();
-
-	// Render to generate draw data
-	ImGui::Render();
-	imGui->updateBuffers();
+	renderImgui();
 
 	device.resetFences(*inFlightFences[frameIndex]);
 	commandBuffers[frameIndex].reset();

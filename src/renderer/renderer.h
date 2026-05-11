@@ -196,6 +196,9 @@ private:
 					  vk::DebugUtilsMessageTypeFlagsEXT type,
 					  const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*);
 
+	// ImGUI
+	void renderImgui();
+
 	// -------------------------------------------------------------------------
 	// Members
 	// -------------------------------------------------------------------------

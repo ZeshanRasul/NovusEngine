@@ -8,6 +8,7 @@
 
 #include "../vulkan/command_pool.h"
 #include "../vulkan/command_buffer.h"
+#include "../vulkan/buffer.h"
 
 // ---------------------------------------------------------------------------
 // Public
@@ -809,34 +810,6 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 // Buffers
 // ---------------------------------------------------------------------------
 
-uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
-{
-	vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
-
-	for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
-	{
-		if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-			return i;
-	}
-
-	throw std::runtime_error("failed to find suitable memory type!");
-}
-
-void Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
-	vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
-{
-	vk::BufferCreateInfo bufferInfo{ .size = size, .usage = usage, .sharingMode = vk::SharingMode::eExclusive };
-	buffer = vk::raii::Buffer(device, bufferInfo);
-
-	vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
-	vk::MemoryAllocateInfo allocInfo{
-		.allocationSize = memRequirements.size,
-		.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)
-	};
-	bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
-	buffer.bindMemory(*bufferMemory, 0);
-}
-
 void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
 {
 	vk::raii::CommandBuffer commandCopyBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
@@ -849,7 +822,7 @@ void Renderer::createVertexBuffer(RenderableComponent& gameObj)
 	vk::DeviceSize         bufferSize = sizeof(gameObj.vertices[0]) * gameObj.vertices.size();
 	vk::raii::Buffer       stagingBuffer({});
 	vk::raii::DeviceMemory stagingBufferMemory({});
-	createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+	Buffer::createBuffer(device, physicalDevice, bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
 		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 		stagingBuffer, stagingBufferMemory);
 
@@ -857,7 +830,7 @@ void Renderer::createVertexBuffer(RenderableComponent& gameObj)
 	memcpy(dataStaging, gameObj.vertices.data(), bufferSize);
 	stagingBufferMemory.unmapMemory();
 
-	createBuffer(bufferSize,
+	Buffer::createBuffer(device, physicalDevice, bufferSize,
 		vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		gameObj.vertexBuffer, gameObj.vertexBufferMemory);
@@ -872,7 +845,7 @@ void Renderer::createIndexBuffer(RenderableComponent& gameObj)
 
 	vk::raii::Buffer       stagingBuffer({});
 	vk::raii::DeviceMemory stagingBufferMemory({});
-	createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
+	Buffer::createBuffer(device, physicalDevice, bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
 		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 		stagingBuffer, stagingBufferMemory);
 
@@ -880,7 +853,7 @@ void Renderer::createIndexBuffer(RenderableComponent& gameObj)
 	memcpy(dataStaging, gameObj.indices.data(), bufferSize);
 	stagingBufferMemory.unmapMemory();
 
-	createBuffer(bufferSize,
+	Buffer::createBuffer(device, physicalDevice, bufferSize,
 		vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		gameObj.indexBuffer, gameObj.indexBufferMemory);
@@ -902,7 +875,7 @@ void Renderer::createUniformBuffers()
 			vk::DeviceSize         bufferSize = sizeof(UniformBufferObject);
 			vk::raii::Buffer       buffer({});
 			vk::raii::DeviceMemory bufferMem({});
-			createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+			Buffer::createBuffer(device, physicalDevice, bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
 				vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 				buffer, bufferMem);
 			gameObject.uniformBuffers.emplace_back(std::move(buffer));
@@ -1194,7 +1167,7 @@ void Renderer::loadTextureFromFile(const std::string& filepath,
 
 	vk::raii::Buffer       stagingBuffer({});
 	vk::raii::DeviceMemory stagingBufferMemory({});
-	createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+	Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
 		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 		stagingBuffer, stagingBufferMemory);
 
@@ -1257,7 +1230,7 @@ void Renderer::createDefaultTextures()
 
 		vk::raii::Buffer       stagingBuffer({});
 		vk::raii::DeviceMemory stagingBufferMemory({});
-		createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+		Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 			stagingBuffer, stagingBufferMemory);
 
@@ -1285,7 +1258,7 @@ void Renderer::createDefaultTextures()
 
 		vk::raii::Buffer       stagingBuffer({});
 		vk::raii::DeviceMemory stagingBufferMemory({});
-		createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+		Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 			stagingBuffer, stagingBufferMemory);
 

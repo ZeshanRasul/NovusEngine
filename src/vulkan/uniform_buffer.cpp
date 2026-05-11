@@ -1,4 +1,6 @@
 #include <glm/glm.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
 #include "uniform_buffer.h"
 
 void UniformBuffer::createUniformBuffers(std::vector<std::unique_ptr<Entity>>& entities, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight)
@@ -44,16 +46,15 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	}
 
 
-	// Light positioned above and to the side of Sponza (Y-up world).
-	// up=(0,0,1) is the world Z axis which is the scene's vertical axis.
-	// Keep up=(0,0,1) but ensure lightPos doesn't become collinear with it.
-	const glm::vec3 lightPos(150.0f, -50.0f, 500.0f);
+   // Light positioned above and to the side of Sponza.
+	// The scene uses Z-up, so keep the shadow view aligned to that axis.
+   const glm::vec3 lightPos(150.0f, -50.0f, 500.0f);
 	const glm::vec3 lightTarget(0.0f, 0.0f, 0.0f);
 	const glm::vec3 lightDir = glm::normalize(lightTarget - lightPos);
-	glm::mat4 lightView = glm::lookAt(lightPos, lightTarget, glm::vec3(1.0f, 0.0f, 0.0f));
+	glm::mat4 lightView = glm::lookAtRH(lightPos, lightTarget, glm::vec3(0.0f, 0.0f, 1.0f));
 	// ±350 covers Sponza (scale 3) with some margin; near/far kept tight to
 	// maximise NDC depth precision so small objects like the helmets cast shadows.
-	glm::mat4 lightProj = glm::ortho(-350.0f, 350.0f, -350.0f, 350.0f, 1.0f, 2000.0f);
+	glm::mat4 lightProj = glm::orthoRH_ZO(-1350.0f, 1350.0f, -1350.0f, 1350.0f, 1.0f, 8000.0f);
 	glm::mat4 lightSpace = lightProj * lightView;
 
 	ubo.lightSpaceMatrix = lightSpace;
@@ -74,7 +75,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.exposure = 2.0f;
 	ubo.gamma = 2.2f;
 	ubo.prefilteredCubeMipLevels = 1.0f;
-	ubo.scaleIBLAmbient = 0.02f;
+	ubo.scaleIBLAmbient = 0.002f;
 
 	memcpy(renderable->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }

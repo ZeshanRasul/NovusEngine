@@ -273,15 +273,16 @@ float4 fragMain(VSOutput input) : SV_TARGET
     
     // === DIRECTIONAL LIGHTING ===
     float3 dirLightDir = normalize(ubo.directionalLightDirection.xyz);
+    float3 L = normalize(-dirLightDir);
     float3 dirLightColor = ubo.directionalLightColor.rgb;
-    float NdotL = max(dot(N, dirLightDir), 0.0);
-    float3 H = normalize(V + dirLightDir);
+    float NdotL = max(dot(N, L), 0.0);
+    float3 H = normalize(V + L);
     float3 diffuse = baseColor.rgb / PI; // Lambertian diffuse
     float D = DistributionGGX(max(dot(N, H), 0.0), roughness);
     float G = GeometrySmith(max(dot(N, V), 0.0), NdotL, roughness);
     float F = FresnelSchlick(max(dot(H, V), 0.0), F0).r; // Assuming grayscale F0 for simplicity
     float3 specular = (D * G * F) / max(4.0 * max(dot(N, V), 0.0) * NdotL, 0.001);
-    float shadow = ShadowCalculation(input.LightSpacePos, N, dirLightDir);
+    float shadow = ShadowCalculation(input.LightSpacePos, N, L);
 
     Lo += (1.0 - shadow) * (diffuse * (1.0 - metallic) + specular) * dirLightColor * NdotL;
 

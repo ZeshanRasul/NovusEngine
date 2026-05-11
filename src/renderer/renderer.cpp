@@ -967,12 +967,12 @@ void Renderer::setupGameObjects()
 		};
 
 	makeEntity("FlightHelmet_Left",
-		{ -13.0f, 10.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 33.0f, 33.0f, 33.0f },
+		{ -13.0f, 100.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 330.0f, 330.0f, 330.0f },
 		"../models/FlightHelmet.gltf");
 
 	{
 		Entity& e = makeEntity("DamagedHelmet",
-			{ 13.0f, -52.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 11.5f, 11.5f, 11.5f },
+			{ 13.0f, -502.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 110.5f, 110.5f, 110.5f },
 			"../models/DamagedHelmet.gltf");
 		e.GetComponent<RenderableComponent>()->materials[0].metallicFactor = 1.0f;
 	}

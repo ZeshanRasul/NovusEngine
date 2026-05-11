@@ -7,6 +7,7 @@
 #include <tiny_gltf.h>
 
 #include "../vulkan/command_pool.h"
+#include "../vulkan/command_buffer.h"
 
 // ---------------------------------------------------------------------------
 // Public
@@ -67,7 +68,7 @@ void Renderer::initVulkan()
 	createUniformBuffers();
 	createDescriptorPool();
 	createDescriptorSets();
-	createCommandBuffers();
+	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
 	createSyncObjects();
 
 	imGui = new ImGuiVulkanUtil(
@@ -701,13 +702,6 @@ bool Renderer::createPBRPipeline()
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
-
-void Renderer::createCommandPool()
-{
-	vk::CommandPoolCreateInfo poolInfo{ .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-										.queueFamilyIndex = queueIndex };
-	commandPool = vk::raii::CommandPool(device, poolInfo);
-}
 
 void Renderer::createCommandBuffers()
 {

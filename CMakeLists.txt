@@ -28,7 +28,7 @@ add_executable(NovusEngine
     src/renderer/renderer.cpp
     "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h" "src/ECS/components/mesh_component.h" "src/ECS/components/camera_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h"
     ${IMGUI_SOURCES}
-    ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h" "src/input/input_system.h" "src/input/input_system.cpp" "src/vulkan/command_pool.h" "src/vulkan/command_pool.cpp")
+    ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h" "src/input/input_system.h" "src/input/input_system.cpp" "src/vulkan/command_pool.h" "src/vulkan/command_pool.cpp" "src/vulkan/command_buffer.h" "src/vulkan/command_buffer.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)

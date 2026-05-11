@@ -6,7 +6,7 @@
 import vulkan_hpp;
 #endif
 
-uint32_t findMemoryType(vk::raii::PhysicalDevice& physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+static uint32_t findMemoryType(vk::raii::PhysicalDevice& physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties)
 {
 	vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
 

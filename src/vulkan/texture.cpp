@@ -8,6 +8,8 @@
 
 #include "command_buffer.h"
 #include "buffer.h"
+#include "image.h"
+#include "image_view.h"
 
 void Texture::loadTextureFromFile(vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, vk::raii::Queue& queue, vk::raii::CommandPool& commandPool, const std::string& filepath, vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory, vk::raii::ImageView& imageView, bool isSRGB)
 {
@@ -86,7 +88,7 @@ void Texture::loadTextureFromFile(vk::raii::Device& device, vk::raii::PhysicalDe
 
 	vk::Format textureFormat = isSRGB ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
 
-	createImage(texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
+	Image::createImage(device, physicalDevice, texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
 		vk::MemoryPropertyFlagBits::eDeviceLocal, image, imageMemory);
 
@@ -95,12 +97,12 @@ void Texture::loadTextureFromFile(vk::raii::Device& device, vk::raii::PhysicalDe
 	// But for our simplified start-up use single time commands already waitIdle
 	// Just make sure endSingleTimeCommands actually waits
 	vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
-	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-	copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
-	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+	Image::transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+	Buffer::copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
+	Image::transitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 	CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
-	imageView = createImageView(*image, textureFormat, vk::ImageAspectFlagBits::eColor);
+	imageView = ImageView::createImageView(device, *image, textureFormat, vk::ImageAspectFlagBits::eColor);
 
 	std::cout << "Successfully loaded texture: " << filepath << " (" << texWidth << "x" << texHeight << ")" << std::endl;
 }

@@ -13,4 +13,8 @@ public:
 	
 	static void copyBuffer(vk::raii::Device& device, vk::raii::Queue& queue, vk::raii::CommandPool& commandPool,
 		vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
+
+	static void copyBufferToImage(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Buffer& buffer,
+		vk::raii::Image& image, uint32_t width, uint32_t height);
+
 };

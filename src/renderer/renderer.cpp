@@ -1,14 +1,15 @@
 #include "renderer/renderer.h"
 #include <ktx.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
 #define TINYGLTF_IMPLEMENTATION
 #include <tiny_gltf.h>
 
 #include "../vulkan/command_pool.h"
 #include "../vulkan/command_buffer.h"
 #include "../vulkan/buffer.h"
+#include "../vulkan/texture.h"
+#include "../vulkan/image.h"
+#include "../vulkan/image_view.h"
 
 // ---------------------------------------------------------------------------
 // Public
@@ -47,7 +48,7 @@ void Renderer::initVulkan()
 {
 	deviceInit();
 	createSwapChain();
-	createImageViews();
+	createSwapChainImageViews();
 	createDescriptorSetLayout();
 	createGraphicsPipeline();
 
@@ -433,7 +434,7 @@ void Renderer::recreateSwapChain()
 	device.waitIdle();
 	cleanupSwapChain();
 	createSwapChain();
-	createImageViews();
+	createSwapChainImageViews();
 	createDepthResources();
 }
 
@@ -441,22 +442,22 @@ void Renderer::recreateSwapChain()
 // Image views
 // ---------------------------------------------------------------------------
 
-vk::raii::ImageView Renderer::createImageView(vk::Image const& image, vk::Format format, vk::ImageAspectFlags aspectFlags)
-{
-	vk::ImageViewCreateInfo viewInfo{
-		.image = image,
-		.viewType = vk::ImageViewType::e2D,
-		.format = format,
-		.subresourceRange = {.aspectMask = aspectFlags, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 } };
-	return vk::raii::ImageView(device, viewInfo);
-}
+//vk::raii::ImageView Renderer::createImageView(vk::Image const& image, vk::Format format, vk::ImageAspectFlags aspectFlags)
+//{
+//	vk::ImageViewCreateInfo viewInfo{
+//		.image = image,
+//		.viewType = vk::ImageViewType::e2D,
+//		.format = format,
+//		.subresourceRange = {.aspectMask = aspectFlags, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1 } };
+//	return vk::raii::ImageView(device, viewInfo);
+//}
 
-void Renderer::createImageViews()
+void Renderer::createSwapChainImageViews()
 {
 	assert(swapChainImageViews.empty());
 	swapChainImageViews.reserve(swapChainImages.size());
 	for (auto& image : swapChainImages)
-		swapChainImageViews.emplace_back(createImageView(image, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor));
+		swapChainImageViews.emplace_back(ImageView::createImageView(device, image, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor));
 }
 
 // ---------------------------------------------------------------------------
@@ -944,84 +945,84 @@ void Renderer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* r
 // Images
 // ---------------------------------------------------------------------------
 
-void Renderer::createImage(uint32_t width, uint32_t height, vk::Format format,
-	vk::ImageTiling tiling, vk::ImageUsageFlags usage,
-	vk::MemoryPropertyFlags properties,
-	vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory)
-{
-	vk::ImageCreateInfo imageInfo{
-		.imageType = vk::ImageType::e2D,
-		.format = format,
-		.extent = { width, height, 1 },
-		.mipLevels = 1,
-		.arrayLayers = 1,
-		.samples = vk::SampleCountFlagBits::e1,
-		.tiling = tiling,
-		.usage = usage,
-		.sharingMode = vk::SharingMode::eExclusive,
-		.initialLayout = vk::ImageLayout::eUndefined
-	};
-	image = vk::raii::Image(device, imageInfo);
+//void Renderer::createImage(uint32_t width, uint32_t height, vk::Format format,
+//	vk::ImageTiling tiling, vk::ImageUsageFlags usage,
+//	vk::MemoryPropertyFlags properties,
+//	vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory)
+//{
+//	vk::ImageCreateInfo imageInfo{
+//		.imageType = vk::ImageType::e2D,
+//		.format = format,
+//		.extent = { width, height, 1 },
+//		.mipLevels = 1,
+//		.arrayLayers = 1,
+//		.samples = vk::SampleCountFlagBits::e1,
+//		.tiling = tiling,
+//		.usage = usage,
+//		.sharingMode = vk::SharingMode::eExclusive,
+//		.initialLayout = vk::ImageLayout::eUndefined
+//	};
+//	image = vk::raii::Image(device, imageInfo);
+//
+//	vk::MemoryRequirements memRequirements = image.getMemoryRequirements();
+//	vk::MemoryAllocateInfo allocInfo{
+//		.allocationSize = memRequirements.size,
+//		.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)
+//	};
+//	imageMemory = vk::raii::DeviceMemory(device, allocInfo);
+//	image.bindMemory(imageMemory, 0);
+//}
 
-	vk::MemoryRequirements memRequirements = image.getMemoryRequirements();
-	vk::MemoryAllocateInfo allocInfo{
-		.allocationSize = memRequirements.size,
-		.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)
-	};
-	imageMemory = vk::raii::DeviceMemory(device, allocInfo);
-	image.bindMemory(imageMemory, 0);
-}
+//void Renderer::copyBufferToImage(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Buffer& buffer,
+//	vk::raii::Image& image, uint32_t width, uint32_t height)
+//{
+//	vk::BufferImageCopy region{
+//		.bufferOffset = 0,
+//		.bufferRowLength = 0,
+//		.bufferImageHeight = 0,
+//		.imageSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
+//		.imageOffset = { 0, 0, 0 },
+//		.imageExtent = { width, height, 1 }
+//	};
+//	commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
+//}
 
-void Renderer::copyBufferToImage(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Buffer& buffer,
-	vk::raii::Image& image, uint32_t width, uint32_t height)
-{
-	vk::BufferImageCopy region{
-		.bufferOffset = 0,
-		.bufferRowLength = 0,
-		.bufferImageHeight = 0,
-		.imageSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
-		.imageOffset = { 0, 0, 0 },
-		.imageExtent = { width, height, 1 }
-	};
-	commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
-}
-
-void Renderer::transitionImageLayout(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image& image,
-	vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
-{
-	vk::ImageMemoryBarrier barrier{
-		.oldLayout = oldLayout,
-		.newLayout = newLayout,
-		.srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-		.dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-		.image = image,
-		.subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor, .levelCount = 1, .layerCount = 1 }
-	};
-
-	vk::PipelineStageFlags sourceStage;
-	vk::PipelineStageFlags destinationStage;
-
-	if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal)
-	{
-		barrier.srcAccessMask = {};
-		barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-		sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-		destinationStage = vk::PipelineStageFlagBits::eTransfer;
-	}
-	else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal)
-	{
-		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-		sourceStage = vk::PipelineStageFlagBits::eTransfer;
-		destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-	}
-	else
-	{
-		throw std::invalid_argument("unsupported layout transition!");
-	}
-
-	commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, {}, barrier);
-}
+//void Renderer::transitionImageLayout(vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image& image,
+//	vk::ImageLayout oldLayout, vk::ImageLayout newLayout)
+//{
+//	vk::ImageMemoryBarrier barrier{
+//		.oldLayout = oldLayout,
+//		.newLayout = newLayout,
+//		.srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+//		.dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+//		.image = image,
+//		.subresourceRange = {.aspectMask = vk::ImageAspectFlagBits::eColor, .levelCount = 1, .layerCount = 1 }
+//	};
+//
+//	vk::PipelineStageFlags sourceStage;
+//	vk::PipelineStageFlags destinationStage;
+//
+//	if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal)
+//	{
+//		barrier.srcAccessMask = {};
+//		barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+//		sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+//		destinationStage = vk::PipelineStageFlagBits::eTransfer;
+//	}
+//	else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal)
+//	{
+//		barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+//		barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+//		sourceStage = vk::PipelineStageFlagBits::eTransfer;
+//		destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+//	}
+//	else
+//	{
+//		throw std::invalid_argument("unsupported layout transition!");
+//	}
+//
+//	commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, {}, barrier);
+//}
 
 void Renderer::transition_image_layout(vk::Image               image,
 	vk::ImageLayout         old_layout,
@@ -1093,132 +1094,132 @@ bool Renderer::hasStencilComponent(vk::Format format)
 void Renderer::createDepthResources()
 {
 	vk::Format depthFormat = findDepthFormat();
-	createImage(swapChainExtent.width, swapChainExtent.height, depthFormat,
+	Image::createImage(device, physicalDevice, swapChainExtent.width, swapChainExtent.height, depthFormat,
 		vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
 		vk::MemoryPropertyFlagBits::eDeviceLocal, depthImage, depthImageMemory);
-	depthImageView = createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
+	depthImageView = ImageView::createImageView(device, depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
 }
 
 // ---------------------------------------------------------------------------
 // Textures
 // ---------------------------------------------------------------------------
 
-void Renderer::loadTextureFromFile(const std::string& filepath,
-	vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory,
-	vk::raii::ImageView& imageView, bool isSRGB)
-{
-	std::ifstream file(filepath);
-	if (!file.good())
-	{
-		std::cout << "Warning: Texture file not found: " << filepath << " - using placeholder" << std::endl;
-		return;
-	}
-	file.close();
-
-	std::string extension = filepath.substr(filepath.find_last_of('.') + 1);
-	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-
-	uint32_t       texWidth, texHeight;
-	vk::DeviceSize imageSize;
-	unsigned char* textureData = nullptr;
-	int            texChannels;
-
-	if (extension == "ktx")
-	{
-		ktxTexture* kTexture;
-		KTX_error_code result = ktxTexture_CreateFromNamedFile(
-			filepath.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
-
-		if (result != KTX_SUCCESS)
-		{
-			std::cout << "Warning: Failed to load KTX texture: " << filepath << std::endl;
-			return;
-		}
-
-		texWidth = kTexture->baseWidth;
-		texHeight = kTexture->baseHeight;
-		imageSize = ktxTexture_GetImageSize(kTexture, 0);
-		auto* ktxData = ktxTexture_GetData(kTexture);
-
-		textureData = new unsigned char[imageSize];
-		memcpy(textureData, ktxData, imageSize);
-		ktxTexture_Destroy(kTexture);
-	}
-	else if (extension == "png" || extension == "jpg" || extension == "jpeg")
-	{
-		int texWidth_i, texHeight_i;
-		textureData = stbi_load(filepath.c_str(), &texWidth_i, &texHeight_i, &texChannels, STBI_rgb_alpha);
-
-		if (!textureData)
-		{
-			std::cout << "Warning: Failed to load image texture: " << filepath << std::endl;
-			return;
-		}
-
-		texWidth = static_cast<uint32_t>(texWidth_i);
-		texHeight = static_cast<uint32_t>(texHeight_i);
-		imageSize = texWidth * texHeight * 4;
-	}
-	else
-	{
-		std::cout << "Warning: Unsupported texture format: " << extension << " for file: " << filepath << std::endl;
-		return;
-	}
-
-	vk::raii::Buffer       stagingBuffer({});
-	vk::raii::DeviceMemory stagingBufferMemory({});
-	Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
-		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-		stagingBuffer, stagingBufferMemory);
-
-	void* data = stagingBufferMemory.mapMemory(0, imageSize);
-	memcpy(data, textureData, imageSize);
-	stagingBufferMemory.unmapMemory();
-
-	if (extension == "ktx")
-		delete[] textureData;
-	else
-		stbi_image_free(textureData);
-
-	vk::Format textureFormat = isSRGB ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
-
-	createImage(texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-		vk::MemoryPropertyFlagBits::eDeviceLocal, image, imageMemory);
-
-	// Delay staging buffer cleanup until command execution is complete
-	// In a real application, you would queue these for deletion after idle
-	// But for our simplified start-up use single time commands already waitIdle
-	// Just make sure endSingleTimeCommands actually waits
-	vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
-	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-	copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
-	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-	CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
-
-	imageView = createImageView(*image, textureFormat, vk::ImageAspectFlagBits::eColor);
-
-	std::cout << "Successfully loaded texture: " << filepath << " (" << texWidth << "x" << texHeight << ")" << std::endl;
-}
+//void Renderer::loadTextureFromFile(const std::string& filepath,
+//	vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory,
+//	vk::raii::ImageView& imageView, bool isSRGB)
+//{
+//	std::ifstream file(filepath);
+//	if (!file.good())
+//	{
+//		std::cout << "Warning: Texture file not found: " << filepath << " - using placeholder" << std::endl;
+//		return;
+//	}
+//	file.close();
+//
+//	std::string extension = filepath.substr(filepath.find_last_of('.') + 1);
+//	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+//
+//	uint32_t       texWidth, texHeight;
+//	vk::DeviceSize imageSize;
+//	unsigned char* textureData = nullptr;
+//	int            texChannels;
+//
+//	if (extension == "ktx")
+//	{
+//		ktxTexture* kTexture;
+//		KTX_error_code result = ktxTexture_CreateFromNamedFile(
+//			filepath.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture);
+//
+//		if (result != KTX_SUCCESS)
+//		{
+//			std::cout << "Warning: Failed to load KTX texture: " << filepath << std::endl;
+//			return;
+//		}
+//
+//		texWidth = kTexture->baseWidth;
+//		texHeight = kTexture->baseHeight;
+//		imageSize = ktxTexture_GetImageSize(kTexture, 0);
+//		auto* ktxData = ktxTexture_GetData(kTexture);
+//
+//		textureData = new unsigned char[imageSize];
+//		memcpy(textureData, ktxData, imageSize);
+//		ktxTexture_Destroy(kTexture);
+//	}
+//	else if (extension == "png" || extension == "jpg" || extension == "jpeg")
+//	{
+//		int texWidth_i, texHeight_i;
+//		textureData = stbi_load(filepath.c_str(), &texWidth_i, &texHeight_i, &texChannels, STBI_rgb_alpha);
+//
+//		if (!textureData)
+//		{
+//			std::cout << "Warning: Failed to load image texture: " << filepath << std::endl;
+//			return;
+//		}
+//
+//		texWidth = static_cast<uint32_t>(texWidth_i);
+//		texHeight = static_cast<uint32_t>(texHeight_i);
+//		imageSize = texWidth * texHeight * 4;
+//	}
+//	else
+//	{
+//		std::cout << "Warning: Unsupported texture format: " << extension << " for file: " << filepath << std::endl;
+//		return;
+//	}
+//
+//	vk::raii::Buffer       stagingBuffer({});
+//	vk::raii::DeviceMemory stagingBufferMemory({});
+//	Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+//		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+//		stagingBuffer, stagingBufferMemory);
+//
+//	void* data = stagingBufferMemory.mapMemory(0, imageSize);
+//	memcpy(data, textureData, imageSize);
+//	stagingBufferMemory.unmapMemory();
+//
+//	if (extension == "ktx")
+//		delete[] textureData;
+//	else
+//		stbi_image_free(textureData);
+//
+//	vk::Format textureFormat = isSRGB ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
+//
+//	createImage(texWidth, texHeight, textureFormat, vk::ImageTiling::eOptimal,
+//		vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+//		vk::MemoryPropertyFlagBits::eDeviceLocal, image, imageMemory);
+//
+//	// Delay staging buffer cleanup until command execution is complete
+//	// In a real application, you would queue these for deletion after idle
+//	// But for our simplified start-up use single time commands already waitIdle
+//	// Just make sure endSingleTimeCommands actually waits
+//	vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
+//	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+//	copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
+//	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+//	CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
+//
+//	imageView = createImageView(*image, textureFormat, vk::ImageAspectFlagBits::eColor);
+//
+//	std::cout << "Successfully loaded texture: " << filepath << " (" << texWidth << "x" << texHeight << ")" << std::endl;
+//}
 
 void Renderer::loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures)
 {
 	std::cout << "Loading PBR textures for material: " << material.GetName() << std::endl;
 
 	if (!material.albedoTexturePath.empty())
-		loadTextureFromFile(material.albedoTexturePath, textures.baseColorImage, textures.baseColorMemory, textures.baseColorView, true);
+		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.albedoTexturePath, textures.baseColorImage, textures.baseColorMemory, textures.baseColorView, true);
 
 	if (!material.metallicRoughnessTexturePath.empty())
-		loadTextureFromFile(material.metallicRoughnessTexturePath, textures.metallicRoughnessImage, textures.metallicRoughnessMemory, textures.metallicRoughnessView, false);
+		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.metallicRoughnessTexturePath, textures.metallicRoughnessImage, textures.metallicRoughnessMemory, textures.metallicRoughnessView, false);
 
 	if (!material.normalTexturePath.empty())
-		loadTextureFromFile(material.normalTexturePath, textures.normalImage, textures.normalMemory, textures.normalView, false);
+		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.normalTexturePath, textures.normalImage, textures.normalMemory, textures.normalView, false);
 
 	if (!material.occlusionTexturePath.empty())
-		loadTextureFromFile(material.occlusionTexturePath, textures.occlusionImage, textures.occlusionMemory, textures.occlusionView, false);
+		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.occlusionTexturePath, textures.occlusionImage, textures.occlusionMemory, textures.occlusionView, false);
 
 	if (!material.emissiveTexturePath.empty())
-		loadTextureFromFile(material.emissiveTexturePath, textures.emissiveImage, textures.emissiveMemory, textures.emissiveView, true);
+		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.emissiveTexturePath, textures.emissiveImage, textures.emissiveMemory, textures.emissiveView, true);
 }
 
 void Renderer::createDefaultTextures()
@@ -1238,17 +1239,17 @@ void Renderer::createDefaultTextures()
 		memcpy(data, &white, imageSize);
 		stagingBufferMemory.unmapMemory();
 
-		createImage(1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+		Image::createImage(device, physicalDevice, 1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
 			vk::MemoryPropertyFlagBits::eDeviceLocal, defaultTextureImage, defaultTextureMemory);
 
 		vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
-		transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		copyBufferToImage(commandBuffer, stagingBuffer, defaultTextureImage, 1, 1);
-		transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		Image::transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+		Buffer::copyBufferToImage(commandBuffer, stagingBuffer, defaultTextureImage, 1, 1);
+		Image::transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
-		defaultTextureView = createImageView(*defaultTextureImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+		defaultTextureView = ImageView::createImageView(device, *defaultTextureImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
 	}
 
 	// Flat normal 1x1
@@ -1266,17 +1267,17 @@ void Renderer::createDefaultTextures()
 		memcpy(data, &flatNormal, imageSize);
 		stagingBufferMemory.unmapMemory();
 
-		createImage(1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+		Image::createImage(device, physicalDevice, 1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
 			vk::MemoryPropertyFlagBits::eDeviceLocal, defaultNormalImage, defaultNormalMemory);
 
 		vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
-		transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		copyBufferToImage(commandBuffer, stagingBuffer, defaultNormalImage, 1, 1);
-		transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		Image::transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+		Buffer::copyBufferToImage(commandBuffer, stagingBuffer, defaultNormalImage, 1, 1);
+		Image::transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
-		defaultNormalView = createImageView(*defaultNormalImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+		defaultNormalView = ImageView::createImageView(device, *defaultNormalImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
 	}
 }
 

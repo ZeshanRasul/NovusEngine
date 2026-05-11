@@ -120,8 +120,7 @@ private:
 	void                 cleanupSwapChain();
 
 	// Image views
-	vk::raii::ImageView createImageView(vk::Image const& image, vk::Format format, vk::ImageAspectFlags aspectFlags);
-	void                createImageViews();
+	void                createSwapChainImageViews();
 
 	// Shaders / pipelines
 	static std::vector<char> readFile(const std::string& filename);
@@ -138,7 +137,6 @@ private:
 	void                    recordCommandBuffer(uint32_t imageIndex);
 
 	// Buffers
-	uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 	void     createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
 						  vk::MemoryPropertyFlags properties,
 						  vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
@@ -151,16 +149,6 @@ private:
 								 TransformComponent* transform, Camera* camera);
 
 	// Images
-	void createImage(uint32_t width, uint32_t height, vk::Format format,
-					 vk::ImageTiling tiling, vk::ImageUsageFlags usage,
-					 vk::MemoryPropertyFlags properties,
-					 vk::raii::Image& image, vk::raii::DeviceMemory& imageMemory);
-	void copyBufferToImage(vk::raii::CommandBuffer& commandBuffer,
-						   const vk::raii::Buffer& buffer,
-						   vk::raii::Image& image, uint32_t width, uint32_t height);
-	void transitionImageLayout(vk::raii::CommandBuffer& commandBuffer,
-							   const vk::raii::Image& image,
-							   vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 	void transition_image_layout(vk::Image image,
 								 vk::ImageLayout old_layout, vk::ImageLayout new_layout,
 								 vk::AccessFlags2 src_access_mask, vk::AccessFlags2 dst_access_mask,

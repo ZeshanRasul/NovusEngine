@@ -37,7 +37,7 @@ void Renderer::initWindow()
 	camera.setupInputCallbacks(window);
 	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
-	camera.setPosition(glm::vec3(0.0f, 20.0f, 23.0f));
+	camera.setPosition(glm::vec3(0.0f, 20.0f, 43.0f));
 	camera.getViewMatrix();
 	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 }
@@ -703,34 +703,6 @@ bool Renderer::createPBRPipeline()
 // Commands
 // ---------------------------------------------------------------------------
 
-void Renderer::createCommandBuffers()
-{
-	vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool,
-											 .level = vk::CommandBufferLevel::ePrimary,
-											 .commandBufferCount = MAX_FRAMES_IN_FLIGHT };
-	commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
-}
-
-vk::raii::CommandBuffer Renderer::beginSingleTimeCommands()
-{
-	vk::CommandBufferAllocateInfo allocInfo{ .commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1 };
-	vk::raii::CommandBuffer       commandBuffer = std::move(vk::raii::CommandBuffers(device, allocInfo).front());
-
-	vk::CommandBufferBeginInfo beginInfo{ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit };
-	commandBuffer.begin(beginInfo);
-
-	return commandBuffer;
-}
-
-void Renderer::endSingleTimeCommands(vk::raii::CommandBuffer&& commandBuffer)
-{
-	commandBuffer.end();
-
-	vk::SubmitInfo submitInfo{ .commandBufferCount = 1, .pCommandBuffers = &*commandBuffer };
-	queue.submit(submitInfo, nullptr);
-	queue.waitIdle();
-}
-
 void Renderer::recordCommandBuffer(uint32_t imageIndex)
 {
 	auto& commandBuffer = commandBuffers[frameIndex];
@@ -867,9 +839,9 @@ void Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk:
 
 void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
 {
-	vk::raii::CommandBuffer commandCopyBuffer = beginSingleTimeCommands();
+	vk::raii::CommandBuffer commandCopyBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
 	commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy{ .size = size });
-	endSingleTimeCommands(std::move(commandCopyBuffer));
+	CommandBuffer::endSingleTimeCommands(std::move(commandCopyBuffer), queue);
 }
 
 void Renderer::createVertexBuffer(RenderableComponent& gameObj)
@@ -1245,11 +1217,11 @@ void Renderer::loadTextureFromFile(const std::string& filepath,
 	// In a real application, you would queue these for deletion after idle
 	// But for our simplified start-up use single time commands already waitIdle
 	// Just make sure endSingleTimeCommands actually waits
-	vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
+	vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
 	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 	copyBufferToImage(commandBuffer, stagingBuffer, image, texWidth, texHeight);
 	transitionImageLayout(commandBuffer, image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-	endSingleTimeCommands(std::move(commandBuffer));
+	CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
 	imageView = createImageView(*image, textureFormat, vk::ImageAspectFlagBits::eColor);
 
@@ -1297,11 +1269,11 @@ void Renderer::createDefaultTextures()
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
 			vk::MemoryPropertyFlagBits::eDeviceLocal, defaultTextureImage, defaultTextureMemory);
 
-		vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
+		vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
 		transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 		copyBufferToImage(commandBuffer, stagingBuffer, defaultTextureImage, 1, 1);
 		transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-		endSingleTimeCommands(std::move(commandBuffer));
+		CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
 		defaultTextureView = createImageView(*defaultTextureImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
 	}
@@ -1325,11 +1297,11 @@ void Renderer::createDefaultTextures()
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
 			vk::MemoryPropertyFlagBits::eDeviceLocal, defaultNormalImage, defaultNormalMemory);
 
-		vk::raii::CommandBuffer commandBuffer = beginSingleTimeCommands();
+		vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
 		transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 		copyBufferToImage(commandBuffer, stagingBuffer, defaultNormalImage, 1, 1);
 		transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-		endSingleTimeCommands(std::move(commandBuffer));
+		CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
 		defaultNormalView = createImageView(*defaultNormalImage, vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
 	}

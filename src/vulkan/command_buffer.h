@@ -10,4 +10,8 @@ class CommandBuffer
 {
 public:
 	static bool init(vk::raii::Device& device, uint32_t queueIndex, vk::raii::CommandPool& cmdPool, std::vector<vk::raii::CommandBuffer>& cmdBuffers, uint32_t framesInFlight);
+
+	static vk::raii::CommandBuffer beginSingleTimeCommands(vk::raii::Device& device, vk::raii::CommandPool& cmdPool);
+
+	static void endSingleTimeCommands(vk::raii::CommandBuffer&& commandBuffer, vk::raii::Queue& queue);
 };

@@ -41,11 +41,8 @@ void Renderer::initWindow()
 
 void Renderer::initVulkan()
 {
-	createInstance();
-	setupDebugMessenger();
-	createSurface();
-	pickPhysicalDevice();
-	createLogicalDevice();
+	deviceInit();
+
 	createSwapChain();
 	createImageViews();
 	createDescriptorSetLayout();
@@ -178,6 +175,17 @@ std::vector<const char*> Renderer::getRequiredInstanceExtensions()
 		extensions.push_back(vk::EXTDebugUtilsExtensionName);
 
 	return extensions;
+}
+
+bool Renderer::deviceInit()
+{
+	createInstance();
+	setupDebugMessenger();
+	createSurface();
+	pickPhysicalDevice();
+	createLogicalDevice();
+
+	return true;
 }
 
 void Renderer::createInstance()

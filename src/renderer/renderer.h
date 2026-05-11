@@ -108,6 +108,8 @@ private:
 	void                     createLogicalDevice();
 	std::vector<const char*> getRequiredInstanceExtensions();
 
+	bool deviceInit();
+
 	// Swap chain
 	vk::SurfaceFormatKHR chooseSwapSurfaceFormat(std::vector<vk::SurfaceFormatKHR> const& formats);
 	vk::PresentModeKHR   chooseSwapPresentMode(std::vector<vk::PresentModeKHR> const& modes);

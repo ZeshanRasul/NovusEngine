@@ -29,7 +29,7 @@ void UniformBuffer::createUniformBuffers(std::vector<std::unique_ptr<Entity>>& e
 	}
 }
 
-void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable, TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent)
+void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable, TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings)
 {
 	UniformBufferObject ubo{};
 
@@ -38,12 +38,12 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	if (cam)
 	{
 		ubo.view = cam->getViewMatrix();
-		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.01f, 1000.0f);
+        ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.05f, 600.0f);
 	}
 	else
 	{
 		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.01f, 1000.0f);
+       ubo.proj = glm::perspective(glm::radians(55.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.05f, 600.0f);
 		ubo.proj[1][1] *= -1;
 	}
 
@@ -51,11 +51,11 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	// Cascaded Shadow Maps
 	// ---------------------------------------------------------------------------
 	// Camera frustum parameters (must match the projection built above)
-	const float camNear  = 0.01f;
-    const float camFar   = 1000.0f;
-    const float shadowMaxDistance = camFar;
+   const float camNear  = 0.05f;
+	const float camFar   = 600.0f;
+ const float shadowMaxDistance = glm::clamp(shadowSettings.shadowMaxDistance, camNear, camFar);
 	const float cascadeFar = glm::min(camFar, shadowMaxDistance);
-	const float lambda   = 0.75f; // blend between log and uniform splits
+  const float lambda   = glm::clamp(shadowSettings.lambda, 0.0f, 1.0f);
 
 	// Compute cascade split distances in view space
 	float splits[SHADOW_CASCADE_COUNT];
@@ -69,9 +69,12 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
    ubo.cascadeSplits = glm::vec4(splits[0], splits[1], splits[2], splits[3]);
 
 	// Shared light direction
-	const glm::vec3 lightPos(23.0f, -90.0f, 8.0f);
-	const glm::vec3 lightTarget(0.0f, 0.0f, 0.0f);
-	const glm::vec3 lightDir    = glm::normalize(lightTarget - lightPos);
+ glm::vec3 lightDir = shadowSettings.lightDirection;
+ if (glm::dot(lightDir, lightDir) < 1e-6f)
+	{
+		lightDir = glm::vec3(23.0f, 90.0f, -8.0f);
+	}
+	lightDir = glm::normalize(lightDir);
 	ubo.directionalLightDirection = glm::vec4(lightDir, 0.0f);
 	ubo.directionalLightColor     = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -121,7 +124,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 			radius = glm::max(radius, glm::length(c - center));
 		}
 
-		radius = std::ceil(radius * 16.0f) / 16.0f;
+     radius = std::ceil(radius * 32.0f) / 32.0f;
 
 		glm::mat4 lightView = glm::lookAtRH(center - lightDir * (radius * 2.0f), center, glm::vec3(0.0f, 0.0f, 1.0f));
 
@@ -140,9 +143,9 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 		centerLS.y = std::floor(centerLS.y / texelSize) * texelSize;
 
 		// Small padding to avoid shadow edge clipping
-		constexpr float padding = 50.0f;
-      const float coveragePadding = glm::max(100.0f, radius * 0.15f);
-		const float depthPadding = glm::max(200.0f, radius * 0.5f);
+        const float padding = shadowSettings.shadowPadding;
+		const float coveragePadding = glm::max(0.0f, radius * shadowSettings.coveragePaddingFactor);
+		const float depthPadding = glm::max(0.0f, radius * shadowSettings.depthPaddingFactor);
 		glm::mat4 lightProj = glm::orthoRH_ZO(centerLS.x - radius - coveragePadding, centerLS.x + radius + coveragePadding,
 										   centerLS.y - radius - coveragePadding, centerLS.y + radius + coveragePadding,
 										   -mx.z - padding - depthPadding, -mn.z + padding + depthPadding);
@@ -165,6 +168,8 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.gamma = 2.2f;
 	ubo.prefilteredCubeMipLevels = 1.0f;
 	ubo.scaleIBLAmbient = 0.002f;
+	ubo.shadowTuning = glm::vec4(shadowSettings.biasScale, shadowSettings.biasMin, shadowSettings.cascadeBlendFactor, 0.0f);
+	ubo.shadowDebug = glm::vec4(shadowSettings.cascadeDebugView, 0.0f, 0.0f, 0.0f);
 
 	memcpy(renderable->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }

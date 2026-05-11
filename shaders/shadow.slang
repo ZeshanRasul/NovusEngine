@@ -20,6 +20,8 @@ struct UniformBufferObject {
     float gamma;
     float prefilteredCubeMipLevels;
     float scaleIBLAmbient;
+    float4 shadowTuning;
+    float4 shadowDebug;
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<UniformBufferObject> ubo;

@@ -44,9 +44,13 @@ void Renderer::initWindow()
 	camera.setupInputCallbacks(window);
 	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
-	camera.setPosition(glm::vec3(0.0f, -120.0f, 43.0f));
+    camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
+	camera.setYaw(90.0f);
+	camera.setPitch(-5.0f);
+	camera.setMovementSpeed(40.0f);
+	camera.setZoom(55.0f);
 	camera.getViewMatrix();
-	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
+  camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 600.0f);
 }
 
 void Renderer::initVulkan()
@@ -180,9 +184,11 @@ void Renderer::renderImgui()
 
 	// Add a button to reset camera position
 	if (ImGui::Button("Reset Camera")) {
-		camera.setPosition(glm::vec3(0.0f, -120.0f, 23.0f));
-		camera.setYaw(-90.0f);
-		camera.setPitch(0.0f);
+        camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
+		camera.setYaw(90.0f);
+		camera.setPitch(-5.0f);
+		camera.setMovementSpeed(40.0f);
+		camera.setZoom(55.0f);
 	}
 
 	// Add sliders for camera settings
@@ -196,11 +202,27 @@ void Renderer::renderImgui()
 		camera.setMouseSensitivity(sensitivity);
 	}
 
-	float zoom = camera.getZoom();
-	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 45.0f)) {
+  float zoom = camera.getZoom();
+	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 90.0f)) {
 		camera.setZoom(zoom);
 	}
 
+	ImGui::End();
+
+	ImGui::Begin("Shadow Tuning");
+	ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
+	ImGui::SliderFloat("Lambda", &shadowSettings.lambda, 0.0f, 1.0f);
+	ImGui::SliderFloat("Bias Scale", &shadowSettings.biasScale, 0.0001f, 0.01f, "%.5f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SliderFloat("Bias Min", &shadowSettings.biasMin, 0.00001f, 0.005f, "%.5f", ImGuiSliderFlags_Logarithmic);
+	ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
+	ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
+	ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
+	ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
+	ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
+	ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
+	if (ImGui::Button("Reset Shadows")) {
+		shadowSettings = ShadowSettings{};
+	}
 	ImGui::End();
 
 	// End the frame
@@ -609,7 +631,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 		if (!renderable || !transform)
 			continue;
 
-		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent);
+        UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
 		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -645,7 +667,7 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 		if (!renderable || !transform)
 			continue;
 
-		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent);
+        UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
 		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -978,12 +1000,12 @@ void Renderer::setupGameObjects()
 		};
 
 	makeEntity("FlightHelmet_Left",
-		{ -13.0f, 100.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
+		{ -13.0f, -10.5f, -100.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
 		"../models/FlightHelmet.gltf");
 
 	{
 		Entity& e = makeEntity("DamagedHelmet",
-			{ 13.0f, -502.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
+			{ 13.0f, -5.0f, -100.0f }, { -90.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
 			"../models/DamagedHelmet.gltf");
 	}
 

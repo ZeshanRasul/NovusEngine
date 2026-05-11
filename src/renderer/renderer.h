@@ -210,6 +210,7 @@ private:
 	std::vector<std::unique_ptr<Entity>> entities;
 
 	Camera camera;
+    ShadowSettings shadowSettings;
 	float  lastFrameTime = 0.0f;
 
 	ImGuiVulkanUtil* imGui;

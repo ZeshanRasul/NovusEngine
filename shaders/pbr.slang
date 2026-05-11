@@ -34,6 +34,8 @@ struct UniformBufferObject {
     float gamma;
     float prefilteredCubeMipLevels;
     float scaleIBLAmbient;
+    float4 shadowTuning;                // x = bias scale, y = min bias, z = blend factor
+    float4 shadowDebug;                 // x = cascade debug view toggle
 };
 
 // Push constants - Fast, small data updated frequently per material/object
@@ -131,7 +133,7 @@ float ComputeCascadeShadow(int cascadeIndex, float3 worldPos, float3 normal, flo
     if (projCoords.z > 1.0 || projCoords.z < 0.0) return 0.0;
     if (any(projCoords.xy < 0.0) || any(projCoords.xy > 1.0)) return 0.0;
 
-    float bias = max(0.0015 * (1.0 - dot(normal, lightDir)), 0.0002);
+    float bias = max(ubo.shadowTuning.x * (1.0 - dot(normal, lightDir)), ubo.shadowTuning.y);
     float currentDepth = projCoords.z;
     float2 texelSize = float2(1.0 / 2048.0, 1.0 / 2048.0);
     float shadow = 0.0;
@@ -168,7 +170,7 @@ float ShadowCalculation(float viewDepth, float3 worldPos, float3 normal, float3 
             : cascadeIndex == 1 ? ubo.cascadeSplits.x
             : cascadeIndex == 2 ? ubo.cascadeSplits.y
             : ubo.cascadeSplits.z;
-        float transitionRange = max((splitDepth - previousSplit) * 0.15, 10.0);
+        float transitionRange = max((splitDepth - previousSplit) * ubo.shadowTuning.z, 10.0);
         float blendStart = splitDepth - transitionRange;
 
         if (viewDepth > blendStart) {
@@ -211,6 +213,12 @@ VSOutput vertMain(VSInput input)
 [[shader("fragment")]]
 float4 fragMain(VSOutput input) : SV_TARGET
 {
+    int cascadeIndex = 4;
+    if      (input.ViewDepth < ubo.cascadeSplits.x) cascadeIndex = 0;
+    else if (input.ViewDepth < ubo.cascadeSplits.y) cascadeIndex = 1;
+    else if (input.ViewDepth < ubo.cascadeSplits.z) cascadeIndex = 2;
+    else if (input.ViewDepth < ubo.cascadeSplits.w) cascadeIndex = 3;
+
     // === MATERIAL PROPERTY SAMPLING ===
     // Start from glTF defaults and only sample textures when they exist.
     float4 baseColor = material.baseColorFactor;
@@ -331,6 +339,15 @@ float4 fragMain(VSOutput input) : SV_TARGET
     float F = FresnelSchlick(max(dot(H, V), 0.0), F0).r; // Assuming grayscale F0 for simplicity
     float3 specular = (D * G * F) / max(4.0 * max(dot(N, V), 0.0) * NdotL, 0.001);
     float shadow = ShadowCalculation(input.ViewDepth, input.WorldPos, N, L);
+
+    if (ubo.shadowDebug.x > 0.5) {
+        float3 cascadeColor = cascadeIndex == 0 ? float3(1.0, 0.2, 0.2)
+            : cascadeIndex == 1 ? float3(0.2, 1.0, 0.2)
+            : cascadeIndex == 2 ? float3(0.2, 0.4, 1.0)
+            : cascadeIndex == 3 ? float3(1.0, 1.0, 0.2)
+            : float3(1.0, 0.2, 1.0);
+        return float4(cascadeColor, 1.0);
+    }
 
     Lo += (1.0 - shadow) * (diffuse * (1.0 - metallic) + specular) * dirLightColor * NdotL;
 

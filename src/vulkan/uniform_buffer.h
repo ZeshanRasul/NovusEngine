@@ -14,6 +14,20 @@ import vulkan_hpp;
 
 static constexpr uint32_t SHADOW_CASCADE_COUNT = 5;
 
+struct ShadowSettings
+{
+	float shadowMaxDistance = 450.0f;
+	float lambda = 0.9f;
+	float biasScale = 0.0015f;
+	float biasMin = 0.0002f;
+	glm::vec3 lightDirection = glm::normalize(glm::vec3(23.0f, 90.0f, -8.0f));
+	float cascadeBlendFactor = 0.15f;
+	float cascadeDebugView = 0.0f;
+	float shadowPadding = 15.0f;
+	float coveragePaddingFactor = 0.08f;
+	float depthPaddingFactor = 0.2f;
+};
+
 struct UniformBufferObject
 {
 	alignas(16) glm::mat4 model;
@@ -31,6 +45,8 @@ struct UniformBufferObject
 	float     gamma;
 	float     prefilteredCubeMipLevels;
 	float     scaleIBLAmbient;
+  glm::vec4 shadowTuning;
+	glm::vec4 shadowDebug;
 };
 
 class UniformBuffer
@@ -39,5 +55,5 @@ public:
 	static void createUniformBuffers(std::vector<std::unique_ptr<Entity>>& entities, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight);
 
 	static void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
-		TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent);
+        TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings);
 };

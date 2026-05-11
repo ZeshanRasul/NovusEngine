@@ -6,6 +6,8 @@
 #define TINYGLTF_IMPLEMENTATION
 #include <tiny_gltf.h>
 
+#include "../vulkan/command_pool.h"
+
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
@@ -42,7 +44,6 @@ void Renderer::initWindow()
 void Renderer::initVulkan()
 {
 	deviceInit();
-
 	createSwapChain();
 	createImageViews();
 	createDescriptorSetLayout();
@@ -53,7 +54,7 @@ void Renderer::initVulkan()
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
 	}
 
-	createCommandPool();
+	CommandPool::init(device, queueIndex, commandPool);
 	createDepthResources();
 	createTextureSampler();
 	createDefaultTextures();

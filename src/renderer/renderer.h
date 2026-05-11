@@ -201,6 +201,7 @@ private:
 	vk::raii::ImageView    shadowImageView   = nullptr;
 	vk::raii::Sampler      shadowSampler     = nullptr;
 	vk::raii::DescriptorSetLayout        shadowDescriptorSetLayout = nullptr;
+	vk::ImageLayout        shadowImageLayout = vk::ImageLayout::eUndefined;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 

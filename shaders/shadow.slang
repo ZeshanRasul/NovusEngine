@@ -9,6 +9,9 @@ struct UniformBufferObject {
     float4x4 model;
     float4x4 view;
     float4x4 proj;
+    float4x4 lightSpaceMatrix;
+    float4 directionalLightDirection;
+    float4 directionalLightColor;    
     float4 lightPositions[4];
     float4 lightColors[4];
     float4 camPos;
@@ -23,6 +26,5 @@ struct UniformBufferObject {
 [shader("vertex")]
 float4 vertMain(VSInput input) : SV_POSITION
 {
-    float4 worldPos = mul(ubo.model, float4(input.Position, 1.0));
-    return mul(ubo.proj, mul(ubo.view, worldPos));
+    return mul(ubo.lightSpaceMatrix, mul(ubo.model, float4(input.Position, 1.0)));
 }

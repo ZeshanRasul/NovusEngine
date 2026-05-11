@@ -105,23 +105,23 @@ float3 FresnelSchlick(float cosTheta, float3 F0) {
 
 float ShadowCalculation(float4 fragPosLightSpace, float3 normal, float3 lightDir)
 {
-    float3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    projCoords = projCoords * 0.5 + 0.5;
-    
-    float closestDepth = shadowMap.Sample(shadowSampler, projCoords.xy).r;
+	float3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+	// Only remap XY from NDC [-1,1] to UV [0,1].
+	// Z is already in [0,1] with GLM_FORCE_DEPTH_ZERO_TO_ONE / Vulkan conventions.
+	projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
-    float currentDepth = projCoords.z;
-          
-    float bias = max(0.01 * (1.0 - dot(normal, lightDir)), 0.0005);
+	// Discard fragments outside the shadow frustum.
+	if (projCoords.z > 1.0 || projCoords.z < 0.0)
+		return 0.0;
+	if (any(projCoords.xy < 0.0) || any(projCoords.xy > 1.0))
+		return 0.0;
 
-    float shadow = 0.0;
+	float closestDepth = shadowMap.Sample(shadowSampler, projCoords.xy).r;
+	float currentDepth = projCoords.z;
 
-    shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
-  
-    if (projCoords.z > 1.0)
-		shadow = 0.0;
+	float bias = max(0.001 * (1.0 - dot(normal, lightDir)), 0.0001);
 
-    return shadow;
+	return currentDepth - bias > closestDepth ? 1.0 : 0.0;
 }
 
 

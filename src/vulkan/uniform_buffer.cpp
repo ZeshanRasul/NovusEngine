@@ -43,14 +43,22 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 		ubo.proj[1][1] *= -1;
 	}
 
-	ubo.directionalLightDirection = glm::vec4(-0.05f, -1.0f, -0.05f, 0.0f);
-	ubo.directionalLightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
-	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f, 150.0f, 0.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::mat4 lightProj = glm::ortho(-150.0f, 150.0f, 150.0f, -150.0f, 0.1f, 3000.0f);
+	// Light positioned above and to the side of Sponza (Y-up world).
+	// up=(0,0,1) is the world Z axis which is the scene's vertical axis.
+	// Keep up=(0,0,1) but ensure lightPos doesn't become collinear with it.
+	const glm::vec3 lightPos(150.0f, -50.0f, 500.0f);
+	const glm::vec3 lightTarget(0.0f, 0.0f, 0.0f);
+	const glm::vec3 lightDir = glm::normalize(lightTarget - lightPos);
+	glm::mat4 lightView = glm::lookAt(lightPos, lightTarget, glm::vec3(1.0f, 0.0f, 0.0f));
+	// ±350 covers Sponza (scale 3) with some margin; near/far kept tight to
+	// maximise NDC depth precision so small objects like the helmets cast shadows.
+	glm::mat4 lightProj = glm::ortho(-350.0f, 350.0f, -350.0f, 350.0f, 1.0f, 2000.0f);
 	glm::mat4 lightSpace = lightProj * lightView;
-	
+
 	ubo.lightSpaceMatrix = lightSpace;
+	ubo.directionalLightDirection = glm::vec4(lightDir, 0.0f);
+	ubo.directionalLightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	ubo.lightPositions[0] = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
 	ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 5.0f, 1.0f);

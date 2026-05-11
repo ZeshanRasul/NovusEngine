@@ -482,13 +482,14 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	auto& commandBuffer = commandBuffers[frameIndex];
 	commandBuffer.begin({});
 	transition_image_layout(*shadowImage,
-		vk::ImageLayout::eUndefined,
+        shadowImageLayout,
 		vk::ImageLayout::eDepthAttachmentOptimal,
-		vk::AccessFlagBits2::eDepthStencilAttachmentRead,
+       vk::AccessFlags2{},
 		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-		vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eFragmentShader,
+      vk::PipelineStageFlagBits2::eTopOfPipe,
 		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
 		vk::ImageAspectFlagBits::eDepth);
+	shadowImageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
 
 	recordShadowPass(commandBuffer);
 	commandBuffer.endRendering();
@@ -497,10 +498,11 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 		vk::ImageLayout::eDepthAttachmentOptimal,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
 		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-		vk::AccessFlagBits2::eDepthStencilAttachmentRead,
-		vk::PipelineStageFlagBits2::eLateFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+		vk::AccessFlagBits2::eShaderSampledRead,
+		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
 		vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eFragmentShader,
 		vk::ImageAspectFlagBits::eDepth);
+   shadowImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 	beginMainPass(commandBuffer, imageIndex);
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
@@ -577,7 +579,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer)
 	};
 
 	vk::RenderingInfo renderingInfo = {
-		.renderArea = {.offset = { 0, 0 }, .extent = swapChainExtent },
+		.renderArea = {.offset = { 0, 0 }, .extent = vk::Extent2D(2048, 2048)},
 		.layerCount = 1,
 		.colorAttachmentCount = 0,
 		.pColorAttachments = nullptr,
@@ -677,15 +679,6 @@ void Renderer::endMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imag
 		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
 		vk::PipelineStageFlagBits2::eBottomOfPipe,
 		vk::ImageAspectFlagBits::eColor);
-
-	transition_image_layout(*shadowImage,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		vk::ImageLayout::eDepthAttachmentOptimal,
-		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-		vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-		vk::ImageAspectFlagBits::eDepth);
 }
 
 // ---------------------------------------------------------------------------

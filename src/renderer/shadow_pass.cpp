@@ -27,22 +27,22 @@ void ShadowPass::createResources(vk::raii::Device& device,
     shadowImageView = ImageView::createImageView(device, shadowImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
 
   vk::SamplerCreateInfo samplerInfo{};
-    samplerInfo.magFilter = vk::Filter::eLinear;
-    samplerInfo.minFilter = vk::Filter::eLinear;
-    samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-    samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToBorder;
-    samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToBorder;
-    samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToBorder;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.anisotropyEnable = vk::False;
-    samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.compareEnable = vk::True;
-    samplerInfo.compareOp = vk::CompareOp::eLessOrEqual;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 1.0f;
-    samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
-    samplerInfo.unnormalizedCoordinates = vk::False;
-    shadowSampler = vk::raii::Sampler(device, samplerInfo);
+  samplerInfo.magFilter = vk::Filter::eLinear;
+  samplerInfo.minFilter = vk::Filter::eLinear;
+  samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+  samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToBorder;
+  samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToBorder;
+  samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToBorder;
+  samplerInfo.mipLodBias = 0.0f;
+  samplerInfo.anisotropyEnable = vk::False;
+  samplerInfo.maxAnisotropy = 1.0f;
+  samplerInfo.compareEnable = vk::False;
+  samplerInfo.compareOp = vk::CompareOp::eNever;
+  samplerInfo.minLod = 0.0f;
+  samplerInfo.maxLod = 1.0f;
+  samplerInfo.borderColor = vk::BorderColor::eFloatOpaqueWhite;
+  samplerInfo.unnormalizedCoordinates = vk::False;
+  shadowSampler = vk::raii::Sampler(device, samplerInfo);
 }
 
 void ShadowPass::createPipeline(vk::raii::Device& device,
@@ -63,7 +63,7 @@ void ShadowPass::createPipeline(vk::raii::Device& device,
         attributeDescriptions.end()
     };
     config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
-    config.cullMode = vk::CullModeFlagBits::eBack;
+  config.cullMode = vk::CullModeFlagBits::eNone;
     config.depthBiasEnable = true;
     config.depthBiasConstantFactor = 1.25f;
     config.depthBiasSlopeFactor = 1.75f;

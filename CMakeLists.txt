@@ -67,6 +67,7 @@ set(SLANG_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader.slang)
 set(PBR_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.slang)
 set(IMGUI_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/imgui.slang)
 set(SKINNING_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/skinning.slang)
+set(SHADOW_SKINNING_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow_skinning.slang)
 set(TRS_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/trs_matrix.comp)
 set(BONE_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bone_matrix.comp)
 
@@ -78,18 +79,19 @@ function (add_slang_shader_target TARGET)
           COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_DIR}
   )
   add_custom_command (
-          OUTPUT  ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv ${SHADERS_DIR}/skinning.spv
+          OUTPUT  ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv ${SHADERS_DIR}/skinning.spv ${SHADERS_DIR}/shadow_skinning.spv
           COMMAND ${SLANGC_EXECUTABLE} ${SLANG_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
           COMMAND ${SLANGC_EXECUTABLE} ${PBR_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o pbr.spv
           COMMAND ${SLANGC_EXECUTABLE} ${IMGUI_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o imgui.spv
           COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -o shadow.spv
           COMMAND ${SLANGC_EXECUTABLE} ${SKINNING_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o skinning.spv
+          COMMAND ${SLANGC_EXECUTABLE} ${SHADOW_SKINNING_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -o shadow_skinning.spv
           WORKING_DIRECTORY ${SHADERS_DIR}
-          DEPENDS ${SHADERS_DIR} ${SLANG_SHADER_SOURCE} ${PBR_SHADER_SOURCE} ${IMGUI_SHADER_SOURCE} ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.slang ${SKINNING_SHADER_SOURCE}
+          DEPENDS ${SHADERS_DIR} ${SLANG_SHADER_SOURCE} ${PBR_SHADER_SOURCE} ${IMGUI_SHADER_SOURCE} ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.slang ${SKINNING_SHADER_SOURCE} ${SHADOW_SKINNING_SHADER_SOURCE}
           COMMENT "Compiling Slang Shaders"
           VERBATIM
   )
-  add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv ${SHADERS_DIR}/skinning.spv)
+  add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv ${SHADERS_DIR}/skinning.spv ${SHADERS_DIR}/shadow_skinning.spv)
 endfunction()
 
 add_slang_shader_target(shaders)

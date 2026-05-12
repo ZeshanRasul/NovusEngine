@@ -167,6 +167,8 @@ private:
 	vk::raii::Pipeline       pbrPipeline       = nullptr;
 	vk::raii::PipelineLayout shadowPipelineLayout = nullptr;
 	vk::raii::Pipeline       shadowPipeline       = nullptr;
+	vk::raii::PipelineLayout shadowSkinningPipelineLayout = nullptr;
+	vk::raii::Pipeline       shadowSkinningPipeline       = nullptr;
 
 	vk::raii::CommandPool                commandPool = nullptr;
 	std::vector<vk::raii::CommandBuffer> commandBuffers;
@@ -246,6 +248,7 @@ private:
 	void runComputeShaders(const std::shared_ptr<AssimpModel>& model, size_t numberOfInstances, uint32_t modelOffset);
 	void updateAssimpAnimations(float deltaTime);
 	void recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer);
+	void recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex);
 
 	struct ComputeModelResources {
 		VkShaderStorageBufferData parentIndexBuffer{};

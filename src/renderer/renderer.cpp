@@ -48,7 +48,7 @@ namespace {
 
 void Renderer::run()
 {
-   initWindow();
+	initWindow();
 	try
 	{
 		initVulkan();
@@ -78,7 +78,7 @@ void Renderer::initWindow()
 	camera.setupInputCallbacks(window);
 	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
-    camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
+	camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
 	camera.setYaw(90.0f);
 	camera.setPitch(-5.0f);
 	camera.setMovementSpeed(40.0f);
@@ -90,7 +90,7 @@ void Renderer::initWindow()
 void Renderer::initVulkan()
 {
 	deviceInit();
-    SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
+	SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 7);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, shadowDescriptorSetLayout, 7);
@@ -116,12 +116,12 @@ void Renderer::initVulkan()
 	}
 	UniformBuffer::createUniformBuffers(entities, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createDescriptorPool(device, entities, descriptorPool, MAX_FRAMES_IN_FLIGHT);
- std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
-		*shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
+	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
+		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
 	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
-    Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
+	Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
 	imGui = new ImGuiVulkanUtil(
 		device,
@@ -361,7 +361,7 @@ void Renderer::mainLoop()
 
 void Renderer::cleanup()
 {
-   if (mCleanupDone)
+	if (mCleanupDone)
 		return;
 	mCleanupDone = true;
 
@@ -375,56 +375,58 @@ void Renderer::cleanup()
 		// Ignore waitIdle failures (e.g. device lost) and continue best-effort cleanup.
 	}
 
-		// Release Assimp per-instance GPU resources (descriptor sets + mapped buffers)
-		// before destroying the skinning descriptor pool.
-		for (auto& gpuData : mAssimpGPUData)
+	// Release Assimp per-instance GPU resources (descriptor sets + mapped buffers)
+	// before destroying the skinning descriptor pool.
+	for (auto& gpuData : mAssimpGPUData)
+	{
+		if (gpuData.boneMapped)
 		{
-			if (gpuData.boneMapped)
+			gpuData.boneBufferMemory.unmapMemory();
+			gpuData.boneMapped = nullptr;
+		}
+
+		for (size_t f = 0; f < gpuData.uboMemories.size() && f < gpuData.uboMapped.size(); ++f)
+		{
+			if (gpuData.uboMapped[f])
 			{
-				gpuData.boneBufferMemory.unmapMemory();
-				gpuData.boneMapped = nullptr;
-			}
-
-			for (size_t f = 0; f < gpuData.uboMemories.size() && f < gpuData.uboMapped.size(); ++f)
-			{
-				if (gpuData.uboMapped[f])
-				{
-					gpuData.uboMemories[f].unmapMemory();
-					gpuData.uboMapped[f] = nullptr;
-				}
+				gpuData.uboMemories[f].unmapMemory();
+				gpuData.uboMapped[f] = nullptr;
 			}
 		}
-		mAssimpGPUData.clear();
+	}
+	mAssimpGPUData.clear();
 
-		// Now descriptor pool/pipeline resources can be safely destroyed.
-		skinningWhiteView = nullptr;
-		skinningWhiteImage = nullptr;
-		skinningWhiteMemory = nullptr;
-		skinningSampler = nullptr;
-		skinningPipeline = nullptr;
-		skinningPipelineLayout = nullptr;
-		skinningDescriptorSetLayout = nullptr;
-		skinningDescriptorPool = nullptr;
+	// Now descriptor pool/pipeline resources can be safely destroyed.
+	skinningWhiteView = nullptr;
+	skinningWhiteImage = nullptr;
+	skinningWhiteMemory = nullptr;
+	skinningSampler = nullptr;
+	skinningPipeline = nullptr;
+	skinningPipelineLayout = nullptr;
+	shadowSkinningPipeline = nullptr;
+	shadowSkinningPipelineLayout = nullptr;
+	skinningDescriptorSetLayout = nullptr;
+	skinningDescriptorPool = nullptr;
 
-		// Cleanup all loaded Assimp model resources (VMA buffers/images).
-		std::unordered_set<AssimpModel*> cleanedModels;
-		for (const auto& model : mModelInstData.miModelList)
-		{
-			if (model && cleanedModels.insert(model.get()).second)
-				model->cleanup(mRenderData);
-		}
-		for (const auto& model : mModelInstData.miPendingDeleteAssimpModels)
-		{
-			if (model && cleanedModels.insert(model.get()).second)
-				model->cleanup(mRenderData);
-		}
+	// Cleanup all loaded Assimp model resources (VMA buffers/images).
+	std::unordered_set<AssimpModel*> cleanedModels;
+	for (const auto& model : mModelInstData.miModelList)
+	{
+		if (model && cleanedModels.insert(model.get()).second)
+			model->cleanup(mRenderData);
+	}
+	for (const auto& model : mModelInstData.miPendingDeleteAssimpModels)
+	{
+		if (model && cleanedModels.insert(model.get()).second)
+			model->cleanup(mRenderData);
+	}
 
-		mModelInstData.miAssimpInstances.clear();
-		mModelInstData.miAssimpInstancesPerModel.clear();
-		mModelInstData.miModelList.clear();
-		mModelInstData.miPendingDeleteAssimpModels.clear();
+	mModelInstData.miAssimpInstances.clear();
+	mModelInstData.miAssimpInstancesPerModel.clear();
+	mModelInstData.miModelList.clear();
+	mModelInstData.miPendingDeleteAssimpModels.clear();
 
-  if (mRenderData.rdAllocator != VK_NULL_HANDLE)
+	if (mRenderData.rdAllocator != VK_NULL_HANDLE)
 	{
 		vmaDestroyAllocator(mRenderData.rdAllocator);
 		mRenderData.rdAllocator = VK_NULL_HANDLE;
@@ -499,7 +501,7 @@ void Renderer::renderImgui()
 
 	// Add a button to reset camera position
 	if (ImGui::Button("Reset Camera")) {
-        camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
+		camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
 		camera.setYaw(90.0f);
 		camera.setPitch(-5.0f);
 		camera.setMovementSpeed(40.0f);
@@ -517,7 +519,7 @@ void Renderer::renderImgui()
 		camera.setMouseSensitivity(sensitivity);
 	}
 
-  float zoom = camera.getZoom();
+	float zoom = camera.getZoom();
 	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 90.0f)) {
 		camera.setZoom(zoom);
 	}
@@ -532,8 +534,8 @@ void Renderer::renderImgui()
 	ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
 	ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
 	ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
-    ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
-    ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
+	ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
+	ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
 	ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
 	ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
 	ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
@@ -867,13 +869,13 @@ void Renderer::renderImgui()
 
 	// Render to generate draw data
 	ImGui::Render();
-		//ImDrawData* drawData = ImGui::GetDrawData();
-	//if (drawData && drawData->CmdListsCount > 0) {
-	//	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
-	//		needsUpdateBuffers = true;
-	//		return true;
-	//	}
-	//}
+	//ImDrawData* drawData = ImGui::GetDrawData();
+//if (drawData && drawData->CmdListsCount > 0) {
+//	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
+//		needsUpdateBuffers = true;
+//		return true;
+//	}
+//}
 	imGui->updateBuffers();
 }
 
@@ -1107,10 +1109,10 @@ bool Renderer::createPBRPipeline()
 		auto bindingDescription = Vertex::getBindingDescription();
 		auto attributeDescriptions = Vertex::getAttributeDescriptions();
 
-        vk::PushConstantRange pushConstantRange{
+		vk::PushConstantRange pushConstantRange{
 			.stageFlags = vk::ShaderStageFlagBits::eFragment,
 			.offset = 0,
-           .size = sizeof(::PushConstantBlock)
+		   .size = sizeof(::PushConstantBlock)
 		};
 
 		Pipeline::PipelineConfig config{};
@@ -1128,7 +1130,7 @@ bool Renderer::createPBRPipeline()
 		config.descriptorSetLayouts = { *descriptorSetLayout };
 		config.pushConstantRanges = { pushConstantRange };
 		config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
-       config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+		config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 
 		auto pipelineBundle = Pipeline::createPipeline(device, config);
 		pbrPipelineLayout = std::move(pipelineBundle.layout);
@@ -1166,6 +1168,7 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 		shadowImageLayouts[cascade] = vk::ImageLayout::eDepthAttachmentOptimal;
 
 		recordShadowPass(commandBuffer, cascade);
+		recordAssimpShadowPass(commandBuffer, cascade);
 		commandBuffer.endRendering();
 
 		transition_image_layout(*shadowImages[cascade],
@@ -1275,7 +1278,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 		if (!renderable || !transform)
 			continue;
 
-        UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
+		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
 		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -1283,8 +1286,8 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 
 		for (const auto& mesh : renderable->meshes)
 		{
-		//	const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
-		//	MaterialPushConstants::push(commandBuffer, *shadowPipelineLayout, material);
+			//	const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
+			//	MaterialPushConstants::push(commandBuffer, *shadowPipelineLayout, material);
 			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
 			commandBuffer.bindDescriptorSets(
@@ -1300,7 +1303,58 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 
 }
 
+void Renderer::recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex)
+{
+	if (mAssimpGPUData.empty() || *shadowSkinningPipeline == VK_NULL_HANDLE)
+		return;
 
+	const UniformBufferObject* shadowTemplateUbo = nullptr;
+	for (auto& entityPtr : entities)
+	{
+		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
+		if (!renderable)
+			continue;
+		if (renderable->uniformBuffersMapped.size() <= frameIndex)
+			continue;
+		if (!renderable->uniformBuffersMapped[frameIndex])
+			continue;
+
+		shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable->uniformBuffersMapped[frameIndex]);
+		break;
+	}
+
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadowSkinningPipeline);
+
+	int cascadeIndexInt = static_cast<int>(cascadeIndex);
+	commandBuffer.pushConstants<int>(*shadowSkinningPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
+
+	for (auto& gpuData : mAssimpGPUData)
+	{
+        UniformBufferObject ubo{};
+		if (shadowTemplateUbo)
+			ubo = *shadowTemplateUbo;
+		ubo.model = gpuData.instance->getWorldTransformMatrix();
+		memcpy(gpuData.uboMapped[frameIndex], &ubo, sizeof(UniformBufferObject));
+
+		auto& model = *gpuData.instance->getModel();
+		const auto& meshes = model.getModelMeshes();
+		const auto& vbos = model.getVertexBuffers();
+		const auto& ibos = model.getIndexBuffers();
+
+		for (size_t i = 0; i < meshes.size(); ++i)
+		{
+			commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+				*shadowSkinningPipelineLayout, 0,
+				*gpuData.descriptorSets[frameIndex][i], nullptr);
+
+			vk::Buffer vb = vbos[i].buffer;
+			vk::DeviceSize off = 0;
+			commandBuffer.bindVertexBuffers(0, vb, off);
+			commandBuffer.bindIndexBuffer(ibos[i].buffer, 0, vk::IndexType::eUint32);
+			commandBuffer.drawIndexed(static_cast<uint32_t>(meshes[i].indices.size()), 1, 0, 0, 0);
+		}
+	}
+}
 
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
@@ -1317,9 +1371,9 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
 		commandBuffer.bindIndexBuffer(*renderable->indexBuffer, 0, vk::IndexType::eUint32);
 
-	 for (const auto& mesh : renderable->meshes)
+		for (const auto& mesh : renderable->meshes)
 		{
-		  const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
+			const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
 			MaterialPushConstants::push(commandBuffer, *pbrPipelineLayout, material);
 			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
@@ -1630,9 +1684,9 @@ void Renderer::initAssimpRenderData()
 	// ---- VMA allocator from raii handles ----
 	VmaAllocatorCreateInfo allocatorInfo{};
 	allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
-	allocatorInfo.physicalDevice   = *physicalDevice;
-	allocatorInfo.device           = *device;
-	allocatorInfo.instance         = *instance;
+	allocatorInfo.physicalDevice = *physicalDevice;
+	allocatorInfo.device = *device;
+	allocatorInfo.instance = *instance;
 
 	if (vmaCreateAllocator(&allocatorInfo, &mRenderData.rdAllocator) != VK_SUCCESS)
 		throw std::runtime_error("Failed to create VMA allocator for Assimp render data");
@@ -1644,41 +1698,41 @@ void Renderer::initAssimpRenderData()
 	initComputeSkinningResources();
 
 	// Raw handles consumed by old VMA-based stack (VertexBuffer, IndexBuffer, Texture)
-	mRenderData.rdDevice         = *device;
+	mRenderData.rdDevice = *device;
 	mRenderData.rdPhysicalDevice = *physicalDevice;
-	mRenderData.rdInstance       = *instance;
-	mRenderData.rdGraphicsQueue  = *queue;
-	mRenderData.rdCommandPool    = *commandPool;
+	mRenderData.rdInstance = *instance;
+	mRenderData.rdGraphicsQueue = *queue;
+	mRenderData.rdCommandPool = *commandPool;
 
 	// ---- Skinning descriptor set layout ----
 	// binding 0 = UBO          (vertex)
 	// binding 1 = bone SSBO    (vertex)
 	// binding 2 = diffuse tex  (fragment)
-	std::array<vk::DescriptorSetLayoutBinding, 3> bindings = {{
+	std::array<vk::DescriptorSetLayoutBinding, 3> bindings = { {
 		{ 0, vk::DescriptorType::eUniformBuffer,        1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment },
 		{ 1, vk::DescriptorType::eStorageBuffer,        1, vk::ShaderStageFlagBits::eVertex   },
 		{ 2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment }
-	}};
+	} };
 	vk::DescriptorSetLayoutCreateInfo layoutInfo{
 		.bindingCount = static_cast<uint32_t>(bindings.size()),
-		.pBindings    = bindings.data()
+		.pBindings = bindings.data()
 	};
 	skinningDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
 	mRenderData.rdAssimpTextureDescriptorLayout = *skinningDescriptorSetLayout;
 
 	// ---- Descriptor pool ----
-	std::array<vk::DescriptorPoolSize, 3> poolSizes = {{
+	std::array<vk::DescriptorPoolSize, 3> poolSizes = { {
 		{ vk::DescriptorType::eUniformBuffer,        512 },
 		{ vk::DescriptorType::eStorageBuffer,        512 },
 		{ vk::DescriptorType::eCombinedImageSampler, 512 }
-	}};
+	} };
 	vk::DescriptorPoolCreateInfo poolInfo{
-		.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-		.maxSets       = 512,
+		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+		.maxSets = 512,
 		.poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
-		.pPoolSizes    = poolSizes.data()
+		.pPoolSizes = poolSizes.data()
 	};
-	skinningDescriptorPool      = vk::raii::DescriptorPool(device, poolInfo);
+	skinningDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	mRenderData.rdDescriptorPool = *skinningDescriptorPool;
 
 	// ---- 1×1 white fallback texture ----
@@ -1714,21 +1768,47 @@ void Renderer::initAssimpRenderData()
 
 	// ---- Sampler ----
 	vk::SamplerCreateInfo samplerInfo{
-		.magFilter        = vk::Filter::eLinear,
-		.minFilter        = vk::Filter::eLinear,
-		.mipmapMode       = vk::SamplerMipmapMode::eLinear,
-		.addressModeU     = vk::SamplerAddressMode::eRepeat,
-		.addressModeV     = vk::SamplerAddressMode::eRepeat,
-		.addressModeW     = vk::SamplerAddressMode::eRepeat,
+		.magFilter = vk::Filter::eLinear,
+		.minFilter = vk::Filter::eLinear,
+		.mipmapMode = vk::SamplerMipmapMode::eLinear,
+		.addressModeU = vk::SamplerAddressMode::eRepeat,
+		.addressModeV = vk::SamplerAddressMode::eRepeat,
+		.addressModeW = vk::SamplerAddressMode::eRepeat,
 		.anisotropyEnable = vk::False,
-		.maxAnisotropy    = 1.0f,
-		.compareEnable    = vk::False,
-		.compareOp        = vk::CompareOp::eAlways,
-		.borderColor      = vk::BorderColor::eIntOpaqueBlack
+		.maxAnisotropy = 1.0f,
+		.compareEnable = vk::False,
+		.compareOp = vk::CompareOp::eAlways,
+		.borderColor = vk::BorderColor::eIntOpaqueBlack
 	};
 	skinningSampler = vk::raii::Sampler(device, samplerInfo);
 
 	createSkinningPipeline();
+
+	{
+		Pipeline::PipelineConfig config{};
+		config.shaderStages = {
+			{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\shadow_skinning.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
+		};
+		config.vertexBindings = { SkinnedVertex::getBindingDescription() };
+		auto skinnedAttrib = SkinnedVertex::getAttributeDescriptions();
+		config.vertexAttributes = { skinnedAttrib.begin(), skinnedAttrib.end() };
+		config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+		config.cullMode = vk::CullModeFlagBits::eNone;
+		config.depthBiasEnable = true;
+		config.depthBiasConstantFactor = 1.25f;
+		config.depthBiasSlopeFactor = 1.75f;
+		config.blendEnable = false;
+		config.descriptorSetLayouts = { *skinningDescriptorSetLayout };
+		config.pushConstantRanges = { vk::PushConstantRange{
+			.stageFlags = vk::ShaderStageFlagBits::eVertex,
+			.offset = 0,
+			.size = sizeof(int)
+		} };
+
+		auto bundle = Pipeline::createPipeline(device, config);
+		shadowSkinningPipelineLayout = std::move(bundle.layout);
+		shadowSkinningPipeline = std::move(bundle.pipeline);
+	}
 }
 
 void Renderer::createSkinningPipeline()
@@ -1741,45 +1821,45 @@ void Renderer::createSkinningPipeline()
 		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
 		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
-	config.vertexBindings         = { bindingDesc };
-	config.vertexAttributes       = { attribDescs.begin(), attribDescs.end() };
-	config.descriptorSetLayouts   = { *skinningDescriptorSetLayout };
+	config.vertexBindings = { bindingDesc };
+	config.vertexAttributes = { attribDescs.begin(), attribDescs.end() };
+	config.descriptorSetLayouts = { *skinningDescriptorSetLayout };
 	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
-	config.depthAttachmentFormat  = DepthTarget::findDepthFormat(physicalDevice);
-	config.cullMode               = vk::CullModeFlagBits::eNone;
+	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+	config.cullMode = vk::CullModeFlagBits::eNone;
 
-	auto bundle          = Pipeline::createPipeline(device, config);
+	auto bundle = Pipeline::createPipeline(device, config);
 	skinningPipelineLayout = std::move(bundle.layout);
-	skinningPipeline       = std::move(bundle.pipeline);
+	skinningPipeline = std::move(bundle.pipeline);
 }
 
 void Renderer::initComputeSkinningResources()
 {
- mComputeSkinningEnabled = false;
+	mComputeSkinningEnabled = false;
 
-	std::array<vk::DescriptorSetLayoutBinding, 2> set0Bindings = {{
+	std::array<vk::DescriptorSetLayoutBinding, 2> set0Bindings = { {
 		{ 0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute },
 		{ 1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute }
-	}};
+	} };
 	vk::DescriptorSetLayoutCreateInfo set0LayoutInfo{
 		.bindingCount = static_cast<uint32_t>(set0Bindings.size()),
 		.pBindings = set0Bindings.data()
 	};
 	mComputeSetLayout0 = vk::raii::DescriptorSetLayout(device, set0LayoutInfo);
 
-	std::array<vk::DescriptorSetLayoutBinding, 2> set1Bindings = {{
+	std::array<vk::DescriptorSetLayoutBinding, 2> set1Bindings = { {
 		{ 0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute },
 		{ 1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute }
-	}};
+	} };
 	vk::DescriptorSetLayoutCreateInfo set1LayoutInfo{
 		.bindingCount = static_cast<uint32_t>(set1Bindings.size()),
 		.pBindings = set1Bindings.data()
 	};
 	mComputeSetLayout1 = vk::raii::DescriptorSetLayout(device, set1LayoutInfo);
 
-	std::array<vk::DescriptorPoolSize, 1> poolSizes = {{
+	std::array<vk::DescriptorPoolSize, 1> poolSizes = { {
 		{ vk::DescriptorType::eStorageBuffer, 2048 }
-	}};
+	} };
 	vk::DescriptorPoolCreateInfo poolInfo{
 		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
 		.maxSets = 1024,
@@ -1798,7 +1878,7 @@ void Renderer::initComputeSkinningResources()
 	mComputeTrsSet0 = std::move(set0[0]);
 	mComputeBoneSet0 = std::move(set0[1]);
 
-  const std::string shaderDir = "D:\\dev\\Graphics\\NovusEngine\\shaders\\";
+	const std::string shaderDir = "D:\\dev\\Graphics\\NovusEngine\\shaders\\";
 	const std::string trsCompPath = shaderDir + "trs_matrix.comp.spv";
 	const std::string boneCompPath = shaderDir + "bone_matrix.comp.spv";
 	if (!std::filesystem::exists(trsCompPath) || !std::filesystem::exists(boneCompPath))
@@ -1824,7 +1904,7 @@ void Renderer::initComputeSkinningResources()
 	};
 	mComputeTrsPipelineLayout = vk::raii::PipelineLayout(device, trsLayoutInfo);
 	vk::ComputePipelineCreateInfo trsPipelineInfo{
-		.stage = { .stage = vk::ShaderStageFlagBits::eCompute, .module = *trsModule, .pName = "main" },
+		.stage = {.stage = vk::ShaderStageFlagBits::eCompute, .module = *trsModule, .pName = "main" },
 		.layout = *mComputeTrsPipelineLayout
 	};
 	mComputeTrsPipeline = vk::raii::Pipeline(device, nullptr, trsPipelineInfo);
@@ -1841,19 +1921,19 @@ void Renderer::initComputeSkinningResources()
 	};
 	mComputeBonePipelineLayout = vk::raii::PipelineLayout(device, boneLayoutInfo);
 	vk::ComputePipelineCreateInfo bonePipelineInfo{
-		.stage = { .stage = vk::ShaderStageFlagBits::eCompute, .module = *boneModule, .pName = "main" },
+		.stage = {.stage = vk::ShaderStageFlagBits::eCompute, .module = *boneModule, .pName = "main" },
 		.layout = *mComputeBonePipelineLayout
 	};
 	mComputeBonePipeline = vk::raii::Pipeline(device, nullptr, bonePipelineInfo);
 
-  vk::CommandBufferAllocateInfo cmdAllocInfo{
-		.commandPool = *commandPool,
-		.level = vk::CommandBufferLevel::ePrimary,
-		.commandBufferCount = 1
+	vk::CommandBufferAllocateInfo cmdAllocInfo{
+		  .commandPool = *commandPool,
+		  .level = vk::CommandBufferLevel::ePrimary,
+		  .commandBufferCount = 1
 	};
 	auto computeCmds = device.allocateCommandBuffers(cmdAllocInfo);
 	mComputeCommandBuffer = std::move(computeCmds[0]);
-   mComputeSkinningEnabled = true;
+	mComputeSkinningEnabled = true;
 }
 
 void Renderer::ensureComputeModelResources(const std::shared_ptr<AssimpModel>& model)
@@ -1927,10 +2007,10 @@ void Renderer::ensureComputeModelResources(const std::shared_ptr<AssimpModel>& m
 
 	vk::DescriptorBufferInfo parentInfo{ .buffer = resources.parentIndexBuffer.buffer, .offset = 0, .range = VK_WHOLE_SIZE };
 	vk::DescriptorBufferInfo offsetInfo{ .buffer = resources.boneOffsetBuffer.buffer, .offset = 0, .range = VK_WHOLE_SIZE };
-	std::array<vk::WriteDescriptorSet, 2> writes = {{
-      { .dstSet = *resources.set1Descriptor, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &parentInfo },
-		{ .dstSet = *resources.set1Descriptor, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &offsetInfo },
-	}};
+	std::array<vk::WriteDescriptorSet, 2> writes = { {
+	  {.dstSet = *resources.set1Descriptor, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &parentInfo },
+		{.dstSet = *resources.set1Descriptor, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &offsetInfo },
+	} };
 	device.updateDescriptorSets(writes, nullptr);
 
 	mComputeModelResources.insert({ key, std::move(resources) });
@@ -1941,7 +2021,7 @@ void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 	AssimpInstanceGPUData gpuData;
 	gpuData.instance = instance;
 
-	auto& model     = *instance->getModel();
+	auto& model = *instance->getModel();
 	uint32_t boneCount = static_cast<uint32_t>(model.getBoneList().size());
 	if (boneCount == 0) boneCount = 1; // avoid zero-size buffer
 
@@ -1984,9 +2064,9 @@ void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 	{
 		std::vector<vk::DescriptorSetLayout> layouts(meshCount, *skinningDescriptorSetLayout);
 		vk::DescriptorSetAllocateInfo allocInfo{
-			.descriptorPool     = *skinningDescriptorPool,
+			.descriptorPool = *skinningDescriptorPool,
 			.descriptorSetCount = meshCount,
-			.pSetLayouts        = layouts.data()
+			.pSetLayouts = layouts.data()
 		};
 		auto sets = device.allocateDescriptorSets(allocInfo);
 		gpuData.descriptorSets[f].reserve(meshCount);
@@ -2015,33 +2095,33 @@ void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 			}
 
 			vk::DescriptorImageInfo imgInfo{
-				.sampler     = *skinningSampler,
-				.imageView   = diffuseView,
+				.sampler = *skinningSampler,
+				.imageView = diffuseView,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
 			};
-			std::array<vk::WriteDescriptorSet, 3> writes = {{
+			std::array<vk::WriteDescriptorSet, 3> writes = { {
 				{
-					.dstSet          = *gpuData.descriptorSets[f][m],
-					.dstBinding      = 0,
+					.dstSet = *gpuData.descriptorSets[f][m],
+					.dstBinding = 0,
 					.descriptorCount = 1,
-					.descriptorType  = vk::DescriptorType::eUniformBuffer,
-					.pBufferInfo     = &uboInfo
+					.descriptorType = vk::DescriptorType::eUniformBuffer,
+					.pBufferInfo = &uboInfo
 				},
 				{
-					.dstSet          = *gpuData.descriptorSets[f][m],
-					.dstBinding      = 1,
+					.dstSet = *gpuData.descriptorSets[f][m],
+					.dstBinding = 1,
 					.descriptorCount = 1,
-					.descriptorType  = vk::DescriptorType::eStorageBuffer,
-					.pBufferInfo     = &boneInfo
+					.descriptorType = vk::DescriptorType::eStorageBuffer,
+					.pBufferInfo = &boneInfo
 				},
 				{
-					.dstSet          = *gpuData.descriptorSets[f][m],
-					.dstBinding      = 2,
+					.dstSet = *gpuData.descriptorSets[f][m],
+					.dstBinding = 2,
 					.descriptorCount = 1,
-					.descriptorType  = vk::DescriptorType::eCombinedImageSampler,
-					.pImageInfo      = &imgInfo
+					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo = &imgInfo
 				}
-			}};
+			} };
 			device.updateDescriptorSets(writes, nullptr);
 		}
 	}
@@ -2069,7 +2149,7 @@ void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 
 void Renderer::updateAssimpAnimations(float deltaTime)
 {
-    /* calculate the size of the node matrix buffer over all animated instances */
+	/* calculate the size of the node matrix buffer over all animated instances */
 	size_t boneMatrixBufferSize = 0;
 	for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
 		size_t numberOfInstances = modelType.second.size();
@@ -2095,7 +2175,7 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 	/* we need to track the presence of animated models */
 	bool animatedModelLoaded = false;
 
-    mInstanceBoneOffsets.clear();
+	mInstanceBoneOffsets.clear();
 
 	size_t instanceToStore = 0;
 	size_t animatedInstancesToStore = 0;
@@ -2114,7 +2194,7 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 					std::vector<NodeTransformData> instanceNodeTransform = modelType.second.at(i)->getNodeTransformData();
 					std::copy(instanceNodeTransform.begin(), instanceNodeTransform.end(), mNodeTransFormData.begin() + animatedInstancesToStore + i * numberOfBones);
 					mWorldPosMatrices.at(instanceToStore + i) = modelType.second.at(i)->getWorldTransformMatrix();
-                    mInstanceBoneOffsets[modelType.second.at(i).get()] = static_cast<uint32_t>(animatedInstancesToStore + i * numberOfBones);
+					mInstanceBoneOffsets[modelType.second.at(i).get()] = static_cast<uint32_t>(animatedInstancesToStore + i * numberOfBones);
 				}
 
 				size_t trsMatrixSize = numberOfBones * numberOfInstances * sizeof(glm::mat4);
@@ -2171,7 +2251,7 @@ void Renderer::updateDescriptorSets()
 		const auto& meshes = model.getModelMeshes();
 		const uint32_t meshCount = static_cast<uint32_t>(meshes.empty() ? 1 : meshes.size());
 
-        const size_t boneCount = std::max<size_t>(1, model.getBoneList().size());
+		const size_t boneCount = std::max<size_t>(1, model.getBoneList().size());
 		vk::DeviceSize boneRange = static_cast<vk::DeviceSize>(sizeof(glm::mat4) * boneCount);
 		vk::DeviceSize boneOffset = 0;
 		if (mComputeSkinningEnabled && model.hasAnimations())
@@ -2182,7 +2262,7 @@ void Renderer::updateDescriptorSets()
 		}
 		for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
 		{
-            vk::DescriptorBufferInfo boneInfo{};
+			vk::DescriptorBufferInfo boneInfo{};
 			if (mComputeSkinningEnabled && model.hasAnimations()) {
 				boneInfo = { .buffer = mShaderBoneMatrixBuffer.buffer, .offset = boneOffset, .range = boneRange };
 			}
@@ -2202,16 +2282,16 @@ void Renderer::updateDescriptorSets()
 				}
 
 				vk::DescriptorImageInfo imgInfo{
-					.sampler     = *skinningSampler,
-					.imageView   = diffuseView,
+					.sampler = *skinningSampler,
+					.imageView = diffuseView,
 					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
 				};
 
-				std::array<vk::WriteDescriptorSet, 3> writes = {{
-					{ .dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBufferInfo = &uboInfo },
-					{ .dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &boneInfo },
-					{ .dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 2, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &imgInfo }
-				}};
+				std::array<vk::WriteDescriptorSet, 3> writes = { {
+					{.dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBufferInfo = &uboInfo },
+					{.dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &boneInfo },
+					{.dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 2, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &imgInfo }
+				} };
 
 				device.updateDescriptorSets(writes, nullptr);
 			}
@@ -2221,13 +2301,13 @@ void Renderer::updateDescriptorSets()
 
 void Renderer::updateComputeDescriptorSets()
 {
-   if (!mComputeSkinningEnabled)
+	if (!mComputeSkinningEnabled)
 		return;
 
-   vk::DescriptorBufferInfo nodeInfo{
-		.buffer = mShaderNodeTransformBuffer.buffer,
-		.offset = 0,
-		.range = VK_WHOLE_SIZE
+	vk::DescriptorBufferInfo nodeInfo{
+		 .buffer = mShaderNodeTransformBuffer.buffer,
+		 .offset = 0,
+		 .range = VK_WHOLE_SIZE
 	};
 	vk::DescriptorBufferInfo trsInfo{
 		.buffer = mShaderTRSMatrixBuffer.buffer,
@@ -2240,18 +2320,18 @@ void Renderer::updateComputeDescriptorSets()
 		.range = VK_WHOLE_SIZE
 	};
 
-	std::array<vk::WriteDescriptorSet, 4> writes = {{
-		{ .dstSet = *mComputeTrsSet0, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &nodeInfo },
-		{ .dstSet = *mComputeTrsSet0, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &trsInfo },
-		{ .dstSet = *mComputeBoneSet0, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &trsInfo },
-		{ .dstSet = *mComputeBoneSet0, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &boneInfo }
-	}};
+	std::array<vk::WriteDescriptorSet, 4> writes = { {
+		{.dstSet = *mComputeTrsSet0, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &nodeInfo },
+		{.dstSet = *mComputeTrsSet0, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &trsInfo },
+		{.dstSet = *mComputeBoneSet0, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &trsInfo },
+		{.dstSet = *mComputeBoneSet0, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &boneInfo }
+	} };
 	device.updateDescriptorSets(writes, nullptr);
 }
 
 void Renderer::runComputeShaders(const std::shared_ptr<AssimpModel>& model, size_t numberOfInstances, uint32_t modelOffset)
 {
-    if (!mComputeSkinningEnabled || !model || !model->hasAnimations() || model->getBoneList().empty() || numberOfInstances == 0)
+	if (!mComputeSkinningEnabled || !model || !model->hasAnimations() || model->getBoneList().empty() || numberOfInstances == 0)
 		return;
 
 	ensureComputeModelResources(model);
@@ -2297,6 +2377,21 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 	if (mAssimpGPUData.empty() || *skinningPipeline == VK_NULL_HANDLE)
 		return;
 
+	const UniformBufferObject* shadowTemplateUbo = nullptr;
+	for (auto& entityPtr : entities)
+	{
+		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
+		if (!renderable)
+			continue;
+		if (renderable->uniformBuffersMapped.size() <= frameIndex)
+			continue;
+		if (!renderable->uniformBuffersMapped[frameIndex])
+			continue;
+
+		shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable->uniformBuffersMapped[frameIndex]);
+		break;
+	}
+
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *skinningPipeline);
 	commandBuffer.setViewport(0, vk::Viewport(
 		0.0f, 0.0f,
@@ -2306,24 +2401,26 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
 
 	float aspect = static_cast<float>(swapChainExtent.width)
-				 / static_cast<float>(swapChainExtent.height);
+		/ static_cast<float>(swapChainExtent.height);
 
 	for (auto& gpuData : mAssimpGPUData)
 	{
-		auto& model        = *gpuData.instance->getModel();
+		auto& model = *gpuData.instance->getModel();
 		const auto& meshes = model.getModelMeshes();
-		const auto& vbos   = model.getVertexBuffers();
-		const auto& ibos   = model.getIndexBuffers();
+		const auto& vbos = model.getVertexBuffers();
+		const auto& ibos = model.getIndexBuffers();
 
 		if (meshes.empty()) continue;
 
 		// Update the persistent per-frame UBO
 		UniformBufferObject ubo{};
-		ubo.model                     = gpuData.instance->getWorldTransformMatrix();
-		ubo.view                      = camera.getViewMatrix();
-		ubo.proj                      = camera.getProjectionMatrix(aspect, 0.1f, 600.0f);
+        if (shadowTemplateUbo)
+			ubo = *shadowTemplateUbo;
+		ubo.model = gpuData.instance->getWorldTransformMatrix();
+		ubo.view = camera.getViewMatrix();
+		ubo.proj = camera.getProjectionMatrix(aspect, 0.1f, 600.0f);
 		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);
-		ubo.directionalLightColor     = glm::vec4(1.0f);
+		ubo.directionalLightColor = glm::vec4(1.0f);
 		memcpy(gpuData.uboMapped[frameIndex], &ubo, sizeof(UniformBufferObject));
 
 		// Draw each mesh with its own descriptor set (binding 0=UBO, 1=bones, 2=diffuse)
@@ -2333,7 +2430,7 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 				*skinningPipelineLayout, 0,
 				*gpuData.descriptorSets[frameIndex][i], nullptr);
 
-			vk::Buffer     vb  = vbos[i].buffer;
+			vk::Buffer     vb = vbos[i].buffer;
 			vk::DeviceSize off = 0;
 			commandBuffer.bindVertexBuffers(0, vb, off);
 			commandBuffer.bindIndexBuffer(ibos[i].buffer, 0, vk::IndexType::eUint32);

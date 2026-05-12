@@ -75,7 +75,7 @@ bool AssimpModel::loadModel(VkRenderData &renderData, std::string modelFilename,
   }
 
   /* the textures are stored directly or relative to the model file */
-  std::string assetDirectory = modelFilename.substr(0, modelFilename.find_last_of('/'));
+  std::string assetDirectory = std::filesystem::path(modelFilename).parent_path().generic_string();
 
   /* nodes */
   Logger::log(1, "%s: ... processing nodes...\n", __FUNCTION__);

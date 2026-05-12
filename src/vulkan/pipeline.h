@@ -63,4 +63,11 @@ namespace Pipeline
     [[nodiscard]] PipelineBundle createPipeline(
         vk::raii::Device const& device,
         PipelineConfig const& config);
+
+    [[nodiscard]] PipelineBundle createComputePipeline(
+        vk::raii::Device const& device,
+        std::string const& computeShaderPath,
+        std::vector<vk::DescriptorSetLayout> const& descriptorSetLayouts = {},
+        std::vector<vk::PushConstantRange> const& pushConstantRanges = {},
+        const char* entryPoint = "main");
 }

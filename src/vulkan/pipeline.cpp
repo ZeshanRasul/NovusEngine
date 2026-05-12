@@ -178,4 +178,39 @@ namespace Pipeline
         result.pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
         return result;
     }
+
+    PipelineBundle createComputePipeline(
+        vk::raii::Device const& device,
+        std::string const& computeShaderPath,
+        std::vector<vk::DescriptorSetLayout> const& descriptorSetLayouts,
+        std::vector<vk::PushConstantRange> const& pushConstantRanges,
+        const char* entryPoint)
+    {
+        auto shaderCode = readFile(computeShaderPath);
+        auto shaderModule = createShaderModule(device, shaderCode);
+
+        vk::PipelineShaderStageCreateInfo stageInfo{
+            .stage = vk::ShaderStageFlagBits::eCompute,
+            .module = *shaderModule,
+            .pName = entryPoint
+        };
+
+        vk::PipelineLayoutCreateInfo layoutInfo{
+            .setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size()),
+            .pSetLayouts = descriptorSetLayouts.data(),
+            .pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size()),
+            .pPushConstantRanges = pushConstantRanges.data()
+        };
+
+        PipelineBundle result;
+        result.layout = vk::raii::PipelineLayout(device, layoutInfo);
+
+        vk::ComputePipelineCreateInfo createInfo{
+            .stage = stageInfo,
+            .layout = *result.layout
+        };
+
+        result.pipeline = vk::raii::Pipeline(device, nullptr, createInfo);
+        return result;
+    }
 }

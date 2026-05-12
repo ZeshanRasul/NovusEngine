@@ -1,5 +1,7 @@
 #include "AssimpMesh.h"
 
+#include <filesystem>
+
 #include "Logger.h"
 #include "Tools.h"
 #include "../vulkan/Texture (2).h"
@@ -32,8 +34,12 @@ bool AssimpMesh::processMesh(VkRenderData &renderData, aiMesh* mesh, const aiSce
     Logger::log(1, "%s: - material found, name '%s'\n", __FUNCTION__, materialName.C_Str());
 
     if (mesh->mMaterialIndex >= 0) {
-      // scan only for diifuse and scalar textures for a start
-      std::vector<aiTextureType> supportedTexTypes = { aiTextureType_DIFFUSE, aiTextureType_SPECULAR };
+      // glTF commonly uses BASE_COLOR (PBR) instead of DIFFUSE
+      std::vector<aiTextureType> supportedTexTypes = {
+        aiTextureType_BASE_COLOR,
+        aiTextureType_DIFFUSE,
+        aiTextureType_SPECULAR
+      };
       for (const auto& texType : supportedTexTypes) {
         unsigned int textureCount = material->GetTextureCount(texType);
         if (textureCount > 0) {
@@ -49,7 +55,11 @@ bool AssimpMesh::processMesh(VkRenderData &renderData, aiMesh* mesh, const aiSce
 
             Logger::log(1, "%s: --- image %i has name '%s'\n", __FUNCTION__, i, texName.c_str());
 
-            mMesh.textures.insert({texType, texName});
+            if (texType == aiTextureType_BASE_COLOR) {
+              mMesh.textures[aiTextureType_DIFFUSE] = texName;
+            } else {
+              mMesh.textures[texType] = texName;
+            }
 
             /* skip already loaded textures */
             if (textures.count(texName) > 0) {
@@ -60,7 +70,7 @@ bool AssimpMesh::processMesh(VkRenderData &renderData, aiMesh* mesh, const aiSce
             // do not try to load internal textures
             if (!texName.empty() && texName.find("*") != 0) {
               VkTextureData newTex{};
-              std::string texNameWithPath = assetDirectory + '/' + texName;
+              std::string texNameWithPath = std::filesystem::path(assetDirectory).append(texName).generic_string();
               if (!AssimpTexture::loadTexture(renderData, newTex, texNameWithPath)) {
                 Logger::log(1, "%s error: could not load texture file '%s', skipping\n", __FUNCTION__, texNameWithPath.c_str());
                 AssimpTexture::cleanup(renderData, newTex);

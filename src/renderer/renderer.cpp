@@ -1889,8 +1889,6 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 		// Update the persistent per-frame UBO
 		UniformBufferObject ubo{};
 		ubo.model                     = gpuData.instance->getWorldTransformMatrix();
-		ubo.model = glm::rotate(ubo.model, glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.model = glm::scale(ubo.model, glm::vec3(500.0f)); // Sponza is huge, scale it down
 		ubo.view                      = camera.getViewMatrix();
 		ubo.proj                      = camera.getProjectionMatrix(aspect, 0.1f, 600.0f);
 		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);

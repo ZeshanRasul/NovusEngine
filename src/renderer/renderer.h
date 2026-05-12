@@ -248,5 +248,6 @@ private:
 	vk::raii::Image               skinningWhiteImage          = nullptr;
 	vk::raii::DeviceMemory        skinningWhiteMemory         = nullptr;
 	vk::raii::ImageView           skinningWhiteView           = nullptr;
-  bool                          mCleanupDone                = false;
+	bool                          mCleanupDone                = false;
+	int mManyInstanceCreateNum = 1;
 };

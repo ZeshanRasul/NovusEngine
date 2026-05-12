@@ -1,7 +1,7 @@
 #include "renderer/renderer.h"
 #include <ktx.h>
 #include <filesystem>
-
+#include <glm/gtc/type_ptr.hpp>
 #include "../vulkan/command_pool.h"
 #include "../vulkan/command_buffer.h"
 #include "../vulkan/buffer.h"
@@ -20,6 +20,8 @@
 #include "../model/AssimpModel.h"
 #include "../model/AssimpInstance.h"
 #include "../model/InstanceSettings.h"
+#include "../../lib/ImGuiFileDialog.h"
+
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
@@ -500,6 +502,267 @@ void Renderer::renderImgui()
 	ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
 	if (ImGui::Button("Reset Shadows")) {
 		shadowSettings = ShadowSettings{};
+	}
+
+	if (ImGui::CollapsingHeader("Models")) {
+		/* state is changed during model deletion, so save it first */
+		bool modelListEmtpy = mModelInstData.miModelList.empty();
+		std::string selectedModelName;
+
+		if (!modelListEmtpy) {
+			selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
+		}
+
+		if (modelListEmtpy) {
+			ImGui::BeginDisabled();
+		}
+
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Models :");
+		ImGui::SameLine();
+		ImGui::PushItemWidth(200);
+		if (ImGui::BeginCombo("##ModelCombo",
+			// avoid access the empty model vector
+			selectedModelName.c_str())) {
+			for (int i = 0; i < mModelInstData.miModelList.size(); ++i) {
+				const bool isSelected = (mModelInstData.miSelectedModel == i);
+				if (ImGui::Selectable(mModelInstData.miModelList.at(i)->getModelFileName().c_str(), isSelected)) {
+					mModelInstData.miSelectedModel = i;
+					selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
+				}
+
+				if (isSelected) {
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::PopItemWidth();
+
+		if (modelListEmtpy) {
+			ImGui::EndDisabled();
+		}
+
+
+		if (ImGui::Button("Import Model")) {
+			IGFD::FileDialogConfig config;
+			config.path = ".";
+			config.countSelectionMax = 1;
+			config.flags = ImGuiFileDialogFlags_Modal;
+			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImGuiFileDialog::Instance()->OpenDialog("ChooseModelFile", "Choose Model File",
+				"Supported Model Files{.gltf,.glb,.obj,.fbx,.dae,.mdl,.md3,.pk3}", config);
+		}
+
+		if (ImGuiFileDialog::Instance()->Display("ChooseModelFile")) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+
+				/* try to construct a relative path */
+				std::filesystem::path currentPath = std::filesystem::current_path();
+				std::string relativePath = std::filesystem::relative(filePathName, currentPath).generic_string();
+
+				if (!relativePath.empty()) {
+					filePathName = relativePath;
+				}
+				/* Windows does understand forward slashes, but std::filesystem preferres backslashes... */
+				std::replace(filePathName.begin(), filePathName.end(), '\\', '/');
+
+				if (!mModelInstData.miModelAddCallbackFunction(filePathName)) {
+					Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, filePathName.c_str());
+				}
+				else {
+					/* select new model and new instance */
+					mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
+					mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+				}
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
+
+		if (modelListEmtpy) {
+			ImGui::BeginDisabled();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Delete Model")) {
+			ImGui::OpenPopup("Delete Model?");
+		}
+
+		if (ImGui::BeginPopupModal("Delete Model?", nullptr, ImGuiChildFlags_AlwaysAutoResize)) {
+			ImGui::Text("Delete Model '%s'?", mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
+
+			/* cheating a bit to get buttons more to the center */
+			ImGui::Indent();
+			ImGui::Indent();
+			if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+				mModelInstData.miModelDeleteCallbackFunction(mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
+
+				/* decrement selected model index to point to model that is in list before the deleted one */
+				if (mModelInstData.miSelectedModel > 0) {
+					mModelInstData.miSelectedModel -= 1;
+				}
+
+				/* reset model instance to first instnace - if we have instances */
+				if (!mModelInstData.miAssimpInstances.empty()) {
+					mModelInstData.miSelectedInstance = 0;
+				}
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+				ImGui::CloseCurrentPopup();
+			}
+			ImGui::EndPopup();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Create Instance")) {
+			std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
+			mModelInstData.miInstanceAddCallbackFunction(currentModel);
+			/* select new instance */
+			mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+		}
+
+		if (ImGui::Button("Create Multiple Instances")) {
+			std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
+			mModelInstData.miInstanceAddManyCallbackFunction(currentModel, mManyInstanceCreateNum);
+			mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+		}
+		ImGui::SameLine();
+		ImGui::SliderInt("##MassInstanceCreation", &mManyInstanceCreateNum, 1, 100, "%d");
+
+		if (modelListEmtpy) {
+			ImGui::EndDisabled();
+		}
+	}
+
+	if (ImGui::CollapsingHeader("Instances")) {
+		size_t numberOfInstances = mModelInstData.miAssimpInstances.size();
+
+		ImGui::Text("Number of Instances: %ld", numberOfInstances);
+
+		if (numberOfInstances == 0) {
+			ImGui::BeginDisabled();
+		}
+
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Selected Instance  :");
+		ImGui::SameLine();
+		ImGui::PushButtonRepeat(true);
+		if (ImGui::ArrowButton("##Left", ImGuiDir_Left) &&
+			mModelInstData.miSelectedInstance > 0) {
+			mModelInstData.miSelectedInstance--;
+		}
+		ImGui::SameLine();
+		ImGui::PushItemWidth(30);
+		ImGui::DragInt("##SelInst", &mModelInstData.miSelectedInstance, 1, 0,
+			mModelInstData.miAssimpInstances.size() - 1, "%3d");
+		ImGui::PopItemWidth();
+		ImGui::SameLine();
+		if (ImGui::ArrowButton("##Right", ImGuiDir_Right) &&
+			mModelInstData.miSelectedInstance < (mModelInstData.miAssimpInstances.size() - 1)) {
+			mModelInstData.miSelectedInstance++;
+		}
+		ImGui::PopButtonRepeat();
+
+		InstanceSettings settings;
+		if (numberOfInstances > 0) {
+			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Clone Instance")) {
+			std::shared_ptr<AssimpInstance> currentInstance = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance);
+			mModelInstData.miInstanceCloneCallbackFunction(currentInstance);
+
+			/* reset to last position for now */
+			mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+
+			/* read back settings for UI */
+			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
+		}
+
+		/* we MUST retain the last model */
+		unsigned int numberOfInstancesPerModel = 0;
+		if (!mModelInstData.miAssimpInstances.empty()) {
+			std::shared_ptr<AssimpInstance> currentInstance = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance);
+			std::string currentModelName = currentInstance->getModel()->getModelFileName();
+			numberOfInstancesPerModel = mModelInstData.miAssimpInstancesPerModel[currentModelName].size();
+		}
+
+		if (numberOfInstancesPerModel < 2) {
+			ImGui::BeginDisabled();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Delete Instance")) {
+			std::shared_ptr<AssimpInstance> currentInstance = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance);
+			mModelInstData.miInstanceDeleteCallbackFunction(currentInstance);
+
+			/* hard reset for now */
+			if (mModelInstData.miSelectedInstance > 0) {
+				mModelInstData.miSelectedInstance -= 1;
+			}
+			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
+		}
+
+		if (numberOfInstancesPerModel < 2) {
+			ImGui::EndDisabled();
+		}
+
+		if (numberOfInstances == 0) {
+			ImGui::EndDisabled();
+		}
+
+		/* get the new size, in case of a deletion */
+		numberOfInstances = mModelInstData.miAssimpInstances.size();
+
+		std::string baseModelName = "None";
+		if (numberOfInstances > 0) {
+			baseModelName = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getModel()->getModelFileName();
+		}
+		ImGui::Text("Base Model: %s", baseModelName.c_str());
+
+		if (numberOfInstances == 0) {
+			ImGui::BeginDisabled();
+		}
+
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Swap Y and Z axes:     ");
+		ImGui::SameLine();
+		ImGui::Checkbox("##ModelAxisSwap", &settings.isSwapYZAxis);
+
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Model Pos (X/Y/Z):     ");
+		ImGui::SameLine();
+		ImGui::SliderFloat3("##ModelPos", glm::value_ptr(settings.isWorldPosition),
+			-25.0f, 25.0f, "%.3f");
+
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Model Rotation (X/Y/Z):");
+		ImGui::SameLine();
+		ImGui::SliderFloat3("##ModelRot", glm::value_ptr(settings.isWorldRotation),
+			-180.0f, 180.0f, "%.3f");
+
+		ImGui::AlignTextToFramePadding();
+		ImGui::Text("Model Scale:           ");
+		ImGui::SameLine();
+		ImGui::SliderFloat("##ModelScale", &settings.isScale,
+			0.001f, 10.0f, "%.4f");
+
+		if (ImGui::Button("Reset Instance Values")) {
+			InstanceSettings defaultSettings{};
+			settings = defaultSettings;
+		}
+
+		if (numberOfInstances == 0) {
+			ImGui::EndDisabled();
+		}
+
+		if (numberOfInstances > 0) {
+			mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->setInstanceSettings(settings);
+		}
 	}
 
 	if (ImGui::CollapsingHeader("Animations")) {

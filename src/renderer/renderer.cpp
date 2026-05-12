@@ -1200,15 +1200,7 @@ void Renderer::createTextureSampler()
 
 void Renderer::drawFrame()
 {
- vk::Result fenceResult = vk::Result::eSuccess;
-	try
-	{
-		fenceResult = device.waitForFences(*inFlightFences[frameIndex], vk::True, UINT64_MAX);
-	}
-	catch (const vk::DeviceLostError&)
-	{
-		throw std::runtime_error("Vulkan device lost while waiting for frame fence");
-	}
+	auto fenceResult = device.waitForFences(*inFlightFences[frameIndex], vk::True, UINT64_MAX);
 	if (fenceResult != vk::Result::eSuccess)
 		throw std::runtime_error("Failed to wait for draw fence!");
 
@@ -1221,9 +1213,8 @@ void Renderer::drawFrame()
 	}
 	if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
 	{
-      if (result == vk::Result::eErrorDeviceLost)
-			throw std::runtime_error("Vulkan device lost while acquiring swap chain image");
-		throw std::runtime_error("Failed to acquire swap chain image");
+		assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
+		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
 	device.resetFences(*inFlightFences[frameIndex]);
@@ -1232,6 +1223,8 @@ void Renderer::drawFrame()
 	renderImgui();
 
 	recordCommandBuffer(imageIndex);
+
+	queue.waitIdle();
 
 	vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 	const vk::SubmitInfo submitInfo{
@@ -1263,8 +1256,7 @@ void Renderer::drawFrame()
 	}
 	else
 	{
-     if (result != vk::Result::eSuccess)
-			throw std::runtime_error("Failed to present swap chain image");
+		assert(result == vk::Result::eSuccess);
 	}
 
 	frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1575,6 +1567,8 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 		// Update the persistent per-frame UBO
 		UniformBufferObject ubo{};
 		ubo.model                     = gpuData.instance->getWorldTransformMatrix();
+		ubo.model = glm::rotate(ubo.model, glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		ubo.model = glm::scale(ubo.model, glm::vec3(500.0f)); // Sponza is huge, scale it down
 		ubo.view                      = camera.getViewMatrix();
 		ubo.proj                      = camera.getProjectionMatrix(aspect, 0.1f, 600.0f);
 		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);

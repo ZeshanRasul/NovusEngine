@@ -1,5 +1,6 @@
 #include "renderer/renderer.h"
 #include <ktx.h>
+#include <cctype>
 #include <filesystem>
 #include <glm/gtc/type_ptr.hpp>
 #include "../vulkan/command_pool.h"
@@ -166,7 +167,22 @@ bool Renderer::addModel(std::string modelFileName) {
 	mModelInstData.miModelList.emplace_back(model);
 
 	/* also add a new instance here to see the model */
-	addInstance(model);
+	auto newInstance = addInstance(model);
+
+	// Apply known import presets for assets authored with different up/scale conventions.
+	std::string fileNameLower = std::filesystem::path(modelFileName).filename().generic_string();
+	std::transform(fileNameLower.begin(), fileNameLower.end(), fileNameLower.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+	InstanceSettings settings = newInstance->getInstanceSettings();
+	if (fileNameLower == "woman.gltf") {
+		settings.isScale = 20.0f;
+		settings.isWorldRotation.z = -90.0f;
+	}
+	else if (fileNameLower == "man.gltf") {
+		settings.isSwapYZAxis = true;
+	}
+	newInstance->setInstanceSettings(settings);
 
 	return true;
 }

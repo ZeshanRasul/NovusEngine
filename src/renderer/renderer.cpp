@@ -501,6 +501,65 @@ void Renderer::renderImgui()
 	if (ImGui::Button("Reset Shadows")) {
 		shadowSettings = ShadowSettings{};
 	}
+
+	if (ImGui::CollapsingHeader("Animations")) {
+		size_t numberOfInstances = mModelInstData.miAssimpInstances.size();
+
+		InstanceSettings settings;
+		size_t numberOfClips = 0;
+		if (numberOfInstances > 0) {
+			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
+			numberOfClips = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getModel()->getAnimClips().size();
+		}
+
+		if (numberOfInstances > 0 && numberOfClips > 0) {
+			std::vector<std::shared_ptr<AssimpAnimClip>> animClips = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getModel()->getAnimClips();
+
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Animation Clip:");
+			ImGui::SameLine();
+			if (ImGui::BeginCombo("##ClipCombo",
+				animClips.at(settings.isAnimClipNr)->getClipName().c_str())) {
+				for (int i = 0; i < animClips.size(); ++i) {
+					const bool isSelected = (settings.isAnimClipNr == i);
+					if (ImGui::Selectable(animClips.at(i)->getClipName().c_str(), isSelected)) {
+						settings.isAnimClipNr = i;
+					}
+
+					if (isSelected) {
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Replay Speed:  ");
+			ImGui::SameLine();
+			ImGui::SliderFloat("##ClipSpeed", &settings.isAnimSpeedFactor, 0.0f, 2.0f, "%.3f");
+		}
+		else {
+			/* TODO: better solution if no instances or no clips are found */
+			ImGui::BeginDisabled();
+
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Animation Clip:");
+			ImGui::SameLine();
+			ImGui::BeginCombo("##ClipComboDisabled", "None");
+
+			float playSpeed = 1.0f;
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Replay Speed:  ");
+			ImGui::SameLine();
+			ImGui::SliderFloat("##ClipSpeedDisabled", &playSpeed, 0.0f, 2.0f, "%.3f");
+
+			ImGui::EndDisabled();
+		}
+
+		if (numberOfInstances > 0) {
+			mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->setInstanceSettings(settings);
+		}
+	}
+
 	ImGui::End();
 
 	// End the frame

@@ -195,11 +195,13 @@ bool Renderer::addModel(std::string modelFileName) {
 
 	InstanceSettings settings = newInstance->getInstanceSettings();
 	if (fileNameLower == "woman.gltf") {
-		settings.isScale = 20.0f;
-		settings.isWorldRotation.z = -90.0f;
+		settings.isScale = 10.0f;
+		settings.isWorldRotation.z = 180.0f;
 	}
 	else if (fileNameLower == "man.gltf") {
 		settings.isSwapYZAxis = true;
+		settings.isWorldRotation.z = -90.0f;
+		settings.isScale = 10.0f;
 	}
 	newInstance->setInstanceSettings(settings);
 

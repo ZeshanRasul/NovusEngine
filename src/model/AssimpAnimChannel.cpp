@@ -96,7 +96,7 @@ glm::vec3 AssimpAnimChannel::getTranslation(float time) {
       }
       break;
     default:
-      Logger::log(1, "%s error: postState %i not implmented\n", __FUNCTION__, mPostState);
+      Logger::log(1, "%s error: postState %i not implented\n", __FUNCTION__, mPostState);
       break;
   }
 
@@ -129,7 +129,7 @@ glm::vec3 AssimpAnimChannel::getScaling(float time) {
       }
       break;
     default:
-      Logger::log(1, "%s error: preState %i not implmented\n", __FUNCTION__, mPreState);
+      Logger::log(1, "%s error: preState %i not implented\n", __FUNCTION__, mPreState);
       break;
   }
 
@@ -145,7 +145,7 @@ glm::vec3 AssimpAnimChannel::getScaling(float time) {
       }
       break;
     default:
-      Logger::log(1, "%s error: postState %i not implmented\n", __FUNCTION__, mPostState);
+      Logger::log(1, "%s error: postState %i not implented\n", __FUNCTION__, mPostState);
       break;
   }
 
@@ -177,7 +177,7 @@ glm::quat AssimpAnimChannel::getRotation(float time) {
       }
       break;
     default:
-      Logger::log(1, "%s error: preState %i not implmented\n", __FUNCTION__, mPreState);
+      Logger::log(1, "%s error: preState %i not implented\n", __FUNCTION__, mPreState);
       break;
   }
 
@@ -193,7 +193,7 @@ glm::quat AssimpAnimChannel::getRotation(float time) {
       }
       break;
     default:
-      Logger::log(1, "%s error: postState %i not implmented\n", __FUNCTION__, mPostState);
+      Logger::log(1, "%s error: postState %i not implented\n", __FUNCTION__, mPostState);
       break;
   }
 
@@ -204,4 +204,12 @@ glm::quat AssimpAnimChannel::getRotation(float time) {
 
   /* roiations are interpolated via SLERP */
   return glm::normalize(glm::slerp(mRotations.at(timeIndex), mRotations.at(timeIndex + 1), interpolatedTime));
+}
+
+int AssimpAnimChannel::getBoneId() {
+    return mBoneId;
+}
+
+void AssimpAnimChannel::setBoneId(int id) {
+    mBoneId = id;
 }

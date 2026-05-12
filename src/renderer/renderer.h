@@ -11,6 +11,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -39,6 +40,7 @@ import vulkan_hpp;
 #include "VkRenderData.h"
 #include "../model/ModelAndInstanceData.h"
 #include "vulkan/uniform_buffer.h"
+#include "vulkan/shader_storage_buffer.h"
 #include "../model/AssimpInstance.h"
 
 constexpr uint32_t WIDTH               = 1920;
@@ -237,8 +239,20 @@ private:
 	void createSkinningPipeline();
 	void createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
 	void deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
+   void updateDescriptorSets();
+	void updateComputeDescriptorSets();
+   void initComputeSkinningResources();
+	void ensureComputeModelResources(const std::shared_ptr<AssimpModel>& model);
+	void runComputeShaders(const std::shared_ptr<AssimpModel>& model, size_t numberOfInstances, uint32_t modelOffset);
 	void updateAssimpAnimations(float deltaTime);
 	void recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer);
+
+	struct ComputeModelResources {
+		VkShaderStorageBufferData parentIndexBuffer{};
+		VkShaderStorageBufferData boneOffsetBuffer{};
+		vk::raii::DescriptorSet set1Descriptor = nullptr;
+		uint32_t boneCount = 0;
+	};
 
 	vk::raii::DescriptorSetLayout skinningDescriptorSetLayout = nullptr;
 	vk::raii::PipelineLayout      skinningPipelineLayout      = nullptr;
@@ -250,4 +264,23 @@ private:
 	vk::raii::ImageView           skinningWhiteView           = nullptr;
 	bool                          mCleanupDone                = false;
 	int mManyInstanceCreateNum = 1;
+	std::vector<glm::mat4> mWorldPosMatrices{};
+	std::vector<NodeTransformData> mNodeTransFormData{};
+	VkShaderStorageBufferData mShaderNodeTransformBuffer{};
+	VkShaderStorageBufferData mShaderTRSMatrixBuffer{};
+	VkShaderStorageBufferData mShaderBoneMatrixBuffer{};
+	vk::raii::DescriptorSetLayout mComputeSetLayout0 = nullptr;
+	vk::raii::DescriptorSetLayout mComputeSetLayout1 = nullptr;
+	vk::raii::DescriptorPool mComputeDescriptorPool = nullptr;
+	vk::raii::DescriptorSet mComputeTrsSet0 = nullptr;
+	vk::raii::DescriptorSet mComputeBoneSet0 = nullptr;
+	vk::raii::PipelineLayout mComputeTrsPipelineLayout = nullptr;
+	vk::raii::Pipeline mComputeTrsPipeline = nullptr;
+	vk::raii::PipelineLayout mComputeBonePipelineLayout = nullptr;
+	vk::raii::Pipeline mComputeBonePipeline = nullptr;
+	vk::raii::CommandBuffer mComputeCommandBuffer = nullptr;
+    bool mComputeSkinningEnabled = false;
+	std::unordered_map<std::string, ComputeModelResources> mComputeModelResources{};
+	std::unordered_map<AssimpInstance*, uint32_t> mInstanceBoneOffsets{};
+
 };

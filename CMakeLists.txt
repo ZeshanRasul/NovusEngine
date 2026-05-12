@@ -46,7 +46,7 @@ add_executable(NovusEngine
     "src/vulkan/command_pool.cpp" "src/vulkan/command_buffer.h" "src/vulkan/command_buffer.cpp" "src/vulkan/texture.h" "src/vulkan/texture.cpp" 
     "src/vulkan/buffer.h" "src/vulkan/buffer.cpp" "src/vulkan/utils.h" "src/vulkan/utils.cpp" "src/vulkan/image.h" "src/vulkan/image.cpp" 
     "src/vulkan/image_view.h" "src/vulkan/image_view.cpp" "src/vulkan/pipeline.h" "src/vulkan/pipeline.cpp" "src/model/model.h" "src/model/model.cpp" 
-    "src/vulkan/uniform_buffer.h" "src/vulkan/uniform_buffer.cpp" "src/vulkan/descriptors.h" "src/vulkan/descriptors.cpp" "src/vulkan/swap_chain.h" "src/vulkan/swap_chain.cpp" 
+    "src/vulkan/uniform_buffer.h" "src/vulkan/uniform_buffer.cpp" "src/vulkan/shader_storage_buffer.h" "src/vulkan/shader_storage_buffer.cpp" "src/vulkan/descriptors.h" "src/vulkan/descriptors.cpp" "src/vulkan/swap_chain.h" "src/vulkan/swap_chain.cpp" 
     "src/vulkan/depth_target.h" "src/vulkan/depth_target.cpp" "src/vulkan/sync.h" "src/vulkan/sync.cpp" "src/vulkan/material.h" "src/vulkan/material.cpp" "src/model/AssimpAnimChannel.cpp"
     "src/model/AssimpAnimChannel.h" "src/model/AssimpAnimClip.cpp" "src/model/AssimpAnimClip.h" "src/model/AssimpBone.cpp" "src/model/AssimpBone.h" "src/model/AssimpInstance.cpp" 
     "src/model/AssimpInstance.h" "src/model/AssimpMesh.cpp" "src/model/AssimpMesh.h" "src/model/AssimpModel.cpp" "src/model/AssimpModel.h" "src/model/AssimpNode.cpp" "src/model/AssimpNode.h" 
@@ -67,6 +67,8 @@ set(SLANG_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader.slang)
 set(PBR_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/pbr.slang)
 set(IMGUI_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/imgui.slang)
 set(SKINNING_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/skinning.slang)
+set(TRS_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/trs_matrix.comp)
+set(BONE_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bone_matrix.comp)
 
 function (add_slang_shader_target TARGET)
   set (SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
@@ -92,6 +94,47 @@ endfunction()
 
 add_slang_shader_target(shaders)
 add_dependencies(NovusEngine shaders)
+
+set (SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
+
+
+file(GLOB GLSL_SOURCE_FILES
+   ${SHADERS_DIR}/*.comp
+)
+
+if(Vulkan_GLSLC_EXECUTABLE)
+  message("Using glslc to compile shaders")
+  foreach(GLSL ${GLSL_SOURCE_FILES})
+    get_filename_component(FILE_NAME ${GLSL} NAME)
+    set(SPIRV "${SHADERS_DIR}/${FILE_NAME}.spv")
+    add_custom_command(
+      OUTPUT ${SPIRV}
+      COMMAND ${Vulkan_GLSLC_EXECUTABLE} -o ${SPIRV} ${GLSL}
+      DEPENDS ${GLSL}
+      WORKING_DIRECTORY ${SHADERS_DIR}
+      VERBATIM
+    )
+    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+  endforeach(GLSL)
+elseif (Vulkan_GLSLANG_VALIDATOR_EXECUTABLE)
+  message("Using glslangValidator to compile shaders")
+  foreach(GLSL ${GLSL_SOURCE_FILES})
+    get_filename_component(FILE_NAME ${GLSL} NAME)
+    set(SPIRV "${SHADERS_DIR}/${FILE_NAME}.spv")
+    add_custom_command(
+      OUTPUT ${SPIRV}
+      COMMAND ${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE} -V -o ${SPIRV} ${GLSL}
+      DEPENDS ${GLSL}
+      WORKING_DIRECTORY ${SHADERS_DIR}
+      VERBATIM
+    )
+
+    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+  endforeach(GLSL)
+endif()
+
+add_custom_target(compute_shaders DEPENDS ${SPIRV_BINARY_FILES})
+add_dependencies(NovusEngine compute_shaders)
 
 target_include_directories(NovusEngine PRIVATE src include build/vcpkg_installed/x64-windows/include build/vcpkg_installed/x64-windows/include/nlohmann)
 include_directories(${GLFW3_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${ASSIMP_INCLUDE_DIR} ${VMA_SOURCE_DIR}/vma)

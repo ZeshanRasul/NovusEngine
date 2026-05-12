@@ -2,6 +2,7 @@
 #include <ktx.h>
 #include <cctype>
 #include <filesystem>
+#include <fstream>
 #include <glm/gtc/type_ptr.hpp>
 #include "../vulkan/command_pool.h"
 #include "../vulkan/command_buffer.h"
@@ -22,6 +23,24 @@
 #include "../model/AssimpInstance.h"
 #include "../model/InstanceSettings.h"
 #include "../../lib/ImGuiFileDialog.h"
+
+namespace {
+	std::vector<uint32_t> readSpvU32(const std::string& filePath)
+	{
+		std::ifstream file(filePath, std::ios::ate | std::ios::binary);
+		if (!file.is_open())
+			throw std::runtime_error("Failed to open SPIR-V file: " + filePath);
+
+		size_t fileSize = static_cast<size_t>(file.tellg());
+		if ((fileSize % sizeof(uint32_t)) != 0)
+			throw std::runtime_error("Invalid SPIR-V size for file: " + filePath);
+
+		std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
+		file.seekg(0, std::ios::beg);
+		file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(fileSize));
+		return buffer;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Public
@@ -1616,6 +1635,12 @@ void Renderer::initAssimpRenderData()
 	if (vmaCreateAllocator(&allocatorInfo, &mRenderData.rdAllocator) != VK_SUCCESS)
 		throw std::runtime_error("Failed to create VMA allocator for Assimp render data");
 
+	ShaderStorageBuffer::init(mRenderData, mShaderNodeTransformBuffer);
+	ShaderStorageBuffer::init(mRenderData, mShaderTRSMatrixBuffer);
+	ShaderStorageBuffer::init(mRenderData, mShaderBoneMatrixBuffer);
+	updateComputeDescriptorSets();
+	initComputeSkinningResources();
+
 	// Raw handles consumed by old VMA-based stack (VertexBuffer, IndexBuffer, Texture)
 	mRenderData.rdDevice         = *device;
 	mRenderData.rdPhysicalDevice = *physicalDevice;
@@ -1726,6 +1751,189 @@ void Renderer::createSkinningPipeline()
 	skinningPipeline       = std::move(bundle.pipeline);
 }
 
+void Renderer::initComputeSkinningResources()
+{
+ mComputeSkinningEnabled = false;
+
+	std::array<vk::DescriptorSetLayoutBinding, 2> set0Bindings = {{
+		{ 0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute },
+		{ 1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute }
+	}};
+	vk::DescriptorSetLayoutCreateInfo set0LayoutInfo{
+		.bindingCount = static_cast<uint32_t>(set0Bindings.size()),
+		.pBindings = set0Bindings.data()
+	};
+	mComputeSetLayout0 = vk::raii::DescriptorSetLayout(device, set0LayoutInfo);
+
+	std::array<vk::DescriptorSetLayoutBinding, 2> set1Bindings = {{
+		{ 0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute },
+		{ 1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute }
+	}};
+	vk::DescriptorSetLayoutCreateInfo set1LayoutInfo{
+		.bindingCount = static_cast<uint32_t>(set1Bindings.size()),
+		.pBindings = set1Bindings.data()
+	};
+	mComputeSetLayout1 = vk::raii::DescriptorSetLayout(device, set1LayoutInfo);
+
+	std::array<vk::DescriptorPoolSize, 1> poolSizes = {{
+		{ vk::DescriptorType::eStorageBuffer, 2048 }
+	}};
+	vk::DescriptorPoolCreateInfo poolInfo{
+		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+		.maxSets = 1024,
+		.poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+		.pPoolSizes = poolSizes.data()
+	};
+	mComputeDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+
+	std::array<vk::DescriptorSetLayout, 2> set0Layouts = { *mComputeSetLayout0, *mComputeSetLayout0 };
+	vk::DescriptorSetAllocateInfo allocInfo{
+		.descriptorPool = *mComputeDescriptorPool,
+		.descriptorSetCount = static_cast<uint32_t>(set0Layouts.size()),
+		.pSetLayouts = set0Layouts.data()
+	};
+	auto set0 = device.allocateDescriptorSets(allocInfo);
+	mComputeTrsSet0 = std::move(set0[0]);
+	mComputeBoneSet0 = std::move(set0[1]);
+
+  const std::string shaderDir = "D:\\dev\\Graphics\\NovusEngine\\shaders\\";
+	const std::string trsCompPath = shaderDir + "trs_matrix.comp.spv";
+	const std::string boneCompPath = shaderDir + "bone_matrix.comp.spv";
+	if (!std::filesystem::exists(trsCompPath) || !std::filesystem::exists(boneCompPath))
+	{
+		Logger::log(1, "%s warning: compute skinning shaders not found, skipping compute path\n", __FUNCTION__);
+		return;
+	}
+
+	vk::PushConstantRange pushRange{
+		.stageFlags = vk::ShaderStageFlagBits::eCompute,
+		.offset = 0,
+		.size = sizeof(uint32_t)
+	};
+
+	auto trsCode = readSpvU32(trsCompPath);
+	vk::ShaderModuleCreateInfo trsModuleInfo{ .codeSize = trsCode.size() * sizeof(uint32_t), .pCode = trsCode.data() };
+	vk::raii::ShaderModule trsModule(device, trsModuleInfo);
+	vk::PipelineLayoutCreateInfo trsLayoutInfo{
+		.setLayoutCount = 1,
+		.pSetLayouts = &*mComputeSetLayout0,
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &pushRange
+	};
+	mComputeTrsPipelineLayout = vk::raii::PipelineLayout(device, trsLayoutInfo);
+	vk::ComputePipelineCreateInfo trsPipelineInfo{
+		.stage = { .stage = vk::ShaderStageFlagBits::eCompute, .module = *trsModule, .pName = "main" },
+		.layout = *mComputeTrsPipelineLayout
+	};
+	mComputeTrsPipeline = vk::raii::Pipeline(device, nullptr, trsPipelineInfo);
+
+	std::array<vk::DescriptorSetLayout, 2> boneLayouts = { *mComputeSetLayout0, *mComputeSetLayout1 };
+	auto boneCode = readSpvU32(boneCompPath);
+	vk::ShaderModuleCreateInfo boneModuleInfo{ .codeSize = boneCode.size() * sizeof(uint32_t), .pCode = boneCode.data() };
+	vk::raii::ShaderModule boneModule(device, boneModuleInfo);
+	vk::PipelineLayoutCreateInfo boneLayoutInfo{
+		.setLayoutCount = static_cast<uint32_t>(boneLayouts.size()),
+		.pSetLayouts = boneLayouts.data(),
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &pushRange
+	};
+	mComputeBonePipelineLayout = vk::raii::PipelineLayout(device, boneLayoutInfo);
+	vk::ComputePipelineCreateInfo bonePipelineInfo{
+		.stage = { .stage = vk::ShaderStageFlagBits::eCompute, .module = *boneModule, .pName = "main" },
+		.layout = *mComputeBonePipelineLayout
+	};
+	mComputeBonePipeline = vk::raii::Pipeline(device, nullptr, bonePipelineInfo);
+
+  vk::CommandBufferAllocateInfo cmdAllocInfo{
+		.commandPool = *commandPool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1
+	};
+	auto computeCmds = device.allocateCommandBuffers(cmdAllocInfo);
+	mComputeCommandBuffer = std::move(computeCmds[0]);
+   mComputeSkinningEnabled = true;
+}
+
+void Renderer::ensureComputeModelResources(const std::shared_ptr<AssimpModel>& model)
+{
+	if (!model)
+		return;
+
+	const std::string key = model->getModelFileName();
+	if (mComputeModelResources.count(key) > 0)
+		return;
+
+	ComputeModelResources resources{};
+	resources.boneCount = static_cast<uint32_t>(model->getBoneList().size());
+	if (resources.boneCount == 0)
+		return;
+
+	std::vector<int32_t> parentIndices(resources.boneCount, -1);
+	std::vector<glm::mat4> boneOffsets(resources.boneCount, glm::mat4(1.0f));
+
+	const auto& nodeList = model->getNodeList();
+	std::unordered_map<std::string, int32_t> nodeToBone{};
+	nodeToBone.reserve(resources.boneCount);
+	for (const auto& bone : model->getBoneList())
+		nodeToBone[bone->getBoneName()] = static_cast<int32_t>(bone->getBoneId());
+
+	for (const auto& node : nodeList)
+	{
+		auto it = nodeToBone.find(node->getNodeName());
+		if (it == nodeToBone.end())
+			continue;
+
+		const int32_t nodeBoneId = it->second;
+		if (nodeBoneId < 0 || static_cast<uint32_t>(nodeBoneId) >= resources.boneCount)
+			continue;
+
+		int32_t parentBoneId = -1;
+		auto parentNode = node->getParentNode();
+		while (parentNode)
+		{
+			auto pb = nodeToBone.find(parentNode->getNodeName());
+			if (pb != nodeToBone.end()) {
+				parentBoneId = pb->second;
+				break;
+			}
+			parentNode = parentNode->getParentNode();
+		}
+
+		parentIndices[nodeBoneId] = parentBoneId;
+	}
+
+	for (const auto& bone : model->getBoneList())
+	{
+		const uint32_t id = bone->getBoneId();
+		if (id < resources.boneCount)
+			boneOffsets[id] = bone->getOffsetMatrix();
+	}
+
+	ShaderStorageBuffer::init(mRenderData, resources.parentIndexBuffer, parentIndices.size() * sizeof(int32_t));
+	ShaderStorageBuffer::init(mRenderData, resources.boneOffsetBuffer, boneOffsets.size() * sizeof(glm::mat4));
+	ShaderStorageBuffer::uploadSsboData(mRenderData, resources.parentIndexBuffer, parentIndices);
+	ShaderStorageBuffer::uploadSsboData(mRenderData, resources.boneOffsetBuffer, boneOffsets);
+
+	std::array<vk::DescriptorSetLayout, 1> set1Layouts = { *mComputeSetLayout1 };
+	vk::DescriptorSetAllocateInfo allocInfo{
+		.descriptorPool = *mComputeDescriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = set1Layouts.data()
+	};
+	auto sets = device.allocateDescriptorSets(allocInfo);
+	resources.set1Descriptor = std::move(sets[0]);
+
+	vk::DescriptorBufferInfo parentInfo{ .buffer = resources.parentIndexBuffer.buffer, .offset = 0, .range = VK_WHOLE_SIZE };
+	vk::DescriptorBufferInfo offsetInfo{ .buffer = resources.boneOffsetBuffer.buffer, .offset = 0, .range = VK_WHOLE_SIZE };
+	std::array<vk::WriteDescriptorSet, 2> writes = {{
+      { .dstSet = *resources.set1Descriptor, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &parentInfo },
+		{ .dstSet = *resources.set1Descriptor, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &offsetInfo },
+	}};
+	device.updateDescriptorSets(writes, nullptr);
+
+	mComputeModelResources.insert({ key, std::move(resources) });
+}
+
 void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance)
 {
 	AssimpInstanceGPUData gpuData;
@@ -1796,7 +2004,6 @@ void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 
 		for (uint32_t m = 0; m < meshCount; ++m)
 		{
-			// Resolve the diffuse image/view for this mesh
 			vk::ImageView diffuseView = *skinningWhiteView;
 			if (m < meshes.size())
 			{
@@ -1860,21 +2067,227 @@ void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 
 void Renderer::updateAssimpAnimations(float deltaTime)
 {
+    /* calculate the size of the node matrix buffer over all animated instances */
+	size_t boneMatrixBufferSize = 0;
+	for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
+		size_t numberOfInstances = modelType.second.size();
+		std::shared_ptr<AssimpModel> model = modelType.second.at(0)->getModel();
+		if (numberOfInstances > 0 && model->getTriangleCount() > 0) {
+
+			/* animated models */
+			if (model->hasAnimations() && !model->getBoneList().empty()) {
+				size_t numberOfBones = model->getBoneList().size();
+
+				/* buffer size must always be a multiple of "local_size_y" instances to avoid undefined behavior */
+				boneMatrixBufferSize += numberOfBones * ((numberOfInstances - 1) / 32 + 1) * 32;
+			}
+		}
+	}
+
+	/* clear and resize world pos matrices */
+	mWorldPosMatrices.clear();
+	mWorldPosMatrices.resize(mModelInstData.miAssimpInstances.size());
+	mNodeTransFormData.clear();
+	mNodeTransFormData.resize(boneMatrixBufferSize);
+
+	/* we need to track the presence of animated models */
+	bool animatedModelLoaded = false;
+
+    mInstanceBoneOffsets.clear();
+
+	size_t instanceToStore = 0;
+	size_t animatedInstancesToStore = 0;
+	for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
+		size_t numberOfInstances = modelType.second.size();
+		if (numberOfInstances > 0) {
+			std::shared_ptr<AssimpModel> model = modelType.second.at(0)->getModel();
+
+			/* animated models */
+			if (model->hasAnimations() && !model->getBoneList().empty()) {
+				size_t numberOfBones = model->getBoneList().size();
+				animatedModelLoaded = true;
+
+				for (unsigned int i = 0; i < numberOfInstances; ++i) {
+					modelType.second.at(i)->updateAnimation(deltaTime);
+					std::vector<NodeTransformData> instanceNodeTransform = modelType.second.at(i)->getNodeTransformData();
+					std::copy(instanceNodeTransform.begin(), instanceNodeTransform.end(), mNodeTransFormData.begin() + animatedInstancesToStore + i * numberOfBones);
+					mWorldPosMatrices.at(instanceToStore + i) = modelType.second.at(i)->getWorldTransformMatrix();
+                    mInstanceBoneOffsets[modelType.second.at(i).get()] = static_cast<uint32_t>(animatedInstancesToStore + i * numberOfBones);
+				}
+
+				size_t trsMatrixSize = numberOfBones * numberOfInstances * sizeof(glm::mat4);
+				mRenderData.rdMatricesSize += trsMatrixSize;
+
+				instanceToStore += numberOfInstances;
+				animatedInstancesToStore += numberOfInstances * numberOfBones;
+			}
+			else {
+				/* non-animated models */
+				for (unsigned int i = 0; i < numberOfInstances; ++i) {
+					mWorldPosMatrices.at(instanceToStore + i) = modelType.second.at(i)->getWorldTransformMatrix();
+				}
+
+				mRenderData.rdMatricesSize += numberOfInstances * sizeof(glm::mat4);
+				instanceToStore += numberOfInstances;
+			}
+		}
+	}
+
+	bool bufferResized = false;
+	bufferResized = ShaderStorageBuffer::uploadSsboData(mRenderData, mShaderNodeTransformBuffer, mNodeTransFormData);
+
+	/* resize SSBO if needed */
+	bufferResized |= ShaderStorageBuffer::checkForResize(mRenderData, mShaderTRSMatrixBuffer, boneMatrixBufferSize * sizeof(glm::mat4));
+	bufferResized |= ShaderStorageBuffer::checkForResize(mRenderData, mShaderBoneMatrixBuffer, boneMatrixBufferSize * sizeof(glm::mat4));
+
+	if (bufferResized) {
+		updateDescriptorSets();
+		updateComputeDescriptorSets();
+	}
+
+	if (animatedModelLoaded && mComputeSkinningEnabled) {
+		uint32_t computeShaderModelOffset = 0;
+		for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
+			size_t numberOfInstances = modelType.second.size();
+			if (numberOfInstances == 0)
+				continue;
+			std::shared_ptr<AssimpModel> modelRef = modelType.second.at(0)->getModel();
+			if (modelRef && modelRef->hasAnimations() && !modelRef->getBoneList().empty()) {
+				runComputeShaders(modelRef, numberOfInstances, computeShaderModelOffset);
+				computeShaderModelOffset += static_cast<uint32_t>(numberOfInstances * modelRef->getBoneList().size());
+			}
+		}
+		updateDescriptorSets();
+	}
+}
+
+void Renderer::updateDescriptorSets()
+{
 	for (auto& gpuData : mAssimpGPUData)
 	{
-		auto& inst  = gpuData.instance;
-		auto& model = *inst->getModel();
+		auto& model = *gpuData.instance->getModel();
+		const auto& meshes = model.getModelMeshes();
+		const uint32_t meshCount = static_cast<uint32_t>(meshes.empty() ? 1 : meshes.size());
 
-		if (model.hasAnimations())
-			inst->updateAnimation(deltaTime);
-		else
-			inst->updateModelRootMatrix();
+        const size_t boneCount = std::max<size_t>(1, model.getBoneList().size());
+		vk::DeviceSize boneRange = static_cast<vk::DeviceSize>(sizeof(glm::mat4) * boneCount);
+		vk::DeviceSize boneOffset = 0;
+		if (mComputeSkinningEnabled && model.hasAnimations())
+		{
+			auto offsetIt = mInstanceBoneOffsets.find(gpuData.instance.get());
+			if (offsetIt != mInstanceBoneOffsets.end())
+				boneOffset = static_cast<vk::DeviceSize>(offsetIt->second) * sizeof(glm::mat4);
+		}
+		for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
+		{
+            vk::DescriptorBufferInfo boneInfo{};
+			if (mComputeSkinningEnabled && model.hasAnimations()) {
+				boneInfo = { .buffer = mShaderBoneMatrixBuffer.buffer, .offset = boneOffset, .range = boneRange };
+			}
+			else {
+				boneInfo = { .buffer = *gpuData.boneBuffer, .offset = 0, .range = boneRange };
+			}
+			vk::DescriptorBufferInfo uboInfo{ .buffer = *gpuData.uboBuffers[f], .offset = 0, .range = sizeof(UniformBufferObject) };
 
-		// Upload bone matrices to the persistent mapped buffer
-		const std::vector<glm::mat4>& bones = inst->getBoneMatrices();
-		if (!bones.empty() && gpuData.boneMapped)
-			memcpy(gpuData.boneMapped, bones.data(), bones.size() * sizeof(glm::mat4));
+			for (uint32_t m = 0; m < meshCount; ++m)
+			{
+				vk::ImageView diffuseView = *skinningWhiteView;
+				if (m < meshes.size())
+				{
+					const VkTextureData* tex = model.getDiffuseTexture(m);
+					if (tex && tex->imageView != VK_NULL_HANDLE)
+						diffuseView = tex->imageView;
+				}
+
+				vk::DescriptorImageInfo imgInfo{
+					.sampler     = *skinningSampler,
+					.imageView   = diffuseView,
+					.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+				};
+
+				std::array<vk::WriteDescriptorSet, 3> writes = {{
+					{ .dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eUniformBuffer, .pBufferInfo = &uboInfo },
+					{ .dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &boneInfo },
+					{ .dstSet = *gpuData.descriptorSets[f][m], .dstBinding = 2, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &imgInfo }
+				}};
+
+				device.updateDescriptorSets(writes, nullptr);
+			}
+		}
 	}
+}
+
+void Renderer::updateComputeDescriptorSets()
+{
+   if (!mComputeSkinningEnabled)
+		return;
+
+   vk::DescriptorBufferInfo nodeInfo{
+		.buffer = mShaderNodeTransformBuffer.buffer,
+		.offset = 0,
+		.range = VK_WHOLE_SIZE
+	};
+	vk::DescriptorBufferInfo trsInfo{
+		.buffer = mShaderTRSMatrixBuffer.buffer,
+		.offset = 0,
+		.range = VK_WHOLE_SIZE
+	};
+	vk::DescriptorBufferInfo boneInfo{
+		.buffer = mShaderBoneMatrixBuffer.buffer,
+		.offset = 0,
+		.range = VK_WHOLE_SIZE
+	};
+
+	std::array<vk::WriteDescriptorSet, 4> writes = {{
+		{ .dstSet = *mComputeTrsSet0, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &nodeInfo },
+		{ .dstSet = *mComputeTrsSet0, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &trsInfo },
+		{ .dstSet = *mComputeBoneSet0, .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &trsInfo },
+		{ .dstSet = *mComputeBoneSet0, .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eStorageBuffer, .pBufferInfo = &boneInfo }
+	}};
+	device.updateDescriptorSets(writes, nullptr);
+}
+
+void Renderer::runComputeShaders(const std::shared_ptr<AssimpModel>& model, size_t numberOfInstances, uint32_t modelOffset)
+{
+    if (!mComputeSkinningEnabled || !model || !model->hasAnimations() || model->getBoneList().empty() || numberOfInstances == 0)
+		return;
+
+	ensureComputeModelResources(model);
+	auto modelIt = mComputeModelResources.find(model->getModelFileName());
+	if (modelIt == mComputeModelResources.end())
+		return;
+
+	const uint32_t numberOfBones = static_cast<uint32_t>(model->getBoneList().size());
+	vk::CommandBufferBeginInfo beginInfo{ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit };
+	mComputeCommandBuffer.reset();
+	mComputeCommandBuffer.begin(beginInfo);
+
+	mComputeCommandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, *mComputeTrsPipeline);
+	mComputeCommandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *mComputeTrsPipelineLayout, 0, *mComputeTrsSet0, nullptr);
+	mComputeCommandBuffer.pushConstants<uint32_t>(*mComputeTrsPipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, modelOffset);
+	mComputeCommandBuffer.dispatch(numberOfBones, static_cast<uint32_t>((numberOfInstances - 1) / 32 + 1), 1);
+
+	vk::MemoryBarrier2 memBarrier{
+		.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+		.srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
+		.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+		.dstAccessMask = vk::AccessFlagBits2::eShaderRead
+	};
+	vk::DependencyInfo depInfo{ .memoryBarrierCount = 1, .pMemoryBarriers = &memBarrier };
+	mComputeCommandBuffer.pipelineBarrier2(depInfo);
+
+	mComputeCommandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, *mComputeBonePipeline);
+	std::array<vk::DescriptorSet, 2> sets = { *mComputeBoneSet0, *modelIt->second.set1Descriptor };
+	mComputeCommandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *mComputeBonePipelineLayout, 0, sets, nullptr);
+	mComputeCommandBuffer.pushConstants<uint32_t>(*mComputeBonePipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, modelOffset);
+	mComputeCommandBuffer.dispatch(numberOfBones, static_cast<uint32_t>((numberOfInstances - 1) / 32 + 1), 1);
+
+	mComputeCommandBuffer.end();
+
+	vk::CommandBuffer rawCmd = *mComputeCommandBuffer;
+	vk::SubmitInfo submitInfo{ .commandBufferCount = 1, .pCommandBuffers = &rawCmd };
+	queue.submit(submitInfo, nullptr);
+	queue.waitIdle();
 }
 
 void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)

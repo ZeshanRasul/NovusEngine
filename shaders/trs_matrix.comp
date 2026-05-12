@@ -1,0 +1,68 @@
+#version 460 core
+layout(local_size_x = 1, local_size_y = 32, local_size_z = 1) in;
+
+struct NodeTransformData {
+  vec4 translation;
+  vec4 scale;
+  vec4 rotation;
+};
+
+layout(push_constant) uniform Constants {
+  uint modelOffset;
+};
+
+layout(std430, set = 0, binding = 0) readonly restrict buffer TransformData {
+  NodeTransformData data[];
+};
+
+layout(std430, set = 0, binding = 1) writeonly restrict buffer TRSMatrix {
+  mat4 trsMat[];
+};
+
+mat4 getTranslationMatrix(uint index) {
+  return mat4(
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+    data[index].translation.x, data[index].translation.y, data[index].translation.z, 1.0
+  );
+}
+
+mat4 getScaleMatrix(uint index) {
+  return mat4(
+    data[index].scale.x, 0.0, 0.0, 0.0,
+    0.0, data[index].scale.y, 0.0, 0.0,
+    0.0, 0.0, data[index].scale.z, 0.0,
+    0.0, 0.0, 0.0, 1.0
+ );
+}
+
+mat4 getRotationMatrix(uint index) {
+  vec4 q = data[index].rotation;
+
+  float qxx = q.x * q.x;
+  float qyy = q.y * q.y;
+  float qzz = q.z * q.z;
+  float qxz = q.x * q.z;
+  float qxy = q.x * q.y;
+  float qyz = q.y * q.z;
+  float qwx = q.w * q.x;
+  float qwy = q.w * q.y;
+  float qwz = q.w * q.z;
+
+  return mat4(
+    1.0 - 2.0 * (qyy + qzz),       2.0 * (qxy + qwz),       2.0 * (qxz - qwy), 0.0,
+          2.0 * (qxy - qwz), 1.0 - 2.0 * (qxx + qzz),       2.0 * (qyz + qwx), 0.0,
+          2.0 * (qxz + qwy),       2.0 * (qyz - qwx), 1.0 - 2.0 * (qxx + qyy), 0.0,
+          0.0,                     0.0,                     0.0,               1.0);
+}
+
+void main() {
+  uint node = gl_GlobalInvocationID.x;
+  uint instance = gl_GlobalInvocationID.y;
+
+  uint numberOfBones = gl_NumWorkGroups.x;
+  uint index = node + numberOfBones * instance + modelOffset;
+
+  trsMat[index] = getTranslationMatrix(index) * getRotationMatrix(index) * getScaleMatrix(index);
+}

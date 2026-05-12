@@ -21,6 +21,9 @@ class AssimpAnimChannel {
     glm::vec3 getScaling(float time);
     glm::quat getRotation(float time);
 
+    int getBoneId();
+    void setBoneId(int id);
+
   private:
     std::string mNodeName;
 
@@ -39,4 +42,5 @@ class AssimpAnimChannel {
 
     unsigned int mPreState = 0;
     unsigned int mPostState = 0;
+    int mBoneId = -1;
 };

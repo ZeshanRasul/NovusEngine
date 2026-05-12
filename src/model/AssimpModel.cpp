@@ -42,7 +42,7 @@ bool AssimpModel::loadModel(VkRenderData &renderData, std::string modelFilename,
   if (scene->HasTextures()) {
     unsigned int numTextures = scene->mNumTextures;
 
-    for (int i = 0; i < scene->mNumTextures; ++i) {
+        for (int i = 0; i < scene->mNumTextures; ++i) {
       std::string texName = scene->mTextures[i]->mFilename.C_Str();
 
       int height = scene->mTextures[i]->mHeight;
@@ -135,6 +135,51 @@ bool AssimpModel::loadModel(VkRenderData &renderData, std::string modelFilename,
       animClip->setClipName(std::to_string(i));
     }
     mAnimClips.emplace_back(animClip);
+  }
+
+  {
+    std::unordered_map<std::string, int> boneNameToId;
+    boneNameToId.reserve(mBoneList.size());
+    for (const auto& bone : mBoneList) {
+      boneNameToId[bone->getBoneName()] = static_cast<int>(bone->getBoneId());
+    }
+
+    for (auto& clip : mAnimClips) {
+      for (auto& channel : clip->getChannelsMutable()) {
+        auto it = boneNameToId.find(channel->getTargetNodeName());
+        channel->setBoneId(it != boneNameToId.end() ? it->second : -1);
+      }
+    }
+  }
+
+  {
+    std::unordered_map<std::string, int> boneNameToId;
+    boneNameToId.reserve(mBoneList.size());
+    for (const auto& bone : mBoneList) {
+      boneNameToId[bone->getBoneName()] = static_cast<int>(bone->getBoneId());
+    }
+
+    for (auto& clip : mAnimClips) {
+      for (auto& channel : clip->getChannelsMutable()) {
+        auto it = boneNameToId.find(channel->getTargetNodeName());
+        channel->setBoneId(it != boneNameToId.end() ? it->second : -1);
+      }
+    }
+  }
+
+  {
+    std::unordered_map<std::string, int> boneNameToId;
+    boneNameToId.reserve(mBoneList.size());
+    for (const auto& bone : mBoneList) {
+      boneNameToId[bone->getBoneName()] = static_cast<int>(bone->getBoneId());
+    }
+
+    for (auto& clip : mAnimClips) {
+      for (auto& channel : clip->getChannelsMutable()) {
+        auto it = boneNameToId.find(channel->getTargetNodeName());
+        channel->setBoneId(it != boneNameToId.end() ? it->second : -1);
+      }
+    }
   }
 
   mModelFilenamePath = modelFilename;

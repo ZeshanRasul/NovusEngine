@@ -11,6 +11,13 @@
 #include "AssimpBone.h"
 #include "InstanceSettings.h"
 
+/* data format to be uploaded to compute shader */
+struct NodeTransformData {
+    glm::vec4 translation = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+    glm::vec4 scale = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+    glm::vec4 rotation = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // quaternion xyzw
+};
+
 class AssimpInstance {
   public:
     AssimpInstance(std::shared_ptr<AssimpModel> model, glm::vec3 position = glm::vec3(0.0f), glm::vec3 rotation = glm::vec3(0.0f), float modelScale = 1.0f);
@@ -30,6 +37,7 @@ class AssimpInstance {
     bool getSwapYZAxis();
 
     std::vector<glm::mat4> getBoneMatrices();
+    std::vector<NodeTransformData> getNodeTransformData();
 
     void setInstanceSettings(InstanceSettings settings);
     InstanceSettings getInstanceSettings();
@@ -52,5 +60,5 @@ class AssimpInstance {
     glm::mat4 mInstanceRootMatrix = glm::mat4(1.0f);
     glm::mat4 mModelRootMatrix = glm::mat4(1.0f);
 
-    std::vector<glm::mat4> mBoneMatrices{};
+    std::vector<NodeTransformData> mNodeTransformData{};
 };

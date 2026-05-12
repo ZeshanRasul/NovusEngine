@@ -29,6 +29,10 @@ std::vector<std::shared_ptr<AssimpAnimChannel>> AssimpAnimClip::getChannels() {
   return mAnimChannels;
 }
 
+std::vector<std::shared_ptr<AssimpAnimChannel>>& AssimpAnimClip::getChannelsMutable() {
+  return mAnimChannels;
+}
+
 float AssimpAnimClip::getClipDuration() {
   return mClipDuration;
 }

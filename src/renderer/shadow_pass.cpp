@@ -74,6 +74,7 @@ void ShadowPass::createPipeline(vk::raii::Device& device,
 		.offset = 0,
 		.size = sizeof(int)
 	}};
+
 	auto pipelineBundle = Pipeline::createPipeline(device, config);
 	shadowPipelineLayout = std::move(pipelineBundle.layout);
 	shadowPipeline = std::move(pipelineBundle.pipeline);

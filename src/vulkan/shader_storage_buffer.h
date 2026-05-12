@@ -1,0 +1,50 @@
+#pragma once
+
+#include <cstddef>
+#include <cstring>
+#include <vector>
+
+#include "../renderer/VkRenderData.h"
+#include "../Logger.h"
+
+class ShaderStorageBuffer
+{
+public:
+    static bool init(VkRenderData& renderData, VkShaderStorageBufferData& SSBOData, size_t bufferSize = 1024);
+
+    template <typename T>
+    static bool uploadSsboData(VkRenderData& renderData, VkShaderStorageBufferData& SSBOData, const std::vector<T>& bufferData)
+    {
+        if (bufferData.empty())
+            return false;
+
+        bool bufferResized = false;
+        size_t bufferSize = bufferData.size() * sizeof(T);
+        if (bufferSize > SSBOData.bufferSize)
+        {
+            Logger::log(1, "%s: resize SSBO %p from %zu to %zu bytes\n", __FUNCTION__, SSBOData.buffer, SSBOData.bufferSize, bufferSize);
+            cleanup(renderData, SSBOData);
+            if (!init(renderData, SSBOData, bufferSize))
+                return false;
+            bufferResized = true;
+        }
+
+        void* data = nullptr;
+        VkResult result = vmaMapMemory(renderData.rdAllocator, SSBOData.bufferAlloc, &data);
+        if (result != VK_SUCCESS)
+        {
+            Logger::log(1, "%s error: could not map SSBO memory (error: %i)\n", __FUNCTION__, result);
+            return false;
+        }
+
+        std::memcpy(data, bufferData.data(), bufferSize);
+        vmaUnmapMemory(renderData.rdAllocator, SSBOData.bufferAlloc);
+        vmaFlushAllocation(renderData.rdAllocator, SSBOData.bufferAlloc, 0, SSBOData.bufferSize);
+
+        return bufferResized;
+    }
+
+    static bool checkForResize(VkRenderData& renderData, VkShaderStorageBufferData& SSBOData, size_t bufferSize);
+
+    static void cleanup(VkRenderData& renderData, VkShaderStorageBufferData& SSBOData);
+};

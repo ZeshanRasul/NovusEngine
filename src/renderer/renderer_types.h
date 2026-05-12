@@ -3,6 +3,8 @@
 #include <string>
 #include <array>
 #include <functional>
+#include <memory>
+#include <vector>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
@@ -15,6 +17,9 @@
 #else
 import vulkan_hpp;
 #endif
+
+// forward declarations
+class AssimpInstance;
 
 // ---------------------------------------------------------------------------
 // Vertex layout matching the PBR shader (pos / normal / texcoord / tangent)
@@ -122,3 +127,54 @@ struct Mesh {
     uint32_t indexCount    = 0;
     uint32_t materialIndex = 0;
 };
+
+// ---------------------------------------------------------------------------
+// VkVertex layout used by AssimpModel (must match VkRenderData.h VkVertex)
+//   pos(3) | color(4) | normal(3) | uv(2) | boneIndex(uvec4) | boneWeight(vec4)
+// ---------------------------------------------------------------------------
+struct SkinnedVertex
+{
+    static vk::VertexInputBindingDescription getBindingDescription()
+    {
+        // VkVertex layout: vec3 + vec4 + vec3 + vec2 + uvec4 + vec4 = 20 * 4 bytes = 80 bytes
+        return { .binding = 0, .stride = (3 + 4 + 3 + 2 + 4 + 4) * sizeof(float),
+                 .inputRate = vk::VertexInputRate::eVertex };
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 6> getAttributeDescriptions()
+    {
+        // VkVertex layout: position(3f) color(4f) normal(3f) uv(2f) boneNumber(4u) boneWeight(4f)
+        uint32_t offset = 0;
+        std::array<vk::VertexInputAttributeDescription, 6> descs{};
+        descs[0] = { 0, 0, vk::Format::eR32G32B32Sfloat,       offset }; offset += 12; // position
+        descs[1] = { 1, 0, vk::Format::eR32G32B32A32Sfloat,    offset }; offset += 16; // color
+        descs[2] = { 2, 0, vk::Format::eR32G32B32Sfloat,       offset }; offset += 12; // normal
+        descs[3] = { 3, 0, vk::Format::eR32G32Sfloat,          offset }; offset += 8;  // uv
+        descs[4] = { 4, 0, vk::Format::eR32G32B32A32Uint,      offset }; offset += 16; // boneIndex
+        descs[5] = { 5, 0, vk::Format::eR32G32B32A32Sfloat,    offset };               // boneWeight
+        return descs;
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Per-instance GPU resources for a skinned AssimpInstance
+// ---------------------------------------------------------------------------
+struct AssimpInstanceGPUData
+{
+    std::shared_ptr<AssimpInstance> instance;
+
+    // bone SSBO (host-visible, updated every frame)
+    vk::raii::Buffer       boneBuffer       = nullptr;
+    vk::raii::DeviceMemory boneBufferMemory  = nullptr;
+    void*                  boneMapped        = nullptr;
+
+    // per-frame UBO buffers (host-visible, updated every frame)
+    std::vector<vk::raii::Buffer>       uboBuffers;
+    std::vector<vk::raii::DeviceMemory> uboMemories;
+    std::vector<void*>                  uboMapped;
+
+    // descriptorSets[frame][mesh] — one set per frame per mesh
+    // (binds UBO + bone SSBO + per-mesh diffuse)
+    std::vector<std::vector<vk::raii::DescriptorSet>> descriptorSets;
+};
+

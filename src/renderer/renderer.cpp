@@ -1,5 +1,6 @@
 #include "renderer/renderer.h"
 #include <ktx.h>
+#include <filesystem>
 
 #include "../vulkan/command_pool.h"
 #include "../vulkan/command_buffer.h"
@@ -16,15 +17,26 @@
 #include "../vulkan/uniform_buffer.h"
 #include "../vulkan/descriptors.h"
 #include "../ECS/entity.h"
+#include "../model/AssimpModel.h"
+#include "../model/AssimpInstance.h"
+#include "../model/InstanceSettings.h"
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
 
 void Renderer::run()
 {
-	initWindow();
-	initVulkan();
-	mainLoop();
+   initWindow();
+	try
+	{
+		initVulkan();
+		mainLoop();
+	}
+	catch (...)
+	{
+		cleanup();
+		throw;
+	}
 	cleanup();
 }
 
@@ -50,7 +62,7 @@ void Renderer::initWindow()
 	camera.setMovementSpeed(40.0f);
 	camera.setZoom(55.0f);
 	camera.getViewMatrix();
-  camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 600.0f);
+	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 600.0f);
 }
 
 void Renderer::initVulkan()
@@ -98,6 +110,194 @@ void Renderer::initVulkan()
 
 	imGui->init(swapChainExtent.width, swapChainExtent.height);
 	imGui->initResources(); // No renderPass needed with dynamic rendering
+
+	mModelInstData.miModelCheckCallbackFunction = [this](std::string fileName) { return hasModel(fileName); };
+	mModelInstData.miModelAddCallbackFunction = [this](std::string fileName) { return addModel(fileName); };
+	mModelInstData.miModelDeleteCallbackFunction = [this](std::string modelName) { deleteModel(modelName); };
+
+	mModelInstData.miInstanceAddCallbackFunction = [this](std::shared_ptr<AssimpModel> model) { return addInstance(model); };
+	mModelInstData.miInstanceAddManyCallbackFunction = [this](std::shared_ptr<AssimpModel> model, int numInstances) { addInstances(model, numInstances); };
+	mModelInstData.miInstanceDeleteCallbackFunction = [this](std::shared_ptr<AssimpInstance> instance) { deleteInstance(instance);};
+	mModelInstData.miInstanceCloneCallbackFunction = [this](std::shared_ptr<AssimpInstance> instance) { cloneInstance(instance); };
+
+	initAssimpRenderData();
+
+	if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf")) {
+		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf");
+	}
+	else {
+		/* select new model and new instance */
+		mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
+		mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+	}
+}
+
+bool Renderer::hasModel(std::string modelFileName) {
+	auto modelIter = std::find_if(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(),
+		[modelFileName](const auto& model) {
+			return model->getModelFileNamePath() == modelFileName || model->getModelFileName() == modelFileName;
+		});
+	return modelIter != mModelInstData.miModelList.end();
+}
+
+std::shared_ptr<AssimpModel> Renderer::getModel(std::string modelFileName) {
+	auto modelIter = std::find_if(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(),
+		[modelFileName](const auto& model) {
+			return model->getModelFileNamePath() == modelFileName || model->getModelFileName() == modelFileName;
+		});
+	if (modelIter != mModelInstData.miModelList.end()) {
+		return *modelIter;
+	}
+	return nullptr;
+}
+
+bool Renderer::addModel(std::string modelFileName) {
+	if (hasModel(modelFileName)) {
+		return false;
+	}
+
+	std::shared_ptr<AssimpModel> model = std::make_shared<AssimpModel>();
+	if (!model->loadModel(mRenderData, modelFileName)) {
+		return false;
+	}
+
+	mModelInstData.miModelList.emplace_back(model);
+
+	/* also add a new instance here to see the model */
+	addInstance(model);
+
+	return true;
+}
+
+void Renderer::deleteModel(std::string modelFileName) {
+	std::string shortModelFileName = std::filesystem::path(modelFileName).filename().generic_string();
+
+	if (!mModelInstData.miAssimpInstances.empty()) {
+		mModelInstData.miAssimpInstances.erase(
+			std::remove_if(
+				mModelInstData.miAssimpInstances.begin(),
+				mModelInstData.miAssimpInstances.end(),
+				[shortModelFileName](std::shared_ptr<AssimpInstance> instance) {
+					return instance->getModel()->getModelFileName() == shortModelFileName;
+				}
+			),
+			mModelInstData.miAssimpInstances.end()
+		);
+	}
+
+	if (mModelInstData.miAssimpInstancesPerModel.count(shortModelFileName) > 0) {
+		mModelInstData.miAssimpInstancesPerModel[shortModelFileName].clear();
+		mModelInstData.miAssimpInstancesPerModel.erase(shortModelFileName);
+	}
+
+	/* add models to pending delete list */
+	for (const auto& model : mModelInstData.miModelList) {
+		if (model && (model->getTriangleCount() > 0)) {
+			mModelInstData.miPendingDeleteAssimpModels.insert(model);
+		}
+	}
+
+	mModelInstData.miModelList.erase(
+		std::remove_if(
+			mModelInstData.miModelList.begin(),
+			mModelInstData.miModelList.end(),
+			[modelFileName](std::shared_ptr<AssimpModel> model) {
+				return model->getModelFileName() == modelFileName;
+			}
+		)
+	);
+
+	updateTriangleCount();
+}
+
+std::shared_ptr<AssimpInstance> Renderer::addInstance(std::shared_ptr<AssimpModel> model) {
+	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
+	mModelInstData.miAssimpInstances.emplace_back(newInstance);
+	mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
+
+	if (*skinningPipeline != VK_NULL_HANDLE) {
+		createAssimpInstanceGPUData(newInstance);
+	}
+
+	updateTriangleCount();
+
+	return newInstance;
+}
+
+void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances) {
+	size_t animClipNum = model->getAnimClips().size();
+	for (int i = 0; i < numInstances; ++i) {
+		int xPos = std::rand() % 50 - 25;
+		int zPos = std::rand() % 50 - 25;
+		int rotation = std::rand() % 360 - 180;
+		int clipNr = std::rand() % animClipNum;
+
+		std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model, glm::vec3(xPos, 0.0f, zPos), glm::vec3(0.0f, rotation, 0.0f));
+		if (animClipNum > 0) {
+			InstanceSettings instSettings = newInstance->getInstanceSettings();
+			instSettings.isAnimClipNr = clipNr;
+			newInstance->setInstanceSettings(instSettings);
+		}
+
+		mModelInstData.miAssimpInstances.emplace_back(newInstance);
+		mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
+	}
+	updateTriangleCount();
+}
+
+void Renderer::deleteInstance(std::shared_ptr<AssimpInstance> instance) {
+	std::shared_ptr<AssimpModel> currentModel = instance->getModel();
+	std::string currentModelName = currentModel->getModelFileName();
+
+	deleteAssimpInstanceGPUData(instance);
+
+	mModelInstData.miAssimpInstances.erase(
+		std::remove_if(
+			mModelInstData.miAssimpInstances.begin(),
+			mModelInstData.miAssimpInstances.end(),
+			[instance](std::shared_ptr<AssimpInstance> inst) {
+				return inst == instance;
+			}
+		));
+
+
+	mModelInstData.miAssimpInstancesPerModel[currentModelName].erase(
+		std::remove_if(
+			mModelInstData.miAssimpInstancesPerModel[currentModelName].begin(),
+			mModelInstData.miAssimpInstancesPerModel[currentModelName].end(),
+			[instance](std::shared_ptr<AssimpInstance> inst) {
+				return inst == instance;
+			}
+		));
+
+	updateTriangleCount();
+}
+
+void Renderer::cloneInstance(std::shared_ptr<AssimpInstance> instance) {
+	std::shared_ptr<AssimpModel> currentModel = instance->getModel();
+	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(currentModel);
+	InstanceSettings newInstanceSettings = instance->getInstanceSettings();
+
+	/* slight offset to see new instance */
+	newInstanceSettings.isWorldPosition += glm::vec3(1.0f, 0.0f, -1.0f);
+	newInstance->setInstanceSettings(newInstanceSettings);
+
+	mModelInstData.miAssimpInstances.emplace_back(newInstance);
+	mModelInstData.miAssimpInstancesPerModel[currentModel->getModelFileName()].emplace_back(newInstance);
+
+	if (*skinningPipeline != VK_NULL_HANDLE) {
+		createAssimpInstanceGPUData(newInstance);
+	}
+
+	updateTriangleCount();
+}
+
+void Renderer::updateTriangleCount()
+{
+	mRenderData.rdTriangleCount = 0;
+	for (const auto& instance : mModelInstData.miAssimpInstances) {
+		mRenderData.rdTriangleCount += instance->getModel()->getTriangleCount();
+	}
 }
 
 void Renderer::mainLoop()
@@ -113,6 +313,7 @@ void Renderer::mainLoop()
 		InputSystem::Update(deltaTime);
 
 		camera.processInput(window, camera, deltaTime);
+		updateAssimpAnimations(deltaTime);
 		drawFrame();
 	}
 
@@ -121,6 +322,81 @@ void Renderer::mainLoop()
 
 void Renderer::cleanup()
 {
+   if (mCleanupDone)
+		return;
+	mCleanupDone = true;
+
+	try
+	{
+		if (*device != VK_NULL_HANDLE)
+			device.waitIdle();
+	}
+	catch (...)
+	{
+		// Ignore waitIdle failures (e.g. device lost) and continue best-effort cleanup.
+	}
+
+		// Release Assimp per-instance GPU resources (descriptor sets + mapped buffers)
+		// before destroying the skinning descriptor pool.
+		for (auto& gpuData : mAssimpGPUData)
+		{
+			if (gpuData.boneMapped)
+			{
+				gpuData.boneBufferMemory.unmapMemory();
+				gpuData.boneMapped = nullptr;
+			}
+
+			for (size_t f = 0; f < gpuData.uboMemories.size() && f < gpuData.uboMapped.size(); ++f)
+			{
+				if (gpuData.uboMapped[f])
+				{
+					gpuData.uboMemories[f].unmapMemory();
+					gpuData.uboMapped[f] = nullptr;
+				}
+			}
+		}
+		mAssimpGPUData.clear();
+
+		// Now descriptor pool/pipeline resources can be safely destroyed.
+		skinningWhiteView = nullptr;
+		skinningWhiteImage = nullptr;
+		skinningWhiteMemory = nullptr;
+		skinningSampler = nullptr;
+		skinningPipeline = nullptr;
+		skinningPipelineLayout = nullptr;
+		skinningDescriptorSetLayout = nullptr;
+		skinningDescriptorPool = nullptr;
+
+		// Cleanup all loaded Assimp model resources (VMA buffers/images).
+		std::unordered_set<AssimpModel*> cleanedModels;
+		for (const auto& model : mModelInstData.miModelList)
+		{
+			if (model && cleanedModels.insert(model.get()).second)
+				model->cleanup(mRenderData);
+		}
+		for (const auto& model : mModelInstData.miPendingDeleteAssimpModels)
+		{
+			if (model && cleanedModels.insert(model.get()).second)
+				model->cleanup(mRenderData);
+		}
+
+		mModelInstData.miAssimpInstances.clear();
+		mModelInstData.miAssimpInstancesPerModel.clear();
+		mModelInstData.miModelList.clear();
+		mModelInstData.miPendingDeleteAssimpModels.clear();
+
+  if (mRenderData.rdAllocator != VK_NULL_HANDLE)
+	{
+		vmaDestroyAllocator(mRenderData.rdAllocator);
+		mRenderData.rdAllocator = VK_NULL_HANDLE;
+	}
+
+	if (imGui)
+	{
+		delete imGui;
+		imGui = nullptr;
+	}
+
 	glfwDestroyWindow(window);
 	glfwTerminate();
 }
@@ -232,6 +508,13 @@ void Renderer::renderImgui()
 
 	// Render to generate draw data
 	ImGui::Render();
+		//ImDrawData* drawData = ImGui::GetDrawData();
+	//if (drawData && drawData->CmdListsCount > 0) {
+	//	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
+	//		needsUpdateBuffers = true;
+	//		return true;
+	//	}
+	//}
 	imGui->updateBuffers();
 }
 
@@ -439,8 +722,8 @@ void Renderer::createGraphicsPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "../shaders/slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "../shaders/slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 
 	config.vertexBindings = { bindingDescription };
@@ -473,8 +756,8 @@ bool Renderer::createPBRPipeline()
 
 		Pipeline::PipelineConfig config{};
 		config.shaderStages = {
-			{ "../shaders/pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-			{ "../shaders/pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+			{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+			{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 		};
 
 		config.vertexBindings = { bindingDescription };
@@ -669,15 +952,15 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 		if (!renderable || !transform)
 			continue;
 
-        UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
+		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
 		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
 		commandBuffer.bindIndexBuffer(*renderable->indexBuffer, 0, vk::IndexType::eUint32);
 
-     for (const auto& mesh : renderable->meshes)
+	 for (const auto& mesh : renderable->meshes)
 		{
-          const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
+		  const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
 			MaterialPushConstants::push(commandBuffer, *pbrPipelineLayout, material);
 			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
@@ -691,6 +974,8 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
 		}
 	}
+
+	recordAssimpSkinnedPass(commandBuffer);
 }
 
 
@@ -915,7 +1200,15 @@ void Renderer::createTextureSampler()
 
 void Renderer::drawFrame()
 {
-	auto fenceResult = device.waitForFences(*inFlightFences[frameIndex], vk::True, UINT64_MAX);
+ vk::Result fenceResult = vk::Result::eSuccess;
+	try
+	{
+		fenceResult = device.waitForFences(*inFlightFences[frameIndex], vk::True, UINT64_MAX);
+	}
+	catch (const vk::DeviceLostError&)
+	{
+		throw std::runtime_error("Vulkan device lost while waiting for frame fence");
+	}
 	if (fenceResult != vk::Result::eSuccess)
 		throw std::runtime_error("Failed to wait for draw fence!");
 
@@ -928,17 +1221,17 @@ void Renderer::drawFrame()
 	}
 	if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
 	{
-		assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
-		throw std::runtime_error("failed to acquire swap chain image!");
+      if (result == vk::Result::eErrorDeviceLost)
+			throw std::runtime_error("Vulkan device lost while acquiring swap chain image");
+		throw std::runtime_error("Failed to acquire swap chain image");
 	}
-
-	renderImgui();
 
 	device.resetFences(*inFlightFences[frameIndex]);
 	commandBuffers[frameIndex].reset();
-	recordCommandBuffer(imageIndex);
 
-	queue.waitIdle();
+	renderImgui();
+
+	recordCommandBuffer(imageIndex);
 
 	vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 	const vk::SubmitInfo submitInfo{
@@ -970,10 +1263,339 @@ void Renderer::drawFrame()
 	}
 	else
 	{
-		assert(result == vk::Result::eSuccess);
+     if (result != vk::Result::eSuccess)
+			throw std::runtime_error("Failed to present swap chain image");
 	}
 
 	frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+// ---------------------------------------------------------------------------
+// Assimp / skinning
+// ---------------------------------------------------------------------------
+
+void Renderer::initAssimpRenderData()
+{
+	// ---- VMA allocator from raii handles ----
+	VmaAllocatorCreateInfo allocatorInfo{};
+	allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+	allocatorInfo.physicalDevice   = *physicalDevice;
+	allocatorInfo.device           = *device;
+	allocatorInfo.instance         = *instance;
+
+	if (vmaCreateAllocator(&allocatorInfo, &mRenderData.rdAllocator) != VK_SUCCESS)
+		throw std::runtime_error("Failed to create VMA allocator for Assimp render data");
+
+	// Raw handles consumed by old VMA-based stack (VertexBuffer, IndexBuffer, Texture)
+	mRenderData.rdDevice         = *device;
+	mRenderData.rdPhysicalDevice = *physicalDevice;
+	mRenderData.rdInstance       = *instance;
+	mRenderData.rdGraphicsQueue  = *queue;
+	mRenderData.rdCommandPool    = *commandPool;
+
+	// ---- Skinning descriptor set layout ----
+	// binding 0 = UBO          (vertex)
+	// binding 1 = bone SSBO    (vertex)
+	// binding 2 = diffuse tex  (fragment)
+	std::array<vk::DescriptorSetLayoutBinding, 3> bindings = {{
+		{ 0, vk::DescriptorType::eUniformBuffer,        1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment },
+		{ 1, vk::DescriptorType::eStorageBuffer,        1, vk::ShaderStageFlagBits::eVertex   },
+		{ 2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment }
+	}};
+	vk::DescriptorSetLayoutCreateInfo layoutInfo{
+		.bindingCount = static_cast<uint32_t>(bindings.size()),
+		.pBindings    = bindings.data()
+	};
+	skinningDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
+	mRenderData.rdAssimpTextureDescriptorLayout = *skinningDescriptorSetLayout;
+
+	// ---- Descriptor pool ----
+	std::array<vk::DescriptorPoolSize, 3> poolSizes = {{
+		{ vk::DescriptorType::eUniformBuffer,        512 },
+		{ vk::DescriptorType::eStorageBuffer,        512 },
+		{ vk::DescriptorType::eCombinedImageSampler, 512 }
+	}};
+	vk::DescriptorPoolCreateInfo poolInfo{
+		.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+		.maxSets       = 512,
+		.poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+		.pPoolSizes    = poolSizes.data()
+	};
+	skinningDescriptorPool      = vk::raii::DescriptorPool(device, poolInfo);
+	mRenderData.rdDescriptorPool = *skinningDescriptorPool;
+
+	// ---- 1×1 white fallback texture ----
+	{
+		const uint32_t white = 0xFFFFFFFF;
+		vk::raii::Buffer       stagingBuf({});
+		vk::raii::DeviceMemory stagingMem({});
+		Buffer::createBuffer(device, physicalDevice, sizeof(uint32_t),
+			vk::BufferUsageFlagBits::eTransferSrc,
+			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+			stagingBuf, stagingMem);
+		void* d = stagingMem.mapMemory(0, sizeof(uint32_t));
+		memcpy(d, &white, sizeof(uint32_t));
+		stagingMem.unmapMemory();
+
+		Image::createImage(device, physicalDevice, 1, 1, vk::Format::eR8G8B8A8Unorm,
+			vk::ImageTiling::eOptimal,
+			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			skinningWhiteImage, skinningWhiteMemory);
+
+		auto tmpCmd = CommandBuffer::beginSingleTimeCommands(device, commandPool);
+		Image::transitionImageLayout(tmpCmd, skinningWhiteImage,
+			vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+		Buffer::copyBufferToImage(tmpCmd, stagingBuf, skinningWhiteImage, 1, 1);
+		Image::transitionImageLayout(tmpCmd, skinningWhiteImage,
+			vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+		CommandBuffer::endSingleTimeCommands(std::move(tmpCmd), queue);
+
+		skinningWhiteView = ImageView::createImageView(device, *skinningWhiteImage,
+			vk::Format::eR8G8B8A8Unorm, vk::ImageAspectFlagBits::eColor);
+	}
+
+	// ---- Sampler ----
+	vk::SamplerCreateInfo samplerInfo{
+		.magFilter        = vk::Filter::eLinear,
+		.minFilter        = vk::Filter::eLinear,
+		.mipmapMode       = vk::SamplerMipmapMode::eLinear,
+		.addressModeU     = vk::SamplerAddressMode::eRepeat,
+		.addressModeV     = vk::SamplerAddressMode::eRepeat,
+		.addressModeW     = vk::SamplerAddressMode::eRepeat,
+		.anisotropyEnable = vk::False,
+		.maxAnisotropy    = 1.0f,
+		.compareEnable    = vk::False,
+		.compareOp        = vk::CompareOp::eAlways,
+		.borderColor      = vk::BorderColor::eIntOpaqueBlack
+	};
+	skinningSampler = vk::raii::Sampler(device, samplerInfo);
+
+	createSkinningPipeline();
+}
+
+void Renderer::createSkinningPipeline()
+{
+	auto bindingDesc = SkinnedVertex::getBindingDescription();
+	auto attribDescs = SkinnedVertex::getAttributeDescriptions();
+
+	Pipeline::PipelineConfig config{};
+	config.shaderStages = {
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+	};
+	config.vertexBindings         = { bindingDesc };
+	config.vertexAttributes       = { attribDescs.begin(), attribDescs.end() };
+	config.descriptorSetLayouts   = { *skinningDescriptorSetLayout };
+	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+	config.depthAttachmentFormat  = DepthTarget::findDepthFormat(physicalDevice);
+	config.cullMode               = vk::CullModeFlagBits::eNone;
+
+	auto bundle          = Pipeline::createPipeline(device, config);
+	skinningPipelineLayout = std::move(bundle.layout);
+	skinningPipeline       = std::move(bundle.pipeline);
+}
+
+void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance)
+{
+	AssimpInstanceGPUData gpuData;
+	gpuData.instance = instance;
+
+	auto& model     = *instance->getModel();
+	uint32_t boneCount = static_cast<uint32_t>(model.getBoneList().size());
+	if (boneCount == 0) boneCount = 1; // avoid zero-size buffer
+
+	vk::DeviceSize boneBufferSize = sizeof(glm::mat4) * boneCount;
+
+	Buffer::createBuffer(device, physicalDevice, boneBufferSize,
+		vk::BufferUsageFlagBits::eStorageBuffer,
+		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+		gpuData.boneBuffer, gpuData.boneBufferMemory);
+
+	gpuData.boneMapped = gpuData.boneBufferMemory.mapMemory(0, boneBufferSize);
+
+	// Initialise to identity
+	std::vector<glm::mat4> identity(boneCount, glm::mat4(1.0f));
+	memcpy(gpuData.boneMapped, identity.data(), static_cast<size_t>(boneBufferSize));
+
+	const auto& meshes = model.getModelMeshes();
+	uint32_t meshCount = static_cast<uint32_t>(meshes.empty() ? 1 : meshes.size());
+
+	// Allocate per-frame UBO buffers (persistent, updated each frame via mapped pointer)
+	gpuData.uboBuffers.reserve(MAX_FRAMES_IN_FLIGHT);
+	gpuData.uboMemories.reserve(MAX_FRAMES_IN_FLIGHT);
+	gpuData.uboMapped.resize(MAX_FRAMES_IN_FLIGHT, nullptr);
+	for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
+	{
+		vk::raii::Buffer       uboBuf({});
+		vk::raii::DeviceMemory uboMem({});
+		Buffer::createBuffer(device, physicalDevice, sizeof(UniformBufferObject),
+			vk::BufferUsageFlagBits::eUniformBuffer,
+			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+			uboBuf, uboMem);
+		gpuData.uboMapped[f] = uboMem.mapMemory(0, sizeof(UniformBufferObject));
+		gpuData.uboBuffers.emplace_back(std::move(uboBuf));
+		gpuData.uboMemories.emplace_back(std::move(uboMem));
+	}
+
+	// Allocate one descriptor set per frame per mesh: descriptorSets[frame][mesh]
+	gpuData.descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+	for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
+	{
+		std::vector<vk::DescriptorSetLayout> layouts(meshCount, *skinningDescriptorSetLayout);
+		vk::DescriptorSetAllocateInfo allocInfo{
+			.descriptorPool     = *skinningDescriptorPool,
+			.descriptorSetCount = meshCount,
+			.pSetLayouts        = layouts.data()
+		};
+		auto sets = device.allocateDescriptorSets(allocInfo);
+		gpuData.descriptorSets[f].reserve(meshCount);
+		for (auto& s : sets)
+			gpuData.descriptorSets[f].emplace_back(std::move(s));
+	}
+
+	// Write bone SSBO, UBO and per-mesh diffuse texture bindings (static per frame)
+	for (uint32_t f = 0; f < MAX_FRAMES_IN_FLIGHT; ++f)
+	{
+		vk::DescriptorBufferInfo boneInfo{
+			.buffer = *gpuData.boneBuffer, .offset = 0, .range = boneBufferSize
+		};
+		vk::DescriptorBufferInfo uboInfo{
+			.buffer = *gpuData.uboBuffers[f], .offset = 0, .range = sizeof(UniformBufferObject)
+		};
+
+		for (uint32_t m = 0; m < meshCount; ++m)
+		{
+			// Resolve the diffuse image/view for this mesh
+			vk::ImageView diffuseView = *skinningWhiteView;
+			if (m < meshes.size())
+			{
+				const VkTextureData* tex = model.getDiffuseTexture(m);
+				if (tex && tex->imageView != VK_NULL_HANDLE)
+					diffuseView = tex->imageView;
+			}
+
+			vk::DescriptorImageInfo imgInfo{
+				.sampler     = *skinningSampler,
+				.imageView   = diffuseView,
+				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+			};
+			std::array<vk::WriteDescriptorSet, 3> writes = {{
+				{
+					.dstSet          = *gpuData.descriptorSets[f][m],
+					.dstBinding      = 0,
+					.descriptorCount = 1,
+					.descriptorType  = vk::DescriptorType::eUniformBuffer,
+					.pBufferInfo     = &uboInfo
+				},
+				{
+					.dstSet          = *gpuData.descriptorSets[f][m],
+					.dstBinding      = 1,
+					.descriptorCount = 1,
+					.descriptorType  = vk::DescriptorType::eStorageBuffer,
+					.pBufferInfo     = &boneInfo
+				},
+				{
+					.dstSet          = *gpuData.descriptorSets[f][m],
+					.dstBinding      = 2,
+					.descriptorCount = 1,
+					.descriptorType  = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo      = &imgInfo
+				}
+			}};
+			device.updateDescriptorSets(writes, nullptr);
+		}
+	}
+
+	mAssimpGPUData.emplace_back(std::move(gpuData));
+}
+
+void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance)
+{
+	device.waitIdle();
+	auto it = std::find_if(mAssimpGPUData.begin(), mAssimpGPUData.end(),
+		[&instance](const AssimpInstanceGPUData& d) { return d.instance == instance; });
+	if (it != mAssimpGPUData.end())
+	{
+		if (it->boneMapped)
+			it->boneBufferMemory.unmapMemory();
+		for (uint32_t f = 0; f < it->uboMemories.size(); ++f)
+		{
+			if (it->uboMapped[f])
+				it->uboMemories[f].unmapMemory();
+		}
+		mAssimpGPUData.erase(it);
+	}
+}
+
+void Renderer::updateAssimpAnimations(float deltaTime)
+{
+	for (auto& gpuData : mAssimpGPUData)
+	{
+		auto& inst  = gpuData.instance;
+		auto& model = *inst->getModel();
+
+		if (model.hasAnimations())
+			inst->updateAnimation(deltaTime);
+		else
+			inst->updateModelRootMatrix();
+
+		// Upload bone matrices to the persistent mapped buffer
+		const std::vector<glm::mat4>& bones = inst->getBoneMatrices();
+		if (!bones.empty() && gpuData.boneMapped)
+			memcpy(gpuData.boneMapped, bones.data(), bones.size() * sizeof(glm::mat4));
+	}
+}
+
+void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
+{
+	if (mAssimpGPUData.empty() || *skinningPipeline == VK_NULL_HANDLE)
+		return;
+
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *skinningPipeline);
+	commandBuffer.setViewport(0, vk::Viewport(
+		0.0f, 0.0f,
+		static_cast<float>(swapChainExtent.width),
+		static_cast<float>(swapChainExtent.height),
+		0.0f, 1.0f));
+	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
+
+	float aspect = static_cast<float>(swapChainExtent.width)
+				 / static_cast<float>(swapChainExtent.height);
+
+	for (auto& gpuData : mAssimpGPUData)
+	{
+		auto& model        = *gpuData.instance->getModel();
+		const auto& meshes = model.getModelMeshes();
+		const auto& vbos   = model.getVertexBuffers();
+		const auto& ibos   = model.getIndexBuffers();
+
+		if (meshes.empty()) continue;
+
+		// Update the persistent per-frame UBO
+		UniformBufferObject ubo{};
+		ubo.model                     = gpuData.instance->getWorldTransformMatrix();
+		ubo.view                      = camera.getViewMatrix();
+		ubo.proj                      = camera.getProjectionMatrix(aspect, 0.1f, 600.0f);
+		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);
+		ubo.directionalLightColor     = glm::vec4(1.0f);
+		memcpy(gpuData.uboMapped[frameIndex], &ubo, sizeof(UniformBufferObject));
+
+		// Draw each mesh with its own descriptor set (binding 0=UBO, 1=bones, 2=diffuse)
+		for (size_t i = 0; i < meshes.size(); ++i)
+		{
+			commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+				*skinningPipelineLayout, 0,
+				*gpuData.descriptorSets[frameIndex][i], nullptr);
+
+			vk::Buffer     vb  = vbos[i].buffer;
+			vk::DeviceSize off = 0;
+			commandBuffer.bindVertexBuffers(0, vb, off);
+			commandBuffer.bindIndexBuffer(ibos[i].buffer, 0, vk::IndexType::eUint32);
+			commandBuffer.drawIndexed(
+				static_cast<uint32_t>(meshes[i].indices.size()), 1, 0, 0, 0);
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1013,6 +1635,6 @@ void Renderer::setupGameObjects()
 
 	makeEntity("Sponza",
 		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.3f, 0.3f, 0.3f },
-		"../models/Sponza.gltf");
+		"models/Sponza.gltf");
 }
 

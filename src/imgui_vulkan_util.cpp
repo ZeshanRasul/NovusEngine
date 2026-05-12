@@ -43,7 +43,12 @@ ImGuiVulkanUtil::~ImGuiVulkanUtil() {
 	// in the main rendering loop as it causes severe performance issues. For frame
 	// synchronization, use fences and semaphores instead.
 	if (device) {
-		device->waitIdle();
+     try {
+			device->waitIdle();
+		}
+		catch (...) {
+			// Best-effort teardown: ignore device-lost or other errors during destruction.
+		}
 	}
 
 	// All resources are automatically cleaned up by their destructors
@@ -264,7 +269,7 @@ void ImGuiVulkanUtil::initResources() {
 	pipelineLayout = device->createPipelineLayout(pipelineLayoutInfo);
 
 	// Load the compiled imgui shader (vertex + fragment entry points in one SPIR-V blob)
-	auto shaderCode = readFile("../shaders/imgui.spv");
+	auto shaderCode = readFile("shaders/imgui.spv");
 	vk::raii::ShaderModule shaderModule = createShaderModule(shaderCode);
 
 	vk::PipelineShaderStageCreateInfo vertStageInfo{
@@ -400,7 +405,7 @@ bool ImGuiVulkanUtil::newFrame() {
 	//	}
 	//}
 
-	return false;
+	return true;
 }
 
 void ImGuiVulkanUtil::updateBuffers() {

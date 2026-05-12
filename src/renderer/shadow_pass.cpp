@@ -55,7 +55,7 @@ void ShadowPass::createPipeline(vk::raii::Device& device,
 
     Pipeline::PipelineConfig config{};
     config.shaderStages = {
-        { "../shaders/shadow.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
+        { "D:\\dev\\Graphics\\NovusEngine\\shaders\\shadow.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
     };
     config.vertexBindings = { Vertex::getBindingDescription() };
     config.vertexAttributes = {

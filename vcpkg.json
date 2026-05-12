@@ -5,6 +5,7 @@
     "glm",
     "tinyobjloader",
     "tinygltf",
-    "ktx"
+    "ktx",
+    "assimp"
   ]
 }

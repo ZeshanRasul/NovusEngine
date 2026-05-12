@@ -36,8 +36,10 @@ import vulkan_hpp;
 #include "renderer/shadow_pass.h"
 #include "../imgui_vulkan_util.h"
 #include "../input/input_system.h"
-
+#include "VkRenderData.h"
+#include "../model/ModelAndInstanceData.h"
 #include "vulkan/uniform_buffer.h"
+#include "../model/AssimpInstance.h"
 
 constexpr uint32_t WIDTH               = 1920;
 constexpr uint32_t HEIGHT              = 1080;
@@ -214,4 +216,37 @@ private:
 	float  lastFrameTime = 0.0f;
 
 	ImGuiVulkanUtil* imGui;
+
+	VkRenderData mRenderData{};
+	ModelAndInstanceData mModelInstData{};
+	std::vector<AssimpInstanceGPUData> mAssimpGPUData{};
+
+	bool hasModel(std::string modelFileName);
+	std::shared_ptr<AssimpModel> getModel(std::string modelFileName);
+	bool addModel(std::string modelFileName);
+	void deleteModel(std::string modelFileName);
+
+	std::shared_ptr<AssimpInstance> addInstance(std::shared_ptr<AssimpModel> model);
+	void addInstances(std::shared_ptr<AssimpModel> model, int numInstances);
+	void deleteInstance(std::shared_ptr<AssimpInstance> instance);
+	void cloneInstance(std::shared_ptr<AssimpInstance> instance);
+	void updateTriangleCount();
+
+	// Assimp / skinning pipeline
+	void initAssimpRenderData();
+	void createSkinningPipeline();
+	void createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
+	void deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
+	void updateAssimpAnimations(float deltaTime);
+	void recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer);
+
+	vk::raii::DescriptorSetLayout skinningDescriptorSetLayout = nullptr;
+	vk::raii::PipelineLayout      skinningPipelineLayout      = nullptr;
+	vk::raii::Pipeline            skinningPipeline            = nullptr;
+	vk::raii::DescriptorPool      skinningDescriptorPool      = nullptr;
+	vk::raii::Sampler             skinningSampler             = nullptr;
+	vk::raii::Image               skinningWhiteImage          = nullptr;
+	vk::raii::DeviceMemory        skinningWhiteMemory         = nullptr;
+	vk::raii::ImageView           skinningWhiteView           = nullptr;
+  bool                          mCleanupDone                = false;
 };

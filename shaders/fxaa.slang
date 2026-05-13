@@ -10,12 +10,17 @@ struct VSOutput {
 // Binding 0: the offscreen scene color image rendered by the main pass
 [[vk::binding(0, 0)]] Texture2D    sceneColor;
 [[vk::binding(0, 0)]] SamplerState sceneSampler;
+[[vk::binding(1, 0)]] Texture2D    bloomColor;
+[[vk::binding(1, 0)]] SamplerState bloomSampler;
 
 struct FxaaPushConstants
 {
     float2 rcpFrame;
     float exposure;
     float gamma;
+    float bloomIntensity;
+    int debugMode;
+    float2 _pad;
 };
 
 [[vk::push_constant]] FxaaPushConstants pc;
@@ -77,6 +82,21 @@ float3 LinearToSRGB(float3 linearColor, float gamma)
 float3 SampleTonemapped(float2 uv, float exposure, float gamma)
 {
     float3 hdr = sceneColor.Sample(sceneSampler, uv).rgb; // linear HDR
+
+    if (pc.debugMode == 1)
+    {
+        float3 mappedScene = TonemapACESFilm(hdr * exposure);
+        return LinearToSRGB(mappedScene, gamma);
+    }
+
+    float3 bloom = bloomColor.Sample(bloomSampler, uv).rgb;
+    if (pc.debugMode == 2)
+    {
+        float3 mappedBloom = TonemapACESFilm(bloom * exposure);
+        return LinearToSRGB(mappedBloom, gamma);
+    }
+
+    hdr += bloom * pc.bloomIntensity;
     float3 mapped = TonemapACESFilm(hdr * exposure);
     return LinearToSRGB(mapped, gamma);
 }

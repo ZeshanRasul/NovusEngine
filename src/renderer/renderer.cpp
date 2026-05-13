@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/component_wise.hpp>
 #include "../vulkan/command_pool.h"
 #include "../vulkan/command_buffer.h"
 #include "../vulkan/buffer.h"
@@ -47,6 +48,24 @@ struct FxaaPushConstantsCPU
 	glm::vec2 rcpFrame;
 	float exposure;
 	float gamma;
+  float bloomIntensity;
+ int debugMode;
+	glm::vec2 _pad{};
+};
+
+struct BloomExtractPushConstantsCPU
+{
+	float threshold;
+ float softKnee;
+	float prefilterScale;
+	float _pad = 0.0f;
+};
+
+struct BloomBlurPushConstantsCPU
+{
+	glm::vec2 direction;
+	float blurScale;
+  float _pad = 0.0f;
 };
 
 
@@ -98,6 +117,7 @@ void Renderer::initWindow()
 void Renderer::initVulkan()
 {
 	deviceInit();
+   physicsSystem.initialize();
 	SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
 	Image::createImage(device, physicalDevice,
@@ -107,10 +127,11 @@ void Renderer::initVulkan()
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		fxaaImage, fxaaImageMemory);	
-	fxaaImageView = ImageView::createImageView(device, fxaaImage, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
+  fxaaImageView = ImageView::createImageView(device, fxaaImage, vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 7);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, shadowDescriptorSetLayout, 7);
 	DescriptorSetLayout::createFxaaDescriptorSetLayout(device, fxaaDescriptorSetLayout);
+   createBloomResources();
 	if (!createPBRPipeline())
 	{
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
@@ -129,12 +150,17 @@ void Renderer::initVulkan()
 		ShadowPass::createResources(device, physicalDevice, shadowImages[i], shadowImageMemories[i], shadowImageViews[i], shadowSampler);
 	createTextureSampler();
 	createFxaaSampler();
+    createBloomDescriptorSets();
+	createBloomPipelines();
 	createDefaultTextures();
 	setupGameObjects();
 	for (auto& entityPtr : entities)
 	{
-		createVertexBuffer(*entityPtr->GetComponent<RenderableComponent>());
-		createIndexBuffer(*entityPtr->GetComponent<RenderableComponent>());
+        auto* renderable = entityPtr->GetComponent<RenderableComponent>();
+		if (!renderable)
+			continue;
+		createVertexBuffer(*renderable);
+		createIndexBuffer(*renderable);
 	}
 	UniformBuffer::createUniformBuffers(entities, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createDescriptorPool(device, entities, descriptorPool, MAX_FRAMES_IN_FLIGHT);
@@ -143,7 +169,7 @@ void Renderer::initVulkan()
 		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
 	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
-	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
+ DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
 	Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
@@ -376,6 +402,7 @@ void Renderer::mainLoop()
 		InputSystem::Update(deltaTime);
 
 		camera.processInput(window, camera, deltaTime);
+		physicsSystem.step(deltaTime);
 		updateAssimpAnimations(deltaTime);
 		drawFrame();
 	}
@@ -461,6 +488,8 @@ void Renderer::cleanup()
 		delete imGui;
 		imGui = nullptr;
 	}
+
+	physicsSystem.shutdown();
 
 	glfwDestroyWindow(window);
 	glfwTerminate();
@@ -548,6 +577,17 @@ void Renderer::renderImgui()
 		camera.setZoom(zoom);
 	}
 
+	ImGui::End();
+
+	ImGui::Begin("Post Processing");
+	ImGui::SliderFloat("Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
+	ImGui::SliderFloat("Gamma", &fxaaGamma, 1.0f, 3.0f, "%.2f");
+	ImGui::Separator();
+	ImGui::Checkbox("Bloom Enabled", &bloomEnabled);
+	ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.1f, 4.0f, "%.2f");
+	ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 2.0f, "%.3f");
+	ImGui::SliderFloat("Bloom Blur Scale", &bloomBlurScale, 0.25f, 3.0f, "%.2f");
+	ImGui::SliderInt("Bloom Blur Passes", &bloomBlurPasses, 1, 8);
 	ImGui::End();
 
 	ImGui::Begin("Shadow Tuning");
@@ -895,6 +935,34 @@ void Renderer::renderImgui()
 	ImGui::Begin("Post Processing");
 	ImGui::SliderFloat("FXAA Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
 	ImGui::SliderFloat("FXAA Gamma", &fxaaGamma, 1.0f, 3.0f, "%.2f");
+   ImGui::Checkbox("Bloom Enabled", &bloomEnabled);
+ ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.05f, 4.0f, "%.2f");
+	ImGui::SliderFloat("Bloom Soft Knee", &bloomSoftKnee, 0.0f, 1.0f, "%.2f");
+	ImGui::SliderFloat("Bloom Prefilter", &bloomPrefilterScale, 0.5f, 6.0f, "%.2f");
+	ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 4.0f, "%.3f");
+	ImGui::SliderFloat("Bloom Blur Scale", &bloomBlurScale, 0.25f, 3.0f, "%.2f");
+	ImGui::SliderInt("Bloom Blur Passes", &bloomBlurPasses, 1, 8);
+	const char* debugModes[] = { "Final", "Scene HDR", "Bloom Only" };
+	ImGui::Combo("Post Debug", &postProcessDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
+	ImGui::End();
+
+	ImGui::Begin("Physics Demo");
+	ImGui::Checkbox("Pause Physics", &physicsPaused);
+	physicsSystem.setPaused(physicsPaused);
+
+	glm::vec3 gravity = physicsSystem.getGravity();
+	if (ImGui::SliderFloat3("Gravity", &gravity.x, -30.0f, 30.0f, "%.2f"))
+	{
+		physicsSystem.setGravity(gravity);
+	}
+
+	ImGui::SliderInt("Spawn Count", &physicsSpawnCount, 1, 128);
+	ImGui::SliderFloat("Spawn Height", &physicsSpawnHeight, 0.0f, -3120.0f, "%.1f");
+
+	if (ImGui::Button("Reset Physics"))
+	{
+		physicsSystem.reset();
+	}
 	ImGui::End();
 
 	// End the frame
@@ -1220,6 +1288,8 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
 
+  recordBloomPasses(commandBuffer);
+
 	recordFxaaPass(commandBuffer, imageIndex);
 
 	recordImguiPass(commandBuffer, imageIndex);
@@ -1416,9 +1486,156 @@ void Renderer::createFxaaSampler()
 	fxaaSampler = vk::raii::Sampler(device, samplerInfo);
 }
 
-void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+void Renderer::createBloomResources()
 {
-	// Transition fxaaImage: color attachment → shader read so the FXAA FS can sample it
+  bloomExtent = {
+		.width = std::max(1u, swapChainExtent.width / 2),
+		.height = std::max(1u, swapChainExtent.height / 2)
+	};
+
+	Image::createImage(device, physicalDevice,
+      bloomExtent.width, bloomExtent.height,
+		bloomFormat,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		bloomImageA, bloomImageAMemory);
+	bloomImageAView = ImageView::createImageView(device, bloomImageA, bloomFormat, vk::ImageAspectFlagBits::eColor);
+
+	Image::createImage(device, physicalDevice,
+      bloomExtent.width, bloomExtent.height,
+		bloomFormat,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		bloomImageB, bloomImageBMemory);
+	bloomImageBView = ImageView::createImageView(device, bloomImageB, bloomFormat, vk::ImageAspectFlagBits::eColor);
+}
+
+void Renderer::createBloomDescriptorSets()
+{
+	std::array<vk::DescriptorSetLayoutBinding, 1> binding{ {
+		{.binding = 0, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment }
+	} };
+	vk::DescriptorSetLayoutCreateInfo layoutInfo{
+		.bindingCount = static_cast<uint32_t>(binding.size()),
+		.pBindings = binding.data()
+	};
+	bloomExtractDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
+	bloomBlurDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
+
+	std::array<vk::DescriptorPoolSize, 1> poolSizes{ {
+		{ .type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT }
+	} };
+	vk::DescriptorPoolCreateInfo poolInfo{
+		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+		.maxSets = 3 * MAX_FRAMES_IN_FLIGHT,
+		.poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+		.pPoolSizes = poolSizes.data()
+	};
+	bloomDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+
+	std::vector<vk::DescriptorSetLayout> extractLayouts(MAX_FRAMES_IN_FLIGHT, *bloomExtractDescriptorSetLayout);
+	vk::DescriptorSetAllocateInfo extractAllocInfo{
+		.descriptorPool = *bloomDescriptorPool,
+		.descriptorSetCount = static_cast<uint32_t>(extractLayouts.size()),
+		.pSetLayouts = extractLayouts.data()
+	};
+	bloomExtractDescriptorSets = device.allocateDescriptorSets(extractAllocInfo);
+
+	std::vector<vk::DescriptorSetLayout> blurLayouts(MAX_FRAMES_IN_FLIGHT, *bloomBlurDescriptorSetLayout);
+	vk::DescriptorSetAllocateInfo blurAllocInfo{
+		.descriptorPool = *bloomDescriptorPool,
+		.descriptorSetCount = static_cast<uint32_t>(blurLayouts.size()),
+		.pSetLayouts = blurLayouts.data()
+	};
+	bloomBlurFromADescriptorSets = device.allocateDescriptorSets(blurAllocInfo);
+	bloomBlurFromBDescriptorSets = device.allocateDescriptorSets(blurAllocInfo);
+
+	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+	{
+		vk::DescriptorImageInfo extractInfo{ .sampler = *fxaaSampler, .imageView = *fxaaImageView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+		vk::WriteDescriptorSet extractWrite{
+			.dstSet = *bloomExtractDescriptorSets[i],
+			.dstBinding = 0,
+			.descriptorCount = 1,
+			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+			.pImageInfo = &extractInfo
+		};
+		device.updateDescriptorSets(extractWrite, nullptr);
+
+		vk::DescriptorImageInfo blurFromAInfo{ .sampler = *fxaaSampler, .imageView = *bloomImageAView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+		vk::WriteDescriptorSet blurAWrite{
+			.dstSet = *bloomBlurFromADescriptorSets[i],
+			.dstBinding = 0,
+			.descriptorCount = 1,
+			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+			.pImageInfo = &blurFromAInfo
+		};
+		device.updateDescriptorSets(blurAWrite, nullptr);
+
+		vk::DescriptorImageInfo blurFromBInfo{ .sampler = *fxaaSampler, .imageView = *bloomImageBView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+		vk::WriteDescriptorSet blurBWrite{
+			.dstSet = *bloomBlurFromBDescriptorSets[i],
+			.dstBinding = 0,
+			.descriptorCount = 1,
+			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+			.pImageInfo = &blurFromBInfo
+		};
+		device.updateDescriptorSets(blurBWrite, nullptr);
+	}
+}
+
+void Renderer::createBloomPipelines()
+{
+	vk::PushConstantRange extractPushRange{
+		.stageFlags = vk::ShaderStageFlagBits::eFragment,
+		.offset = 0,
+		.size = sizeof(BloomExtractPushConstantsCPU)
+	};
+	Pipeline::PipelineConfig extractConfig{};
+	extractConfig.shaderStages = {
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+	};
+	extractConfig.descriptorSetLayouts = { *bloomExtractDescriptorSetLayout };
+	extractConfig.pushConstantRanges = { extractPushRange };
+	extractConfig.colorAttachmentFormats = { bloomFormat };
+	extractConfig.depthTestEnable = false;
+	extractConfig.depthWriteEnable = false;
+	extractConfig.blendEnable = false;
+	extractConfig.cullMode = vk::CullModeFlagBits::eNone;
+	auto extractBundle = Pipeline::createPipeline(device, extractConfig);
+	bloomExtractPipelineLayout = std::move(extractBundle.layout);
+	bloomExtractPipeline = std::move(extractBundle.pipeline);
+
+	vk::PushConstantRange blurPushRange{
+		.stageFlags = vk::ShaderStageFlagBits::eFragment,
+		.offset = 0,
+		.size = sizeof(BloomBlurPushConstantsCPU)
+	};
+	Pipeline::PipelineConfig blurConfig{};
+	blurConfig.shaderStages = {
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+	};
+	blurConfig.descriptorSetLayouts = { *bloomBlurDescriptorSetLayout };
+	blurConfig.pushConstantRanges = { blurPushRange };
+	blurConfig.colorAttachmentFormats = { bloomFormat };
+	blurConfig.depthTestEnable = false;
+	blurConfig.depthWriteEnable = false;
+	blurConfig.blendEnable = false;
+	blurConfig.cullMode = vk::CullModeFlagBits::eNone;
+	auto blurBundle = Pipeline::createPipeline(device, blurConfig);
+	bloomBlurPipelineLayout = std::move(blurBundle.layout);
+	bloomBlurPipeline = std::move(blurBundle.pipeline);
+}
+
+void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
+{
+ if (!bloomEnabled)
+		return;
+
 	transition_image_layout(*fxaaImage,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -1428,6 +1645,185 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		vk::PipelineStageFlagBits2::eFragmentShader,
 		vk::ImageAspectFlagBits::eColor);
 
+	transition_image_layout(*bloomImageA,
+		bloomImageALayout,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::AccessFlags2{},
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::PipelineStageFlagBits2::eTopOfPipe,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::ImageAspectFlagBits::eColor);
+	bloomImageALayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+	vk::RenderingAttachmentInfo bloomAttachmentA{
+		.imageView = bloomImageAView,
+		.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+		.loadOp = vk::AttachmentLoadOp::eClear,
+		.storeOp = vk::AttachmentStoreOp::eStore,
+		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
+	};
+	vk::RenderingInfo bloomRenderInfoA{
+     .renderArea = {.offset = { 0, 0 }, .extent = bloomExtent },
+		.layerCount = 1,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = &bloomAttachmentA
+	};
+
+	vk::RenderingInfo bloomRenderInfoB{
+		.renderArea = {.offset = { 0, 0 }, .extent = bloomExtent },
+		.layerCount = 1,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = nullptr
+	};
+	commandBuffer.beginRendering(bloomRenderInfoA);
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloomExtractPipeline);
+	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
+      static_cast<float>(bloomExtent.width),
+		static_cast<float>(bloomExtent.height), 0.0f, 1.0f));
+	commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, bloomExtent));
+	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+		*bloomExtractPipelineLayout, 0,
+		*bloomExtractDescriptorSets[frameIndex], nullptr);
+  BloomExtractPushConstantsCPU extractPc{
+		.threshold = bloomThreshold,
+		.softKnee = bloomSoftKnee,
+		.prefilterScale = bloomPrefilterScale
+	};
+	commandBuffer.pushConstants<BloomExtractPushConstantsCPU>(
+		*bloomExtractPipelineLayout,
+		vk::ShaderStageFlagBits::eFragment,
+		0,
+		extractPc);
+	commandBuffer.draw(3, 1, 0, 0);
+	commandBuffer.endRendering();
+
+	transition_image_layout(*bloomImageA,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::AccessFlagBits2::eShaderSampledRead,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits2::eFragmentShader,
+		vk::ImageAspectFlagBits::eColor);
+	bloomImageALayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+	transition_image_layout(*bloomImageB,
+		bloomImageBLayout,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::AccessFlags2{},
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::PipelineStageFlagBits2::eTopOfPipe,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::ImageAspectFlagBits::eColor);
+	bloomImageBLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+   vk::RenderingAttachmentInfo bloomAttachmentB{
+		.imageView = bloomImageBView,
+		.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+		.loadOp = vk::AttachmentLoadOp::eClear,
+		.storeOp = vk::AttachmentStoreOp::eStore,
+		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
+	};
+ bloomRenderInfoB.pColorAttachments = &bloomAttachmentB;
+
+	const int blurPassPairs = std::max(1, bloomBlurPasses);
+	for (int i = 0; i < blurPassPairs; ++i)
+	{
+     if (i > 0)
+		{
+			transition_image_layout(*bloomImageB,
+				vk::ImageLayout::eShaderReadOnlyOptimal,
+				vk::ImageLayout::eColorAttachmentOptimal,
+				vk::AccessFlagBits2::eShaderSampledRead,
+				vk::AccessFlagBits2::eColorAttachmentWrite,
+				vk::PipelineStageFlagBits2::eFragmentShader,
+				vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+				vk::ImageAspectFlagBits::eColor);
+			bloomImageBLayout = vk::ImageLayout::eColorAttachmentOptimal;
+		}
+
+		commandBuffer.beginRendering(bloomRenderInfoB);
+		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloomBlurPipeline);
+		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
+			static_cast<float>(bloomExtent.width),
+			static_cast<float>(bloomExtent.height), 0.0f, 1.0f));
+		commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, bloomExtent));
+		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+			*bloomBlurPipelineLayout, 0,
+			*bloomBlurFromADescriptorSets[frameIndex], nullptr);
+		BloomBlurPushConstantsCPU blurPcX{
+			.direction = {
+				1.0f / static_cast<float>(bloomExtent.width),
+				0.0f
+			},
+			.blurScale = bloomBlurScale
+		};
+		commandBuffer.pushConstants<BloomBlurPushConstantsCPU>(
+			*bloomBlurPipelineLayout,
+			vk::ShaderStageFlagBits::eFragment,
+			0,
+			blurPcX);
+		commandBuffer.draw(3, 1, 0, 0);
+		commandBuffer.endRendering();
+
+		transition_image_layout(*bloomImageB,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::AccessFlagBits2::eColorAttachmentWrite,
+			vk::AccessFlagBits2::eShaderSampledRead,
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits2::eFragmentShader,
+			vk::ImageAspectFlagBits::eColor);
+		bloomImageBLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+		transition_image_layout(*bloomImageA,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::AccessFlagBits2::eShaderSampledRead,
+			vk::AccessFlagBits2::eColorAttachmentWrite,
+			vk::PipelineStageFlagBits2::eFragmentShader,
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+			vk::ImageAspectFlagBits::eColor);
+		bloomImageALayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+		commandBuffer.beginRendering(bloomRenderInfoA);
+		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloomBlurPipeline);
+		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
+			static_cast<float>(bloomExtent.width),
+			static_cast<float>(bloomExtent.height), 0.0f, 1.0f));
+		commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, bloomExtent));
+		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+			*bloomBlurPipelineLayout, 0,
+			*bloomBlurFromBDescriptorSets[frameIndex], nullptr);
+		BloomBlurPushConstantsCPU blurPcY{
+			.direction = {
+				0.0f,
+				1.0f / static_cast<float>(bloomExtent.height)
+			},
+			.blurScale = bloomBlurScale
+		};
+		commandBuffer.pushConstants<BloomBlurPushConstantsCPU>(
+			*bloomBlurPipelineLayout,
+			vk::ShaderStageFlagBits::eFragment,
+			0,
+			blurPcY);
+		commandBuffer.draw(3, 1, 0, 0);
+		commandBuffer.endRendering();
+
+		transition_image_layout(*bloomImageA,
+			vk::ImageLayout::eColorAttachmentOptimal,
+			vk::ImageLayout::eShaderReadOnlyOptimal,
+			vk::AccessFlagBits2::eColorAttachmentWrite,
+			vk::AccessFlagBits2::eShaderSampledRead,
+			vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+			vk::PipelineStageFlagBits2::eFragmentShader,
+			vk::ImageAspectFlagBits::eColor);
+		bloomImageALayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+	}
+}
+
+void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+{
 	// Transition swapchain image: undefined → color attachment for FXAA output
 	transition_image_layout(swapChainImages[imageIndex],
 		vk::ImageLayout::eUndefined,
@@ -1471,7 +1867,9 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 			1.0f / static_cast<float>(swapChainExtent.height)
 		},
 		.exposure = fxaaExposure,
-		.gamma = fxaaGamma
+      .gamma = fxaaGamma,
+      .bloomIntensity = bloomEnabled ? bloomIntensity : 0.0f,
+		.debugMode = postProcessDebugMode
 	};
 
 	commandBuffer.pushConstants<FxaaPushConstantsCPU>(
@@ -2588,10 +2986,13 @@ void Renderer::setupGameObjects()
 			transform->SetRotation(glm::quat(rotation));
 			transform->SetScale(scale);
 
-			auto* renderable = entity.AddComponent<RenderableComponent>();
-			Model::loadModel(modelPath, *renderable);
-			for (size_t i = 0; i < renderable->materials.size(); ++i)
-				loadPBRTextures(renderable->materials[i], renderable->materialTextures[i]);
+          if (!modelPath.empty())
+			{
+				auto* renderable = entity.AddComponent<RenderableComponent>();
+				Model::loadModel(modelPath, *renderable);
+				for (size_t i = 0; i < renderable->materials.size(); ++i)
+					loadPBRTextures(renderable->materials[i], renderable->materialTextures[i]);
+			}
 
 			return entity;
 		};
@@ -2609,5 +3010,81 @@ void Renderer::setupGameObjects()
 	makeEntity("Sponza",
 		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.3f, 0.3f, 0.3f },
 		"models/Sponza.gltf");
+
+	setupPhysicsShowcase();
+
+	for (auto& entity : entities)
+		physicsSystem.registerEntity(entity.get());
+}
+
+void Renderer::setupPhysicsShowcase()
+{
+	auto makePhysicsEntity = [&](const std::string& name,
+		glm::vec3 position, glm::vec3 rotation, glm::vec3 scale,
+		const std::string& modelPath,
+		PhysicsBodyType bodyType,
+		PhysicsShapeType shapeType,
+		float mass,
+		float restitution,
+		float friction,
+		glm::vec3 linearVelocity = glm::vec3(0.0f)) -> Entity& {
+			entities.push_back(std::make_unique<Entity>(name));
+			Entity& entity = *entities.back();
+
+			auto* transform = entity.AddComponent<TransformComponent>();
+			transform->SetPosition(position);
+			transform->SetRotation(glm::quat(rotation));
+			transform->SetScale(scale);
+
+          if (!modelPath.empty())
+			{
+				auto* renderable = entity.AddComponent<RenderableComponent>();
+				Model::loadModel(modelPath, *renderable);
+				for (size_t i = 0; i < renderable->materials.size(); ++i)
+					loadPBRTextures(renderable->materials[i], renderable->materialTextures[i]);
+			}
+
+			auto* physics = entity.AddComponent<PhysicsComponent>();
+			physics->bodyType = bodyType;
+			physics->shapeType = shapeType;
+			physics->mass = mass;
+			physics->restitution = restitution;
+			physics->friction = friction;
+			physics->halfExtents = glm::max(scale * 0.5f, glm::vec3(0.1f));
+			physics->radius = glm::max(0.2f, glm::compMax(scale) * 0.5f);
+			physics->setLinearVelocity(linearVelocity);
+
+			return entity;
+		};
+
+	makePhysicsEntity("PhysicsFloor",
+		{ 0.0f, -0.25f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 2000.0f, 0.5f, 2000.0f },
+       "",
+		PhysicsBodyType::Static,
+		PhysicsShapeType::Box,
+		0.0f,
+		0.0f,
+		0.9f);
+
+	for (int i = 0; i < 16; ++i)
+	{
+		const float x = -30.0f + static_cast<float>(i % 4) * 22.0f;
+		const float z =  40.0f + static_cast<float>(i / 4) * 22.0f;
+		const float y = physicsSpawnHeight + static_cast<float>(i) * 12.0f;
+
+		const bool sphere = (i % 2) == 0;
+		makePhysicsEntity(
+			sphere ? "PhysicsSphere" : "PhysicsBox",
+			{ x, y, z },
+			{ 0.0f, 0.0f, 0.0f },
+			sphere ? glm::vec3(10.55f) : glm::vec3(10.65f),
+			sphere ? "models/FlightHelmet.gltf" : "models/DamagedHelmet.gltf",
+			PhysicsBodyType::Dynamic,
+			sphere ? PhysicsShapeType::Sphere : PhysicsShapeType::Box,
+			1.0f,
+			0.35f,
+			0.4f,
+			glm::vec3(0.0f));
+	}
 }
 

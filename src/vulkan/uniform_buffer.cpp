@@ -9,10 +9,13 @@ void UniformBuffer::createUniformBuffers(std::vector<std::unique_ptr<Entity>>& e
 {
 	for (auto& entityPtr : entities)
 	{
-		auto& gameObject = *entityPtr->GetComponent<RenderableComponent>();
-		gameObject.uniformBuffers.clear();
-		gameObject.uniformBuffersMemory.clear();
-		gameObject.uniformBuffersMapped.clear();
+		auto* gameObject = entityPtr->GetComponent<RenderableComponent>();
+		if (!gameObject)
+			continue;
+
+		gameObject->uniformBuffers.clear();
+		gameObject->uniformBuffersMemory.clear();
+		gameObject->uniformBuffersMapped.clear();
 
 		for (size_t i = 0; i < framesInFlight; i++)
 		{
@@ -22,9 +25,9 @@ void UniformBuffer::createUniformBuffers(std::vector<std::unique_ptr<Entity>>& e
 			Buffer::createBuffer(device, physicalDevice, bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
 				vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 				buffer, bufferMem);
-			gameObject.uniformBuffers.emplace_back(std::move(buffer));
-			gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
-			gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));
+			gameObject->uniformBuffers.emplace_back(std::move(buffer));
+			gameObject->uniformBuffersMemory.emplace_back(std::move(bufferMem));
+			gameObject->uniformBuffersMapped.emplace_back(gameObject->uniformBuffersMemory[i].mapMemory(0, bufferSize));
 		}
 	}
 }

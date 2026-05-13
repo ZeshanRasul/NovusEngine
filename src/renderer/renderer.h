@@ -34,6 +34,7 @@ import vulkan_hpp;
 #include "ECS/components/transform_component.h"
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"
+#include "ECS/components/physics_component.h"
 #include "renderer/shadow_pass.h"
 #include "../imgui_vulkan_util.h"
 #include "../input/input_system.h"
@@ -42,6 +43,7 @@ import vulkan_hpp;
 #include "vulkan/uniform_buffer.h"
 #include "vulkan/shader_storage_buffer.h"
 #include "../model/AssimpInstance.h"
+#include "physics/physics_system.h"
 
 constexpr uint32_t WIDTH               = 1920;
 constexpr uint32_t HEIGHT              = 1080;
@@ -121,6 +123,7 @@ private:
 
 	// Scene
 	void setupGameObjects();
+	void setupPhysicsShowcase();
 
 	// Callbacks
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
@@ -217,6 +220,10 @@ private:
 
 	Camera camera;
     ShadowSettings shadowSettings;
+    PhysicsSystem physicsSystem;
+	bool physicsPaused = false;
+	int physicsSpawnCount = 24;
+	float physicsSpawnHeight = -800.0f;
 	float  lastFrameTime = 0.0f;
 
 	ImGuiVulkanUtil* imGui;
@@ -301,6 +308,42 @@ private:
 	float fxaaGamma = 2.2f;
 
 	void createFxaaSampler();
+   void createBloomResources();
+	void createBloomPipelines();
+	void createBloomDescriptorSets();
+	void recordBloomPasses(vk::raii::CommandBuffer& commandBuffer);
 	void recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
 	void createFxaaPipeline();
+
+	vk::Format bloomFormat = vk::Format::eR16G16B16A16Sfloat;
+  vk::Extent2D bloomExtent{};
+	vk::raii::Image bloomImageA = nullptr;
+	vk::raii::DeviceMemory bloomImageAMemory = nullptr;
+	vk::raii::ImageView bloomImageAView = nullptr;
+	vk::raii::Image bloomImageB = nullptr;
+	vk::raii::DeviceMemory bloomImageBMemory = nullptr;
+	vk::raii::ImageView bloomImageBView = nullptr;
+	vk::ImageLayout bloomImageALayout = vk::ImageLayout::eUndefined;
+	vk::ImageLayout bloomImageBLayout = vk::ImageLayout::eUndefined;
+
+	vk::raii::DescriptorSetLayout bloomExtractDescriptorSetLayout = nullptr;
+	vk::raii::DescriptorSetLayout bloomBlurDescriptorSetLayout = nullptr;
+	vk::raii::DescriptorPool bloomDescriptorPool = nullptr;
+	std::vector<vk::raii::DescriptorSet> bloomExtractDescriptorSets;
+	std::vector<vk::raii::DescriptorSet> bloomBlurFromADescriptorSets;
+	std::vector<vk::raii::DescriptorSet> bloomBlurFromBDescriptorSets;
+
+	vk::raii::PipelineLayout bloomExtractPipelineLayout = nullptr;
+	vk::raii::Pipeline bloomExtractPipeline = nullptr;
+	vk::raii::PipelineLayout bloomBlurPipelineLayout = nullptr;
+	vk::raii::Pipeline bloomBlurPipeline = nullptr;
+
+	bool bloomEnabled = true;
+    float bloomThreshold = 0.7f;
+	float bloomSoftKnee = 0.5f;
+	float bloomPrefilterScale = 2.0f;
+	float bloomIntensity = 0.2f;
+	float bloomBlurScale = 1.0f;
+  int bloomBlurPasses = 2;
+  int postProcessDebugMode = 0;
 };

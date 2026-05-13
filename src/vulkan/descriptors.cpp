@@ -33,7 +33,7 @@ void DescriptorPool::createDescriptorPool(vk::raii::Device& device, std::vector<
 void DescriptorPool::createFxaaDescriptorPool(vk::raii::Device& device, vk::raii::DescriptorPool& descriptorPool, uint32_t framesInFlight)
 {
 	std::array<vk::DescriptorPoolSize, 1> poolSize{ {
-		{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = framesInFlight}
+      {.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 2 * framesInFlight}
 	} };
 
 	vk::DescriptorPoolCreateInfo poolInfo{
@@ -52,14 +52,15 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 {
 	for (auto& entityPtr : entities)
 	{
-		auto& gameObject = *entityPtr->GetComponent<RenderableComponent>();
-		gameObject.materialDescriptorSets.clear();
-		gameObject.materialDescriptorSets.resize(gameObject.materials.size());
-
-		for (size_t materialIndex = 0; materialIndex < gameObject.materials.size(); ++materialIndex)
+		auto* gameObject = entityPtr->GetComponent<RenderableComponent>();
+		if (!gameObject)
+			continue;
+		gameObject->materialDescriptorSets.clear();
+		gameObject->materialDescriptorSets.resize(gameObject->materials.size());
+		for (size_t materialIndex = 0; materialIndex < gameObject->materials.size(); ++materialIndex)
 		{
-			auto& materialTextures = gameObject.materialTextures[materialIndex];
-			auto& descriptorSetsForMaterial = gameObject.materialDescriptorSets[materialIndex];
+			auto& materialTextures = gameObject->materialTextures[materialIndex];
+			auto& descriptorSetsForMaterial = gameObject->materialDescriptorSets[materialIndex];
 
 			std::vector<vk::DescriptorSetLayout> layouts(framesInFlight, *descriptorSetLayout);
 			vk::DescriptorSetAllocateInfo allocInfo{
@@ -73,7 +74,7 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 			for (size_t i = 0; i < framesInFlight; i++)
 			{
 				vk::DescriptorBufferInfo bufferInfo{
-					.buffer = *gameObject.uniformBuffers[i],
+					.buffer = *gameObject->uniformBuffers[i],
 					.offset = 0,
 					.range = sizeof(UniformBufferObject)
 				};
@@ -115,8 +116,8 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 
 }
 
-void DescriptorSet::createFxaaDescriptorSets(vk::raii::Device& device, vk::raii::DescriptorPool& descriptorPool, vk::raii::DescriptorSetLayout& descriptorSetLayout, vk::raii::ImageView& inputImageView, 
-	vk::raii::Sampler& textureSampler, uint32_t framesInFlight, std::vector<vk::raii::DescriptorSet>& fxaaDescriptorSets)
+void DescriptorSet::createFxaaDescriptorSets(vk::raii::Device& device, vk::raii::DescriptorPool& descriptorPool, vk::raii::DescriptorSetLayout& descriptorSetLayout, vk::raii::ImageView& inputImageView,
+	vk::raii::ImageView& bloomImageView, vk::raii::Sampler& textureSampler, uint32_t framesInFlight, std::vector<vk::raii::DescriptorSet>& fxaaDescriptorSets)
 {
 	std::vector<vk::DescriptorSetLayout> layouts(framesInFlight, *descriptorSetLayout);
 	vk::DescriptorSetAllocateInfo allocInfo{
@@ -127,9 +128,13 @@ void DescriptorSet::createFxaaDescriptorSets(vk::raii::Device& device, vk::raii:
 	fxaaDescriptorSets = device.allocateDescriptorSets(allocInfo);
 	for (size_t i = 0; i < framesInFlight; i++)
 	{
-		vk::DescriptorImageInfo imageInfo{ .sampler = *textureSampler, .imageView = *inputImageView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
-		vk::WriteDescriptorSet descriptorWrite{ .dstSet = *fxaaDescriptorSets[i], .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &imageInfo };
-		device.updateDescriptorSets(descriptorWrite, {});
+      vk::DescriptorImageInfo sceneInfo{ .sampler = *textureSampler, .imageView = *inputImageView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+		vk::DescriptorImageInfo bloomInfo{ .sampler = *textureSampler, .imageView = *bloomImageView, .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal };
+		std::array<vk::WriteDescriptorSet, 2> descriptorWrites{ {
+			{ .dstSet = *fxaaDescriptorSets[i], .dstBinding = 0, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &sceneInfo },
+			{ .dstSet = *fxaaDescriptorSets[i], .dstBinding = 1, .descriptorCount = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .pImageInfo = &bloomInfo }
+		} };
+		device.updateDescriptorSets(descriptorWrites, {});
 	};
 }
 
@@ -158,8 +163,9 @@ void DescriptorSetLayout::createEntityDescriptorSetLayout(vk::raii::Device& devi
 
 void DescriptorSetLayout::createFxaaDescriptorSetLayout(vk::raii::Device& device, vk::raii::DescriptorSetLayout& descriptorSetLayout)
 {
-	std::array<vk::DescriptorSetLayoutBinding, 1> bindings{ {
-		{.binding = 0, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment }
+   std::array<vk::DescriptorSetLayoutBinding, 2> bindings{ {
+		{.binding = 0, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment },
+		{.binding = 1, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eFragment }
 		} };
 
 	vk::DescriptorSetLayoutCreateInfo layoutInfo{ .bindingCount = static_cast<uint32_t>(bindings.size()),

@@ -221,7 +221,7 @@ namespace Pipeline
 		vk::PushConstantRange fxaaPushConstantRange{
 			.stageFlags = vk::ShaderStageFlagBits::eFragment,
 			.offset = 0,
-			.size = sizeof(float) * 4
+           .size = sizeof(float) * 8
 		};
 
 		vk::PipelineLayoutCreateInfo layoutInfo{

@@ -297,7 +297,8 @@ private:
 	vk::raii::PipelineLayout fxaaPipelineLayout = nullptr;
 	vk::raii::Pipeline fxaaPipeline = nullptr;
 	vk::raii::Sampler fxaaSampler = nullptr;
-
+	float fxaaExposure = 1.0f;
+	float fxaaGamma = 2.2f;
 
 	void createFxaaSampler();
 	void recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);

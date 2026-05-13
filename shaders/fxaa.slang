@@ -11,9 +11,14 @@ struct VSOutput {
 [[vk::binding(0, 0)]] Texture2D    sceneColor;
 [[vk::binding(0, 0)]] SamplerState sceneSampler;
 
-// rcpFrame = (1.0 / screenWidth, 1.0 / screenHeight)
-// Tells FXAA how large one texel is in UV space for neighbour lookups
-[[vk::push_constant]] float2 rcpFrame;
+struct FxaaPushConstants
+{
+    float2 rcpFrame;
+    float exposure;
+    float gamma;
+};
+
+[[vk::push_constant]] FxaaPushConstants pc;
 
 // ---------------------------------------------------------------------------
 // Vertex shader — fullscreen triangle (no vertex buffer)
@@ -82,8 +87,10 @@ float4 fragMain(VSOutput input) : SV_TARGET
 {
     float2 uv = input.UV;
 
-    float exposure = 1.0;
-    float gamma = 2.2;
+    float exposure = pc.exposure;
+    float gamma = pc.gamma;
+
+    float2 rcpFrame = pc.rcpFrame;
 
     // --- 1. Sample luma at center and cardinal neighbours ---
     float lumaCenter = luma(SampleTonemapped(uv, exposure, gamma));

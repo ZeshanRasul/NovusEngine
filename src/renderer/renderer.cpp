@@ -42,6 +42,14 @@ namespace {
 	}
 }
 
+struct FxaaPushConstantsCPU
+{
+	glm::vec2 rcpFrame;
+	float exposure;
+	float gamma;
+};
+
+
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
@@ -884,8 +892,14 @@ void Renderer::renderImgui()
 
 	ImGui::End();
 
+	ImGui::Begin("Post Processing");
+	ImGui::SliderFloat("FXAA Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
+	ImGui::SliderFloat("FXAA Gamma", &fxaaGamma, 1.0f, 3.0f, "%.2f");
+	ImGui::End();
+
 	// End the frame
 	ImGui::EndFrame();
+
 
 	// Render to generate draw data
 	ImGui::Render();
@@ -1451,12 +1465,21 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		*fxaaDescriptorSets[frameIndex], nullptr);
 
 	// Push rcpFrame so the FXAA shader knows the texel size
-	glm::vec2 rcpFrame{
-		1.0f / static_cast<float>(swapChainExtent.width),
-		1.0f / static_cast<float>(swapChainExtent.height)
+	FxaaPushConstantsCPU pc{
+		.rcpFrame = {
+			1.0f / static_cast<float>(swapChainExtent.width),
+			1.0f / static_cast<float>(swapChainExtent.height)
+		},
+		.exposure = fxaaExposure,
+		.gamma = fxaaGamma
 	};
-	commandBuffer.pushConstants<glm::vec2>(*fxaaPipelineLayout,
-		vk::ShaderStageFlagBits::eFragment, 0, rcpFrame);
+
+	commandBuffer.pushConstants<FxaaPushConstantsCPU>(
+		*fxaaPipelineLayout,
+		vk::ShaderStageFlagBits::eFragment,
+		0,
+		pc
+	);
 
 	// 3 vertices, no vertex buffer — the VS generates the fullscreen triangle
 	commandBuffer.draw(3, 1, 0, 0);

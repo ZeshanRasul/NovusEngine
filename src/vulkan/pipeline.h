@@ -70,4 +70,9 @@ namespace Pipeline
         std::vector<vk::DescriptorSetLayout> const& descriptorSetLayouts = {},
         std::vector<vk::PushConstantRange> const& pushConstantRanges = {},
         const char* entryPoint = "main");
+
+    [[nodiscard]] PipelineBundle createFxaaPipeline(
+        vk::raii::Device const& device,
+        vk::Format colorFormat,
+        vk::raii::DescriptorSetLayout const& descriptorSetLayout);
 }

@@ -3,214 +3,319 @@
 #include <array>
 #include <fstream>
 #include <stdexcept>
+#include <glm/glm.hpp>
+
 
 namespace
 {
-    std::vector<char> readFile(const std::string& filename)
-    {
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
-        if (!file.is_open())
-            throw std::runtime_error("Failed to open shader file: " + filename);
+	std::vector<char> readFile(const std::string& filename)
+	{
+		std::ifstream file(filename, std::ios::ate | std::ios::binary);
+		if (!file.is_open())
+			throw std::runtime_error("Failed to open shader file: " + filename);
 
-        std::vector<char> buffer(static_cast<size_t>(file.tellg()));
-        file.seekg(0, std::ios::beg);
-        file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-        return buffer;
-    }
+		std::vector<char> buffer(static_cast<size_t>(file.tellg()));
+		file.seekg(0, std::ios::beg);
+		file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+		return buffer;
+	}
 
-    vk::raii::ShaderModule createShaderModule(
-        vk::raii::Device const& device,
-        std::vector<char> const& code)
-    {
-        vk::ShaderModuleCreateInfo createInfo{
-            .codeSize = code.size(),
-            .pCode = reinterpret_cast<uint32_t const*>(code.data())
-        };
+	vk::raii::ShaderModule createShaderModule(
+		vk::raii::Device const& device,
+		std::vector<char> const& code)
+	{
+		vk::ShaderModuleCreateInfo createInfo{
+			.codeSize = code.size(),
+			.pCode = reinterpret_cast<uint32_t const*>(code.data())
+		};
 
-        return vk::raii::ShaderModule(device, createInfo);
-    }
+		return vk::raii::ShaderModule(device, createInfo);
+	}
 }
 
 namespace Pipeline
 {
-    PipelineBundle createPipeline(vk::raii::Device const& device, PipelineConfig const& config)
-    {
-        if (config.shaderStages.empty())
-            throw std::runtime_error("PipelineConfig requires at least one shader stage.");
+	PipelineBundle createPipeline(vk::raii::Device const& device, PipelineConfig const& config)
+	{
+		if (config.shaderStages.empty())
+			throw std::runtime_error("PipelineConfig requires at least one shader stage.");
 
-        if (config.colorAttachmentFormats.empty() &&
-            config.depthAttachmentFormat == vk::Format::eUndefined &&
-            config.stencilAttachmentFormat == vk::Format::eUndefined)
-        {
-            throw std::runtime_error("PipelineConfig requires at least one attachment format.");
-        }
+		if (config.colorAttachmentFormats.empty() &&
+			config.depthAttachmentFormat == vk::Format::eUndefined &&
+			config.stencilAttachmentFormat == vk::Format::eUndefined)
+		{
+			throw std::runtime_error("PipelineConfig requires at least one attachment format.");
+		}
 
-        std::vector<vk::raii::ShaderModule> shaderModules;
-        shaderModules.reserve(config.shaderStages.size());
+		std::vector<vk::raii::ShaderModule> shaderModules;
+		shaderModules.reserve(config.shaderStages.size());
 
-        std::vector<vk::PipelineShaderStageCreateInfo> shaderStageInfos;
-        shaderStageInfos.reserve(config.shaderStages.size());
+		std::vector<vk::PipelineShaderStageCreateInfo> shaderStageInfos;
+		shaderStageInfos.reserve(config.shaderStages.size());
 
-        for (auto const& shaderStage : config.shaderStages)
-        {
-            auto shaderCode = readFile(shaderStage.shaderPath);
-            shaderModules.emplace_back(createShaderModule(device, shaderCode));
+		for (auto const& shaderStage : config.shaderStages)
+		{
+			auto shaderCode = readFile(shaderStage.shaderPath);
+			shaderModules.emplace_back(createShaderModule(device, shaderCode));
 
-            shaderStageInfos.emplace_back(vk::PipelineShaderStageCreateInfo{
-                .stage = shaderStage.stage,
-                .module = *shaderModules.back(),
-                .pName = shaderStage.entryPoint
-            });
-        }
+			shaderStageInfos.emplace_back(vk::PipelineShaderStageCreateInfo{
+				.stage = shaderStage.stage,
+				.module = *shaderModules.back(),
+				.pName = shaderStage.entryPoint
+				});
+		}
 
-        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
-            .vertexBindingDescriptionCount = static_cast<uint32_t>(config.vertexBindings.size()),
-            .pVertexBindingDescriptions = config.vertexBindings.data(),
-            .vertexAttributeDescriptionCount = static_cast<uint32_t>(config.vertexAttributes.size()),
-            .pVertexAttributeDescriptions = config.vertexAttributes.data()
-        };
+		vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+			.vertexBindingDescriptionCount = static_cast<uint32_t>(config.vertexBindings.size()),
+			.pVertexBindingDescriptions = config.vertexBindings.data(),
+			.vertexAttributeDescriptionCount = static_cast<uint32_t>(config.vertexAttributes.size()),
+			.pVertexAttributeDescriptions = config.vertexAttributes.data()
+		};
 
-        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
-            .topology = config.topology,
-            .primitiveRestartEnable = vk::False
-        };
+		vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
+			.topology = config.topology,
+			.primitiveRestartEnable = vk::False
+		};
 
-        vk::PipelineViewportStateCreateInfo viewportState{
-            .viewportCount = 1,
-            .pViewports = nullptr,
-            .scissorCount = 1,
-            .pScissors = nullptr
-        };
+		vk::PipelineViewportStateCreateInfo viewportState{
+			.viewportCount = 1,
+			.pViewports = nullptr,
+			.scissorCount = 1,
+			.pScissors = nullptr
+		};
 
-        vk::PipelineRasterizationStateCreateInfo rasterizer{
-            .depthClampEnable = vk::False,
-            .rasterizerDiscardEnable = vk::False,
-            .polygonMode = config.polygonMode,
-            .cullMode = config.cullMode,
-            .frontFace = config.frontFace,
-            .depthBiasEnable = config.depthBiasEnable,
-            .depthBiasConstantFactor = config.depthBiasConstantFactor,
-            .depthBiasClamp = config.depthBiasClamp,
-            .depthBiasSlopeFactor = config.depthBiasSlopeFactor,
-            .lineWidth = 1.0f
-        };
+		vk::PipelineRasterizationStateCreateInfo rasterizer{
+			.depthClampEnable = vk::False,
+			.rasterizerDiscardEnable = vk::False,
+			.polygonMode = config.polygonMode,
+			.cullMode = config.cullMode,
+			.frontFace = config.frontFace,
+			.depthBiasEnable = config.depthBiasEnable,
+			.depthBiasConstantFactor = config.depthBiasConstantFactor,
+			.depthBiasClamp = config.depthBiasClamp,
+			.depthBiasSlopeFactor = config.depthBiasSlopeFactor,
+			.lineWidth = 1.0f
+		};
 
-        vk::PipelineMultisampleStateCreateInfo multisampling{
-            .rasterizationSamples = config.samples,
-            .sampleShadingEnable = vk::False
-        };
+		vk::PipelineMultisampleStateCreateInfo multisampling{
+			.rasterizationSamples = config.samples,
+			.sampleShadingEnable = vk::False
+		};
 
-        vk::PipelineDepthStencilStateCreateInfo depthStencil{
-            .depthTestEnable = config.depthTestEnable,
-            .depthWriteEnable = config.depthWriteEnable,
-            .depthCompareOp = config.depthCompareOp,
-            .depthBoundsTestEnable = vk::False,
-            .stencilTestEnable = vk::False
-        };
+		vk::PipelineDepthStencilStateCreateInfo depthStencil{
+			.depthTestEnable = config.depthTestEnable,
+			.depthWriteEnable = config.depthWriteEnable,
+			.depthCompareOp = config.depthCompareOp,
+			.depthBoundsTestEnable = vk::False,
+			.stencilTestEnable = vk::False
+		};
 
-        std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
-        colorBlendAttachments.reserve(config.colorAttachmentFormats.size());
+		std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
+		colorBlendAttachments.reserve(config.colorAttachmentFormats.size());
 
-        for (size_t i = 0; i < config.colorAttachmentFormats.size(); ++i)
-        {
-            colorBlendAttachments.emplace_back(vk::PipelineColorBlendAttachmentState{
-                .blendEnable = config.blendEnable,
-                .srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
-                .dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
-                .colorBlendOp = vk::BlendOp::eAdd,
-                .srcAlphaBlendFactor = vk::BlendFactor::eOne,
-                .dstAlphaBlendFactor = vk::BlendFactor::eZero,
-                .alphaBlendOp = vk::BlendOp::eAdd,
-                .colorWriteMask =
-                    vk::ColorComponentFlagBits::eR |
-                    vk::ColorComponentFlagBits::eG |
-                    vk::ColorComponentFlagBits::eB |
-                    vk::ColorComponentFlagBits::eA
-            });
-        }
+		for (size_t i = 0; i < config.colorAttachmentFormats.size(); ++i)
+		{
+			colorBlendAttachments.emplace_back(vk::PipelineColorBlendAttachmentState{
+				.blendEnable = config.blendEnable,
+				.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha,
+				.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha,
+				.colorBlendOp = vk::BlendOp::eAdd,
+				.srcAlphaBlendFactor = vk::BlendFactor::eOne,
+				.dstAlphaBlendFactor = vk::BlendFactor::eZero,
+				.alphaBlendOp = vk::BlendOp::eAdd,
+				.colorWriteMask =
+					vk::ColorComponentFlagBits::eR |
+					vk::ColorComponentFlagBits::eG |
+					vk::ColorComponentFlagBits::eB |
+					vk::ColorComponentFlagBits::eA
+				});
+		}
 
-        vk::PipelineColorBlendStateCreateInfo colorBlending{
-            .logicOpEnable = vk::False,
-            .logicOp = vk::LogicOp::eCopy,
-            .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
-            .pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data()
-        };
+		vk::PipelineColorBlendStateCreateInfo colorBlending{
+			.logicOpEnable = vk::False,
+			.logicOp = vk::LogicOp::eCopy,
+			.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
+			.pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data()
+		};
 
-        vk::PipelineDynamicStateCreateInfo dynamicState{
-            .dynamicStateCount = static_cast<uint32_t>(config.dynamicStates.size()),
-            .pDynamicStates = config.dynamicStates.data()
-        };
+		vk::PipelineDynamicStateCreateInfo dynamicState{
+			.dynamicStateCount = static_cast<uint32_t>(config.dynamicStates.size()),
+			.pDynamicStates = config.dynamicStates.data()
+		};
 
-        vk::PipelineLayoutCreateInfo layoutInfo{
-            .setLayoutCount = static_cast<uint32_t>(config.descriptorSetLayouts.size()),
-            .pSetLayouts = config.descriptorSetLayouts.data(),
-            .pushConstantRangeCount = static_cast<uint32_t>(config.pushConstantRanges.size()),
-            .pPushConstantRanges = config.pushConstantRanges.data()
-        };
+		vk::PipelineLayoutCreateInfo layoutInfo{
+			.setLayoutCount = static_cast<uint32_t>(config.descriptorSetLayouts.size()),
+			.pSetLayouts = config.descriptorSetLayouts.data(),
+			.pushConstantRangeCount = static_cast<uint32_t>(config.pushConstantRanges.size()),
+			.pPushConstantRanges = config.pushConstantRanges.data()
+		};
 
-        PipelineBundle result;
-        result.layout = vk::raii::PipelineLayout(device, layoutInfo);
+		PipelineBundle result;
+		result.layout = vk::raii::PipelineLayout(device, layoutInfo);
 
-        vk::PipelineRenderingCreateInfo renderingInfo{
-            .colorAttachmentCount = static_cast<uint32_t>(config.colorAttachmentFormats.size()),
-            .pColorAttachmentFormats = config.colorAttachmentFormats.empty() ? nullptr : config.colorAttachmentFormats.data(),
-            .depthAttachmentFormat = config.depthAttachmentFormat,
-            .stencilAttachmentFormat = config.stencilAttachmentFormat
-        };
+		vk::PipelineRenderingCreateInfo renderingInfo{
+			.colorAttachmentCount = static_cast<uint32_t>(config.colorAttachmentFormats.size()),
+			.pColorAttachmentFormats = config.colorAttachmentFormats.empty() ? nullptr : config.colorAttachmentFormats.data(),
+			.depthAttachmentFormat = config.depthAttachmentFormat,
+			.stencilAttachmentFormat = config.stencilAttachmentFormat
+		};
 
-        vk::GraphicsPipelineCreateInfo pipelineInfo{
-            .pNext = &renderingInfo,
-            .stageCount = static_cast<uint32_t>(shaderStageInfos.size()),
-            .pStages = shaderStageInfos.data(),
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssembly,
-            .pViewportState = &viewportState,
-            .pRasterizationState = &rasterizer,
-            .pMultisampleState = &multisampling,
-            .pDepthStencilState = &depthStencil,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-            .layout = *result.layout,
-            .renderPass = nullptr,
-            .subpass = 0
-        };
+		vk::GraphicsPipelineCreateInfo pipelineInfo{
+			.pNext = &renderingInfo,
+			.stageCount = static_cast<uint32_t>(shaderStageInfos.size()),
+			.pStages = shaderStageInfos.data(),
+			.pVertexInputState = &vertexInputInfo,
+			.pInputAssemblyState = &inputAssembly,
+			.pViewportState = &viewportState,
+			.pRasterizationState = &rasterizer,
+			.pMultisampleState = &multisampling,
+			.pDepthStencilState = &depthStencil,
+			.pColorBlendState = &colorBlending,
+			.pDynamicState = &dynamicState,
+			.layout = *result.layout,
+			.renderPass = nullptr,
+			.subpass = 0
+		};
 
-        result.pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
-        return result;
-    }
+		result.pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+		return result;
+	}
 
-    PipelineBundle createComputePipeline(
-        vk::raii::Device const& device,
-        std::string const& computeShaderPath,
-        std::vector<vk::DescriptorSetLayout> const& descriptorSetLayouts,
-        std::vector<vk::PushConstantRange> const& pushConstantRanges,
-        const char* entryPoint)
-    {
-        auto shaderCode = readFile(computeShaderPath);
-        auto shaderModule = createShaderModule(device, shaderCode);
+	PipelineBundle createComputePipeline(
+		vk::raii::Device const& device,
+		std::string const& computeShaderPath,
+		std::vector<vk::DescriptorSetLayout> const& descriptorSetLayouts,
+		std::vector<vk::PushConstantRange> const& pushConstantRanges,
+		const char* entryPoint)
+	{
+		auto shaderCode = readFile(computeShaderPath);
+		auto shaderModule = createShaderModule(device, shaderCode);
 
-        vk::PipelineShaderStageCreateInfo stageInfo{
-            .stage = vk::ShaderStageFlagBits::eCompute,
-            .module = *shaderModule,
-            .pName = entryPoint
-        };
+		vk::PipelineShaderStageCreateInfo stageInfo{
+			.stage = vk::ShaderStageFlagBits::eCompute,
+			.module = *shaderModule,
+			.pName = entryPoint
+		};
 
-        vk::PipelineLayoutCreateInfo layoutInfo{
-            .setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size()),
-            .pSetLayouts = descriptorSetLayouts.data(),
-            .pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size()),
-            .pPushConstantRanges = pushConstantRanges.data()
-        };
+		vk::PipelineLayoutCreateInfo layoutInfo{
+			.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size()),
+			.pSetLayouts = descriptorSetLayouts.data(),
+			.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size()),
+			.pPushConstantRanges = pushConstantRanges.data()
+		};
 
-        PipelineBundle result;
-        result.layout = vk::raii::PipelineLayout(device, layoutInfo);
+		PipelineBundle result;
+		result.layout = vk::raii::PipelineLayout(device, layoutInfo);
 
-        vk::ComputePipelineCreateInfo createInfo{
-            .stage = stageInfo,
-            .layout = *result.layout
-        };
+		vk::ComputePipelineCreateInfo createInfo{
+			.stage = stageInfo,
+			.layout = *result.layout
+		};
 
-        result.pipeline = vk::raii::Pipeline(device, nullptr, createInfo);
-        return result;
-    }
+		result.pipeline = vk::raii::Pipeline(device, nullptr, createInfo);
+		return result;
+	}
+
+	PipelineBundle createFxaaPipeline(vk::raii::Device const& device, vk::Format colorFormat, vk::raii::DescriptorSetLayout const& descriptorSetLayout)
+	{
+		vk::PushConstantRange fxaaPushConstantRange{
+			.stageFlags = vk::ShaderStageFlagBits::eFragment,
+			.offset = 0,
+			.size = sizeof(glm::vec2)
+		};
+
+		vk::PipelineLayoutCreateInfo layoutInfo{
+			.setLayoutCount = 1,
+			.pSetLayouts = &*descriptorSetLayout,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &fxaaPushConstantRange
+		};
+
+		PipelineBundle result;
+		result.layout = vk::raii::PipelineLayout(device, layoutInfo);
+
+		auto vertCode = readFile("D:\\dev\\Graphics\\NovusEngine\\shaders\\fxaa.spv");
+		auto fragCode = readFile("D:\\dev\\Graphics\\NovusEngine\\shaders\\fxaa.spv");
+
+		auto vertModule = createShaderModule(device, vertCode);
+		auto fragModule = createShaderModule(device, fragCode);
+
+		std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{ {
+			{.stage = vk::ShaderStageFlagBits::eVertex,   .module = *vertModule, .pName = "vertMain" },
+			{.stage = vk::ShaderStageFlagBits::eFragment, .module = *fragModule, .pName = "fragMain" }
+		} };
+
+		// No vertex input — triangle is generated procedurally in the VS
+		vk::PipelineVertexInputStateCreateInfo vertexInputInfo{
+			.vertexBindingDescriptionCount = 0,
+			.pVertexBindingDescriptions = nullptr,
+			.vertexAttributeDescriptionCount = 0,
+			.pVertexAttributeDescriptions = nullptr
+		};
+
+
+		vk::PipelineViewportStateCreateInfo viewportState{
+			.viewportCount = 1,
+			.scissorCount = 1
+		};
+
+		vk::PipelineRasterizationStateCreateInfo rasterizer{
+			.polygonMode = vk::PolygonMode::eFill,
+			.cullMode = vk::CullModeFlagBits::eNone,  // No culling — single triangle covers screen
+			.frontFace = vk::FrontFace::eCounterClockwise,
+			.lineWidth = 1.0f
+		};
+
+		vk::PipelineMultisampleStateCreateInfo multisampling{
+			.rasterizationSamples = vk::SampleCountFlagBits::e1
+		};
+
+		// No blending — FXAA outputs the final resolved color directly
+		vk::PipelineColorBlendAttachmentState blendAttachment{
+			.blendEnable = vk::False,
+			.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+							  vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA
+		};
+
+		vk::PipelineColorBlendStateCreateInfo colorBlending{
+			.attachmentCount = 1,
+			.pAttachments = &blendAttachment
+		};
+
+		std::array<vk::DynamicState, 2> dynamicStates{ vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+		vk::PipelineDynamicStateCreateInfo dynamicState{
+			.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+			.pDynamicStates = dynamicStates.data()
+		};
+
+		vk::PipelineInputAssemblyStateCreateInfo inputAssembly{
+			.topology = vk::PrimitiveTopology::eTriangleList,
+			.primitiveRestartEnable = vk::False
+		};
+
+
+		// No depth attachment — just writing to the swapchain color image
+		vk::PipelineRenderingCreateInfo renderingInfo{
+			.colorAttachmentCount = 1,
+			.pColorAttachmentFormats = &colorFormat
+		};
+
+		vk::GraphicsPipelineCreateInfo pipelineInfo{
+			.pNext = &renderingInfo,
+			.stageCount = static_cast<uint32_t>(shaderStages.size()),
+			.pStages = shaderStages.data(),
+			.pVertexInputState = &vertexInputInfo,
+			.pInputAssemblyState = &inputAssembly,
+			.pViewportState = &viewportState,
+			.pRasterizationState = &rasterizer,
+			.pMultisampleState = &multisampling,
+			.pDepthStencilState = nullptr,           // No depth for post-process pass
+			.pColorBlendState = &colorBlending,
+			.pDynamicState = &dynamicState,
+			.layout = *result.layout
+		};
+
+		result.pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+		return result;
+	}
 }

@@ -286,4 +286,20 @@ private:
 	std::unordered_map<std::string, ComputeModelResources> mComputeModelResources{};
 	std::unordered_map<AssimpInstance*, uint32_t> mInstanceBoneOffsets{};
 
+
+	// FXAA Pass
+	vk::raii::Image 	fxaaImage = nullptr;
+	vk::raii::DeviceMemory fxaaImageMemory = nullptr;
+	vk::raii::ImageView fxaaImageView = nullptr;
+	vk::raii::DescriptorSetLayout fxaaDescriptorSetLayout = nullptr;
+	std::vector<vk::raii::DescriptorSet> fxaaDescriptorSets;
+	vk::raii::DescriptorPool fxaaDescriptorPool = nullptr;
+	vk::raii::PipelineLayout fxaaPipelineLayout = nullptr;
+	vk::raii::Pipeline fxaaPipeline = nullptr;
+	vk::raii::Sampler fxaaSampler = nullptr;
+
+
+	void createFxaaSampler();
+	void recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
+	void createFxaaPipeline();
 };

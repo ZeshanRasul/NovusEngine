@@ -92,9 +92,17 @@ void Renderer::initVulkan()
 	deviceInit();
 	SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
+	Image::createImage(device, physicalDevice,
+		swapChainExtent.width, swapChainExtent.height,
+		swapChainSurfaceFormat.format,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		fxaaImage, fxaaImageMemory);	
+	fxaaImageView = ImageView::createImageView(device, fxaaImage, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 7);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, shadowDescriptorSetLayout, 7);
-
+	DescriptorSetLayout::createFxaaDescriptorSetLayout(device, fxaaDescriptorSetLayout);
 	if (!createPBRPipeline())
 	{
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
@@ -102,11 +110,17 @@ void Renderer::initVulkan()
 
 	ShadowPass::createPipeline(device, physicalDevice, shadowPipelineLayout, shadowPipeline, shadowDescriptorSetLayout);
 
+	auto pipelineBundle = Pipeline::createFxaaPipeline(device, swapChainSurfaceFormat.format, fxaaDescriptorSetLayout);
+	fxaaPipelineLayout = std::move(pipelineBundle.layout);
+	fxaaPipeline = std::move(pipelineBundle.pipeline);
+
+	
 	CommandPool::init(device, queueIndex, commandPool);
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
 	for (uint32_t i = 0; i < SHADOW_CASCADE_COUNT; ++i)
 		ShadowPass::createResources(device, physicalDevice, shadowImages[i], shadowImageMemories[i], shadowImageViews[i], shadowSampler);
 	createTextureSampler();
+	createFxaaSampler();
 	createDefaultTextures();
 	setupGameObjects();
 	for (auto& entityPtr : entities)
@@ -116,10 +130,12 @@ void Renderer::initVulkan()
 	}
 	UniformBuffer::createUniformBuffers(entities, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createDescriptorPool(device, entities, descriptorPool, MAX_FRAMES_IN_FLIGHT);
+	DescriptorPool::createFxaaDescriptorPool(device, fxaaDescriptorPool, MAX_FRAMES_IN_FLIGHT);
 	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
 		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
 	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
+	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
 	Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
@@ -542,6 +558,10 @@ void Renderer::renderImgui()
 	if (ImGui::Button("Reset Shadows")) {
 		shadowSettings = ShadowSettings{};
 	}
+
+	ImGui::End();
+
+	ImGui::Begin("Animation Controls");
 
 	if (ImGui::CollapsingHeader("Models")) {
 		/* state is changed during model deletion, so save it first */
@@ -1181,18 +1201,24 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 			vk::ImageAspectFlagBits::eDepth);
 		shadowImageLayouts[cascade] = vk::ImageLayout::eShaderReadOnlyOptimal;
 	}
+
 	beginMainPass(commandBuffer, imageIndex);
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
+
+	recordFxaaPass(commandBuffer, imageIndex);
+
 	recordImguiPass(commandBuffer, imageIndex);
+
 	endMainPass(commandBuffer, imageIndex);
+	
 	commandBuffer.end();
 }
 
 void Renderer::beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
 {
 
-	transition_image_layout(swapChainImages[imageIndex],
+	transition_image_layout(*fxaaImage,
 		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eColorAttachmentOptimal,
 		vk::AccessFlags2{},
@@ -1214,7 +1240,7 @@ void Renderer::beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t im
 	vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
 
 	vk::RenderingAttachmentInfo attachmentInfo = {
-		.imageView = swapChainImageViews[imageIndex],
+		.imageView = fxaaImageView,
 		.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
 		.loadOp = vk::AttachmentLoadOp::eClear,
 		.storeOp = vk::AttachmentStoreOp::eStore,
@@ -1354,6 +1380,88 @@ void Renderer::recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, ui
 			commandBuffer.drawIndexed(static_cast<uint32_t>(meshes[i].indices.size()), 1, 0, 0, 0);
 		}
 	}
+}
+
+void Renderer::createFxaaSampler()
+{
+	vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
+	vk::SamplerCreateInfo samplerInfo{
+		.magFilter = vk::Filter::eLinear,
+		.minFilter = vk::Filter::eLinear,
+		.mipmapMode = vk::SamplerMipmapMode::eLinear,
+		.addressModeU = vk::SamplerAddressMode::eRepeat,
+		.addressModeV = vk::SamplerAddressMode::eRepeat,
+		.addressModeW = vk::SamplerAddressMode::eRepeat,
+		.anisotropyEnable = vk::True,
+		.maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+		.compareEnable = vk::False,
+		.compareOp = vk::CompareOp::eAlways,
+		.borderColor = vk::BorderColor::eIntOpaqueBlack,
+		.unnormalizedCoordinates = vk::False
+	};
+	fxaaSampler = vk::raii::Sampler(device, samplerInfo);
+}
+
+void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+{
+	// Transition fxaaImage: color attachment → shader read so the FXAA FS can sample it
+	transition_image_layout(*fxaaImage,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::AccessFlagBits2::eShaderSampledRead,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits2::eFragmentShader,
+		vk::ImageAspectFlagBits::eColor);
+
+	// Transition swapchain image: undefined → color attachment for FXAA output
+	transition_image_layout(swapChainImages[imageIndex],
+		vk::ImageLayout::eUndefined,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::AccessFlags2{},
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::ImageAspectFlagBits::eColor);
+
+	vk::RenderingAttachmentInfo colorAttachment{
+		.imageView = swapChainImageViews[imageIndex],
+		.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+		.loadOp = vk::AttachmentLoadOp::eClear,
+		.storeOp = vk::AttachmentStoreOp::eStore,
+		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
+	};
+
+	vk::RenderingInfo renderingInfo{
+		.renderArea = {.offset = { 0, 0 }, .extent = swapChainExtent },
+		.layerCount = 1,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = &colorAttachment
+	};
+
+	commandBuffer.beginRendering(renderingInfo);
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *fxaaPipeline);
+	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
+		static_cast<float>(swapChainExtent.width),
+		static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
+	commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, swapChainExtent));
+
+ 	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+		*fxaaPipelineLayout, 0,
+		*fxaaDescriptorSets[frameIndex], nullptr);
+
+	// Push rcpFrame so the FXAA shader knows the texel size
+	glm::vec2 rcpFrame{
+		1.0f / static_cast<float>(swapChainExtent.width),
+		1.0f / static_cast<float>(swapChainExtent.height)
+	};
+	commandBuffer.pushConstants<glm::vec2>(*fxaaPipelineLayout,
+		vk::ShaderStageFlagBits::eFragment, 0, rcpFrame);
+
+	// 3 vertices, no vertex buffer — the VS generates the fullscreen triangle
+	commandBuffer.draw(3, 1, 0, 0);
+	commandBuffer.endRendering();
+
 }
 
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)

@@ -70,35 +70,68 @@ set(SKINNING_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/skinning.slang)
 set(SHADOW_SKINNING_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow_skinning.slang)
 set(TRS_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/trs_matrix.comp)
 set(BONE_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bone_matrix.comp)
+set(FXAA_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/fxaa.slang)
 
-function (add_slang_shader_target TARGET)
-  set (SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
-  set (ENTRY_POINTS -entry vertMain -entry fragMain)
-  add_custom_command (
-          OUTPUT ${SHADERS_DIR}
-          COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADERS_DIR}
-  )
-  add_custom_command (
-          OUTPUT  ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv ${SHADERS_DIR}/skinning.spv ${SHADERS_DIR}/shadow_skinning.spv
-          COMMAND ${SLANGC_EXECUTABLE} ${SLANG_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o slang.spv
-          COMMAND ${SLANGC_EXECUTABLE} ${PBR_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o pbr.spv
-          COMMAND ${SLANGC_EXECUTABLE} ${IMGUI_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o imgui.spv
-          COMMAND ${SLANGC_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.slang -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -o shadow.spv
-          COMMAND ${SLANGC_EXECUTABLE} ${SKINNING_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name ${ENTRY_POINTS} -o skinning.spv
-          COMMAND ${SLANGC_EXECUTABLE} ${SHADOW_SKINNING_SHADER_SOURCE} -target spirv -profile spirv_1_4 -emit-spirv-directly -fvk-use-entrypoint-name -entry vertMain -o shadow_skinning.spv
-          WORKING_DIRECTORY ${SHADERS_DIR}
-          DEPENDS ${SHADERS_DIR} ${SLANG_SHADER_SOURCE} ${PBR_SHADER_SOURCE} ${IMGUI_SHADER_SOURCE} ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow.slang ${SKINNING_SHADER_SOURCE} ${SHADOW_SKINNING_SHADER_SOURCE}
-          COMMENT "Compiling Slang Shaders"
-          VERBATIM
-  )
-  add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv ${SHADERS_DIR}/pbr.spv ${SHADERS_DIR}/imgui.spv ${SHADERS_DIR}/shadow.spv ${SHADERS_DIR}/skinning.spv ${SHADERS_DIR}/shadow_skinning.spv)
+function(add_slang_shader_target TARGET)
+    set(SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
+    set(SPIRV_OUTPUT_FILES "")
+
+    # Each entry: "source|output|entry1|entry2|..."
+    set(SLANG_SHADERS
+        "shader.slang|slang.spv|vertMain|fragMain"
+        "pbr.slang|pbr.spv|vertMain|fragMain"
+        "imgui.slang|imgui.spv|vertMain|fragMain"
+        "shadow.slang|shadow.spv|vertMain"
+        "skinning.slang|skinning.spv|vertMain|fragMain"
+        "shadow_skinning.slang|shadow_skinning.spv|vertMain"
+        "fxaa.slang|fxaa.spv|vertMain|fragMain"
+    )
+
+    foreach(SHADER_ENTRY IN LISTS SLANG_SHADERS)
+        # Split on | into a proper CMake list
+        string(REPLACE "|" ";" SHADER_PARTS "${SHADER_ENTRY}")
+
+        list(GET SHADER_PARTS 0 SHADER_FILE)
+        list(GET SHADER_PARTS 1 OUTPUT_FILE)
+
+        # Everything from index 2 onward is an entry point
+        list(LENGTH SHADER_PARTS PARTS_LEN)
+        set(ENTRY_ARGS "")
+        math(EXPR EP_START "2")
+        math(EXPR EP_END "${PARTS_LEN} - 1")
+        foreach(IDX RANGE ${EP_START} ${EP_END})
+            list(GET SHADER_PARTS ${IDX} EP)
+            list(APPEND ENTRY_ARGS -entry ${EP})
+        endforeach()
+
+        set(SOURCE_PATH ${SHADERS_DIR}/${SHADER_FILE})
+        set(OUTPUT_PATH ${SHADERS_DIR}/${OUTPUT_FILE})
+
+        add_custom_command(
+            OUTPUT  ${OUTPUT_PATH}
+            COMMAND ${SLANGC_EXECUTABLE}
+                    ${SOURCE_PATH}
+                    -target spirv
+                    -profile spirv_1_4
+                    -emit-spirv-directly
+                    -fvk-use-entrypoint-name
+                    ${ENTRY_ARGS}
+                    -o ${OUTPUT_PATH}
+            DEPENDS ${SOURCE_PATH}
+            WORKING_DIRECTORY ${SHADERS_DIR}
+            COMMENT "Compiling ${SHADER_FILE} -> ${OUTPUT_FILE}"
+            VERBATIM
+        )
+
+        list(APPEND SPIRV_OUTPUT_FILES ${OUTPUT_PATH})
+    endforeach()
+
+    add_custom_target(${TARGET} DEPENDS ${SPIRV_OUTPUT_FILES})
 endfunction()
 
 add_slang_shader_target(shaders)
 add_dependencies(NovusEngine shaders)
-
 set (SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
-
 
 file(GLOB GLSL_SOURCE_FILES
    ${SHADERS_DIR}/*.comp

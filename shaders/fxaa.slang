@@ -143,7 +143,7 @@ float4 fragMain(VSOutput input) : SV_TARGET
     // side of the edge — prevents blurring in the wrong direction
     bool lumaCenterSmaller = lumaCenter < lumaLocalAvg;
     bool correctVariation  = ((dist1 < dist2 ? lumaEnd1 : lumaEnd2) < 0.0) != lumaCenterSmaller;
-    float pixelOffset = correctVariation ? -distFinal * (isHorizontal ? stepLength : stepLength) : 0.0;
+    float edgeOffset = correctVariation ? (-distFinal + 0.5) * stepLength : 0.0;
 
     // Sub-pixel blend — reduces single-pixel shimmer
     float subPixelOffset = 0.0;
@@ -155,10 +155,13 @@ float4 fragMain(VSOutput input) : SV_TARGET
         subPixelOffset *= subPixelOffset * 0.75; // Blend strength cap
     }
 
-    float finalOffset = max(pixelOffset, subPixelOffset);
+    float subPixelOffsetSigned = subPixelOffset * stepLength;
+    float finalOffset = (abs(edgeOffset) >= abs(subPixelOffsetSigned)) ? edgeOffset : subPixelOffsetSigned;
     float2 finalUV = uv;
     if (isHorizontal) finalUV.y += finalOffset;
     else              finalUV.x += finalOffset;
+
+    finalUV = clamp(finalUV, rcpFrame * 0.5, float2(1.0, 1.0) - rcpFrame * 0.5);
 
     return sceneColor.Sample(sceneSampler, finalUV);
 }

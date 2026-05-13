@@ -52,7 +52,8 @@ add_executable(NovusEngine
     "src/model/AssimpInstance.h" "src/model/AssimpMesh.cpp" "src/model/AssimpMesh.h" "src/model/AssimpModel.cpp" "src/model/AssimpModel.h" "src/model/AssimpNode.cpp" "src/model/AssimpNode.h" 
     "src/model/InstanceSettings.h" "src/model/AssimpLoadedModel.cpp" "src/model/AssimpLoadedModel.h" "src/model/ModelAndInstanceData.h" "src/renderer/VkRenderData.h" "src/Logger.cpp" "src/Logger.h" 
     "src/vulkan/IndexBuffer.cpp" "src/vulkan/IndexBuffer.h" "src/vulkan/Texture (2).cpp" "src/vulkan/Texture (2).h" "src/vulkan/VertexBuffer.cpp" "src/vulkan/VertexBuffer.h" "src/vulkan/CommandBuffer.cpp" 
-    "src/vulkan/CommandBuffer.h" "lib/ImGuiFileDialog.cpp")
+    "src/vulkan/CommandBuffer.h" "lib/ImGuiFileDialog.cpp"
+    "src/physics/physics_system.h" "src/physics/physics_system.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -85,6 +86,8 @@ function(add_slang_shader_target TARGET)
         "skinning.slang|skinning.spv|vertMain|fragMain"
         "shadow_skinning.slang|shadow_skinning.spv|vertMain"
         "fxaa.slang|fxaa.spv|vertMain|fragMain"
+        "bloom_extract.slang|bloom_extract.spv|vertMain|fragMain"
+        "bloom_blur.slang|bloom_blur.spv|vertMain|fragMain"
     )
 
     foreach(SHADER_ENTRY IN LISTS SLANG_SHADERS)

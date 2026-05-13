@@ -358,16 +358,6 @@ float4 fragMain(VSOutput input) : SV_TARGET
     // Combine all lighting contributions
     float3 color = ambient + Lo + emissive;
 
-    // Apply exposure before tone mapping
-    color *= ubo.exposure;
-
-    // === HDR TONE MAPPING AND GAMMA CORRECTION ===
-    // Apply Reinhard tone mapping to compress HDR values to [0,1] range
-    color = color / (color + float3(1.0, 1.0, 1.0));
-
-    // Apply gamma correction for sRGB display (inverse gamma)
-    color = pow(color, float3(1.0 / ubo.gamma, 1.0 / ubo.gamma, 1.0 / ubo.gamma));
-
     // Output final color with original alpha
     return float4(color, baseColor.a);
 }

@@ -94,7 +94,7 @@ void Renderer::initVulkan()
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
 	Image::createImage(device, physicalDevice,
 		swapChainExtent.width, swapChainExtent.height,
-		swapChainSurfaceFormat.format,
+		vk::Format::eR16G16B16A16Sfloat,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
@@ -1149,7 +1149,7 @@ bool Renderer::createPBRPipeline()
 
 		config.descriptorSetLayouts = { *descriptorSetLayout };
 		config.pushConstantRanges = { pushConstantRange };
-		config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+		config.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat };
 		config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 
 		auto pipelineBundle = Pipeline::createPipeline(device, config);

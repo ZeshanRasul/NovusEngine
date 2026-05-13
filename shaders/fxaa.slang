@@ -53,17 +53,44 @@ float luma(float3 rgb)
     return dot(rgb, float3(0.299, 0.587, 0.114));
 }
 
+float3 TonemapACESFilm(float3 x)
+{
+    // Narkowicz ACES approximation
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+}
+
+float3 LinearToSRGB(float3 linearColor, float gamma)
+{
+    return pow(saturate(linearColor), float3(1.0 / gamma));
+}
+
+float3 SampleTonemapped(float2 uv, float exposure, float gamma)
+{
+    float3 hdr = sceneColor.Sample(sceneSampler, uv).rgb; // linear HDR
+    float3 mapped = TonemapACESFilm(hdr * exposure);
+    return LinearToSRGB(mapped, gamma);
+}
+
+
 [shader("fragment")]
 float4 fragMain(VSOutput input) : SV_TARGET
 {
     float2 uv = input.UV;
 
+    float exposure = 1.0;
+    float gamma = 2.2;
+
     // --- 1. Sample luma at center and cardinal neighbours ---
-    float lumaCenter = luma(sceneColor.Sample(sceneSampler, uv).rgb);
-    float lumaUp     = luma(sceneColor.Sample(sceneSampler, uv + float2( 0.0,  rcpFrame.y)).rgb);
-    float lumaDown   = luma(sceneColor.Sample(sceneSampler, uv + float2( 0.0, -rcpFrame.y)).rgb);
-    float lumaLeft   = luma(sceneColor.Sample(sceneSampler, uv + float2(-rcpFrame.x,  0.0)).rgb);
-    float lumaRight  = luma(sceneColor.Sample(sceneSampler, uv + float2( rcpFrame.x,  0.0)).rgb);
+    float lumaCenter = luma(SampleTonemapped(uv, exposure, gamma));
+    float lumaUp     = luma(SampleTonemapped(uv + float2( 0.0,  rcpFrame.y), exposure, gamma));
+    float lumaDown   = luma(SampleTonemapped(uv + float2( 0.0, -rcpFrame.y), exposure, gamma));
+    float lumaLeft   = luma(SampleTonemapped(uv + float2(-rcpFrame.x,  0.0), exposure, gamma));
+    float lumaRight  = luma(SampleTonemapped(uv + float2( rcpFrame.x,  0.0), exposure, gamma));
 
     float lumaMin = min(lumaCenter, min(min(lumaUp, lumaDown), min(lumaLeft, lumaRight)));
     float lumaMax = max(lumaCenter, max(max(lumaUp, lumaDown), max(lumaLeft, lumaRight)));
@@ -73,13 +100,16 @@ float4 fragMain(VSOutput input) : SV_TARGET
     static const float EDGE_THRESHOLD_MIN = 0.0312; // Ignore very dark regions
     static const float EDGE_THRESHOLD     = 0.125;  // Minimum contrast to trigger AA
     if (lumaRange < max(EDGE_THRESHOLD_MIN, lumaMax * EDGE_THRESHOLD))
-        return sceneColor.Sample(sceneSampler, uv);
+        {
+            float3 finalColor = SampleTonemapped(uv, exposure, gamma);
+            return float4(finalColor, 1.0);
+        }
 
     // --- 3. Sample diagonal corners to determine edge direction ---
-    float lumaUL = luma(sceneColor.Sample(sceneSampler, uv + float2(-rcpFrame.x,  rcpFrame.y)).rgb);
-    float lumaUR = luma(sceneColor.Sample(sceneSampler, uv + float2( rcpFrame.x,  rcpFrame.y)).rgb);
-    float lumaDL = luma(sceneColor.Sample(sceneSampler, uv + float2(-rcpFrame.x, -rcpFrame.y)).rgb);
-    float lumaDR = luma(sceneColor.Sample(sceneSampler, uv + float2( rcpFrame.x, -rcpFrame.y)).rgb);
+    float lumaUL = luma(SampleTonemapped(uv + float2(-rcpFrame.x,  rcpFrame.y), exposure, gamma));
+    float lumaUR = luma(SampleTonemapped(uv + float2( rcpFrame.x,  rcpFrame.y), exposure, gamma));
+    float lumaDL = luma(SampleTonemapped(uv + float2(-rcpFrame.x, -rcpFrame.y), exposure, gamma));
+    float lumaDR = luma(SampleTonemapped(uv + float2( rcpFrame.x, -rcpFrame.y), exposure, gamma));
 
     // Combine neighbours into weighted gradient estimates per axis
     float edgeHorizontal = abs(-2.0*lumaLeft  + lumaUL + lumaDL)
@@ -115,8 +145,8 @@ float4 fragMain(VSOutput input) : SV_TARGET
     float2 uv1 = currentUV - offset;
     float2 uv2 = currentUV + offset;
 
-    float lumaEnd1 = luma(sceneColor.Sample(sceneSampler, uv1).rgb) - lumaLocalAvg;
-    float lumaEnd2 = luma(sceneColor.Sample(sceneSampler, uv2).rgb) - lumaLocalAvg;
+    float lumaEnd1 = luma(SampleTonemapped(uv1, exposure, gamma)) - lumaLocalAvg;
+    float lumaEnd2 = luma(SampleTonemapped(uv2, exposure, gamma)) - lumaLocalAvg;
 
     bool reached1 = (abs(lumaEnd1) >= gradientScaled);
     bool reached2 = (abs(lumaEnd2) >= gradientScaled);
@@ -128,8 +158,8 @@ float4 fragMain(VSOutput input) : SV_TARGET
     [unroll]
     for (int i = 0; i < FXAA_QUALITY_STEPS && !(reached1 && reached2); ++i)
     {
-        if (!reached1) { uv1 -= offset * quality[i]; lumaEnd1 = luma(sceneColor.Sample(sceneSampler, uv1).rgb) - lumaLocalAvg; }
-        if (!reached2) { uv2 += offset * quality[i]; lumaEnd2 = luma(sceneColor.Sample(sceneSampler, uv2).rgb) - lumaLocalAvg; }
+        if (!reached1) { uv1 -= offset * quality[i]; lumaEnd1 = luma(SampleTonemapped(uv1, exposure, gamma)) - lumaLocalAvg; }
+        if (!reached2) { uv2 += offset * quality[i]; lumaEnd2 = luma(SampleTonemapped(uv2, exposure, gamma)) - lumaLocalAvg; }
         reached1 = (abs(lumaEnd1) >= gradientScaled);
         reached2 = (abs(lumaEnd2) >= gradientScaled);
     }
@@ -163,5 +193,7 @@ float4 fragMain(VSOutput input) : SV_TARGET
 
     finalUV = clamp(finalUV, rcpFrame * 0.5, float2(1.0, 1.0) - rcpFrame * 0.5);
 
-    return sceneColor.Sample(sceneSampler, finalUV);
+    float3 finalColor = SampleTonemapped(finalUV, exposure, gamma);
+
+    return float4(finalColor, 1.0);
 }

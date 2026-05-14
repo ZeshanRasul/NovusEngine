@@ -932,12 +932,10 @@ void Renderer::renderViewportPanel()
 	mViewportFocused = ImGui::IsWindowFocused();
 	mViewportHovered = ImGui::IsWindowHovered();
 
-	const ImVec2 viewportPos = ImGui::GetWindowPos();
-	const ImVec2 viewportSize = ImGui::GetWindowSize();
-	ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
-	ImGuizmo::SetRect(viewportPos.x, viewportPos.y, viewportSize.x, viewportSize.y);
-
+	const ImVec2 imagePos = ImGui::GetCursorScreenPos();
 	const ImVec2 available = ImGui::GetContentRegionAvail();
+	ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+	ImGuizmo::SetRect(imagePos.x, imagePos.y, available.x, available.y);
 	if (mViewportTextureId && available.x > 1.0f && available.y > 1.0f)
 	{
 		ImGui::Image(mViewportTextureId, available, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
@@ -1594,29 +1592,45 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 				transform->SetScale(scale);
 
 			glm::mat4 transformMatrix = transform->GetTransformMatrix();
-			glm::mat4 proj = projection;
-          const bool manipulated = ImGuizmo::Manipulate(glm::value_ptr(view),
-				glm::value_ptr(proj),
+			glm::mat4 gizmoProjection = projection;
+			gizmoProjection[1][1] *= -1.0f;
+			const bool manipulated = ImGuizmo::Manipulate(glm::value_ptr(view),
+				glm::value_ptr(gizmoProjection),
 				currentOperation,
-				currentMode,		
+				currentMode,
 				glm::value_ptr(transformMatrix));
 
-            if (manipulated || ImGuizmo::IsUsing())
+			if ((manipulated || ImGuizmo::IsUsing()) && currentOperation != static_cast<ImGuizmo::OPERATION>(-1))
 			{
 				glm::vec3 pos, rot, scale;
-              ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transformMatrix),
+				ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transformMatrix),
 					glm::value_ptr(pos),
 					glm::value_ptr(rot),
 					glm::value_ptr(scale));
 
+				switch (currentOperation)
+				{
+				case ImGuizmo::OPERATION::TRANSLATE:
+					transform->SetPosition(pos);
+					break;
+				case ImGuizmo::OPERATION::ROTATE:
+					transform->SetRotation(glm::quat(glm::radians(rot)));
+					break;
+				case ImGuizmo::OPERATION::SCALE:
+					transform->SetScale(scale);
+					break;
+				default:
+					break;
+				}
 
-				transform->SetPosition(glm::vec3(pos.x, pos.y, pos.z));
-				transform->SetScale(glm::vec3(scale.x, scale.y, scale.z));
-
-				// rot is Euler degrees from ImGuizmo (XYZ)
-				transform->SetRotation(glm::quat(glm::radians(rot)));
-
-				transform->GetTransformMatrix();
+				if (auto* assimp = registry.try_get<AssimpInstanceComponent>(mEnttSelectedEntity); assimp && assimp->instance)
+				{
+					InstanceSettings settings = assimp->instance->getInstanceSettings();
+					settings.isWorldPosition = transform->GetPosition();
+					settings.isWorldRotation = glm::degrees(glm::eulerAngles(transform->GetRotation()));
+					settings.isScale = transform->GetScale().x;
+					assimp->instance->setInstanceSettings(settings);
+				}
 			}
 		}
 

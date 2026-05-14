@@ -27,7 +27,7 @@
 #include "../../lib/ImGuiFileDialog.h"
 
 namespace {
-   using json = nlohmann::json;
+	using json = nlohmann::json;
 
 	std::vector<uint32_t> readSpvU32(const std::string& filePath)
 	{
@@ -55,7 +55,7 @@ namespace {
 					return true;
 			}
 			return false;
-		};
+			};
 
 		if (!nameExists(baseName))
 			return baseName;
@@ -79,12 +79,12 @@ void Renderer::createAssimpInstanceForEntity(std::shared_ptr<AssimpModel> model,
 	// Create an AssimpInstance and attach it to the entity
 	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
 	auto& registry = mEnttScene.getRegistry();
-   auto& animation = registry.emplace_or_replace<AnimationComponent>(entity);
+	auto& animation = registry.emplace_or_replace<AnimationComponent>(entity);
 	InstanceSettings newSettings = newInstance->getInstanceSettings();
 	newSettings.isAnimClipNr = animation.clipIndex;
 	newSettings.isAnimSpeedFactor = animation.speed;
 	newInstance->setInstanceSettings(newSettings);
-   AssimpSystems::RegisterInstance(mModelInstData, registry, entity, newInstance,
+	AssimpSystems::RegisterInstance(mModelInstData, registry, entity, newInstance,
 		[this](const std::shared_ptr<AssimpInstance>& instance) {
 			if (*skinningPipeline != VK_NULL_HANDLE)
 			{
@@ -269,16 +269,32 @@ void Renderer::initVulkan()
 	{
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
 	}
+	std::array<glm::vec4, 4> pointLightPositions = {
+	   glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
+	   glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
+	   glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
+	   glm::vec4(20.0f, 40.0f, -10.0f, 1.0f)
+	};
+	std::array<glm::vec4, 4> pointLightColors = {
+		glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f),
+		glm::vec4(800.0f, 200.0f, 200.0f, 1.0f),
+		glm::vec4(200.0f, 200.0f, 800.0f, 1.0f),
+		glm::vec4(200.0f, 800.0f, 200.0f, 1.0f)
+	};
 
+	for (int i = 0; i < 4; ++i)
 	{
 		auto& registry = mEnttScene.getRegistry();
 		auto pointLightEntity = mEnttScene.createEntity("Point Light");
 		auto& lightTransform = registry.emplace_or_replace<TransformComponent>(pointLightEntity);
-		lightTransform.SetPosition(glm::vec3(0.0f, -45.0f, 0.0f));
+		lightTransform.SetPosition(glm::vec3(pointLightPositions[i]));
 		auto& light = registry.emplace_or_replace<PointLightComponent>(pointLightEntity);
-		light.color = glm::vec3(1.0f);
-		light.intensity = 1000.0f;
+		glm::vec3 legacyColor = glm::vec3(pointLightColors[i]);
+		float legacyIntensity = std::max(1.0f, std::max(legacyColor.x, std::max(legacyColor.y, legacyColor.z)));
+		light.color = legacyColor / legacyIntensity;
+		light.intensity = legacyIntensity;
 		light.range = 120.0f;
+		light.enabled = true;
 	}
 	ShadowPass::createPipeline(device, physicalDevice, shadowPipelineLayout, shadowPipeline, shadowDescriptorSetLayout);
 
@@ -360,7 +376,7 @@ void Renderer::initEnttDemoScene()
 		if (inst) {
 			onAssimpInstanceDestroyed(inst.get());
 		}
-	});
+		});
 
 	mUndoSnapshots.clear();
 	mRedoSnapshots.clear();
@@ -420,7 +436,7 @@ bool Renderer::addModel(std::string modelFileName) {
 
 	// Select the entity that createAssimpEnttEntity already created for this instance and
 	// sync its ECS transform to match the applied presets.
-   auto& registry = mEnttScene.getRegistry();
+	auto& registry = mEnttScene.getRegistry();
 	entt::entity instanceEntity = AssimpSystems::FindEntityForInstance(registry, newInstance.get());
 	if (instanceEntity != entt::null) {
 		mEnttSelectedEntity = instanceEntity;
@@ -437,7 +453,7 @@ bool Renderer::addModel(std::string modelFileName) {
 void Renderer::deleteModel(std::string modelFileName) {
 	std::string shortModelFileName = std::filesystem::path(modelFileName).filename().generic_string();
 
-    if (!mModelInstData.miAssimpInstances.empty()) {
+	if (!mModelInstData.miAssimpInstances.empty()) {
 		std::vector<std::shared_ptr<AssimpInstance>> instancesToDestroy;
 		for (const auto& instance : mModelInstData.miAssimpInstances)
 		{
@@ -504,7 +520,7 @@ void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances
 		int xPos = std::rand() % 50 - 25;
 		int zPos = std::rand() % 50 - 25;
 		int rotation = std::rand() % 360 - 180;
-     int clipNr = animClipNum > 0 ? std::rand() % animClipNum : 0;
+		int clipNr = animClipNum > 0 ? std::rand() % animClipNum : 0;
 
 		std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model, glm::vec3(xPos, 0.0f, zPos), glm::vec3(0.0f, rotation, 0.0f));
 		if (animClipNum > 0) {
@@ -519,7 +535,7 @@ void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances
 }
 
 void Renderer::deleteInstance(std::shared_ptr<AssimpInstance> instance) {
-   if (!instance)
+	if (!instance)
 		return;
 
 	destroyAssimpEnttEntity(instance);
@@ -558,35 +574,35 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 	auto* key = instance.get();
 	auto& registry = mEnttScene.getRegistry();
 
-   entt::entity existingEntity = AssimpSystems::FindEntityForInstance(registry, key);
+	entt::entity existingEntity = AssimpSystems::FindEntityForInstance(registry, key);
 	if (existingEntity != entt::null && registry.valid(existingEntity))
 	{
-      AssimpSystems::RegisterInstance(mModelInstData, registry, existingEntity, instance,
+		AssimpSystems::RegisterInstance(mModelInstData, registry, existingEntity, instance,
 			[this](const std::shared_ptr<AssimpInstance>& registeredInstance) {
 				if (*skinningPipeline != VK_NULL_HANDLE)
 				{
 					createAssimpInstanceGPUData(registeredInstance);
 				}
 			});
-     auto* transform = registry.try_get<TransformComponent>(existingEntity);
+		auto* transform = registry.try_get<TransformComponent>(existingEntity);
 		if (transform)
 		{
 			InstanceSettings settings = instance->getInstanceSettings();
 			transform->SetPosition(settings.isWorldPosition);
 			transform->SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
 			transform->SetScale(glm::vec3(settings.isScale));
-           auto& animation = registry.emplace_or_replace<AnimationComponent>(existingEntity);
+			auto& animation = registry.emplace_or_replace<AnimationComponent>(existingEntity);
 			animation.clipIndex = settings.isAnimClipNr;
 			animation.speed = settings.isAnimSpeedFactor;
 		}
-      return existingEntity;
+		return existingEntity;
 	}
 
 	std::string modelName = "Instance";
 	if (instance->getModel())
 		modelName = instance->getModel()->getModelFileName();
 
-  std::string entityName = makeUniqueEntityName(registry, namePrefix + modelName);
+	std::string entityName = makeUniqueEntityName(registry, namePrefix + modelName);
 	entt::entity entity = mEnttScene.createEntity(entityName);
 	auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
 	InstanceSettings settings = instance->getInstanceSettings();
@@ -597,7 +613,7 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 	animation.clipIndex = settings.isAnimClipNr;
 	animation.speed = settings.isAnimSpeedFactor;
 
-    AssimpSystems::RegisterInstance(mModelInstData, registry, entity, instance,
+	AssimpSystems::RegisterInstance(mModelInstData, registry, entity, instance,
 		[this](const std::shared_ptr<AssimpInstance>& registeredInstance) {
 			if (*skinningPipeline != VK_NULL_HANDLE)
 			{
@@ -612,12 +628,12 @@ void Renderer::destroyAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& in
 	if (!instance)
 		return;
 
-    auto& registry = mEnttScene.getRegistry();
+	auto& registry = mEnttScene.getRegistry();
 	entt::entity entity = AssimpSystems::FindEntityForInstance(registry, instance.get());
 	if (entity == entt::null)
 		return;
 
-  if (mEnttScene.isValid(entity))
+	if (mEnttScene.isValid(entity))
 		mEnttScene.destroyEntity(entity);
 
 	if (mEnttSelectedEntity == entity)
@@ -970,7 +986,7 @@ void Renderer::renderImgui()
 		}
 	}
 
- ImGui::Separator();
+	ImGui::Separator();
 	ImGui::TextUnformatted("Instance and animation editing moved to ECS Inspector.");
 
 	ImGui::End();
@@ -1027,16 +1043,16 @@ void Renderer::renderImgui()
 void Renderer::renderEnttEditor()
 {
 	auto& registry = mEnttScene.getRegistry();
- static entt::entity sNameEditEntity = entt::null;
+	static entt::entity sNameEditEntity = entt::null;
 	static char sNameEditBuffer[256]{};
-   auto isInMultiSelection = [&](entt::entity entity) {
+	auto isInMultiSelection = [&](entt::entity entity) {
 		return std::find(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), entity) != mEnttMultiSelection.end();
-	};
+		};
 	auto removeFromMultiSelection = [&](entt::entity entity) {
 		auto it = std::remove(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), entity);
 		if (it != mEnttMultiSelection.end())
 			mEnttMultiSelection.erase(it, mEnttMultiSelection.end());
-	};
+		};
 	auto detachHierarchy = [&](entt::entity entity) {
 		auto* hc = registry.try_get<HierarchyComponent>(entity);
 		if (!hc)
@@ -1059,7 +1075,7 @@ void Renderer::renderEnttEditor()
 		}
 		hc->children.clear();
 		hc->parent = entt::null;
-	};
+		};
 	auto isDescendantOf = [&](entt::entity child, entt::entity possibleAncestor) {
 		entt::entity cursor = child;
 		while (cursor != entt::null && registry.valid(cursor)) {
@@ -1071,8 +1087,8 @@ void Renderer::renderEnttEditor()
 				return true;
 		}
 		return false;
-	};
-  auto recalcLocalFromParent = [&](entt::entity child) {
+		};
+	auto recalcLocalFromParent = [&](entt::entity child) {
 		auto* childHc = registry.try_get<HierarchyComponent>(child);
 		auto* childTransform = registry.try_get<TransformComponent>(child);
 		if (!childHc || !childTransform)
@@ -1099,7 +1115,7 @@ void Renderer::renderEnttEditor()
 			((childTransform->GetPosition() - parentTransform->GetPosition()) / safeParentScale);
 		childHc->localRotation = glm::inverse(parentTransform->GetRotation()) * childTransform->GetRotation();
 		childHc->localScale = childTransform->GetScale() / safeParentScale;
-	};
+		};
 	std::function<void(entt::entity)> applyWorldFromParent = [&](entt::entity parentEntity) {
 		auto* parentHc = registry.try_get<HierarchyComponent>(parentEntity);
 		auto* parentTransform = registry.try_get<TransformComponent>(parentEntity);
@@ -1126,7 +1142,7 @@ void Renderer::renderEnttEditor()
 
 			applyWorldFromParent(child);
 		}
-	};
+		};
 	auto setParent = [&](entt::entity child, entt::entity newParent) {
 		if (!registry.valid(child))
 			return;
@@ -1156,7 +1172,7 @@ void Renderer::renderEnttEditor()
 		recalcLocalFromParent(child);
 		if (newParent != entt::null)
 			applyWorldFromParent(newParent);
-	};
+		};
 	auto selectEntityAndSync = [&](entt::entity entity) {
 		mEnttSelectedEntity = entity;
 		mEnttMultiSelection.clear();
@@ -1177,17 +1193,17 @@ void Renderer::renderEnttEditor()
 				}
 			}
 		}
-	};
+		};
 
 	// Keep selection state clean to avoid deleting stale entities.
 	mEnttMultiSelection.erase(
 		std::remove_if(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), [&](entt::entity e) {
 			return !mEnttScene.isValid(e);
-		}),
+			}),
 		mEnttMultiSelection.end());
 	std::sort(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), [](entt::entity a, entt::entity b) {
 		return entt::to_integral(a) < entt::to_integral(b);
-	});
+		});
 	mEnttMultiSelection.erase(std::unique(mEnttMultiSelection.begin(), mEnttMultiSelection.end()), mEnttMultiSelection.end());
 
 	if (mEnttScene.isValid(mEnttSelectedEntity) && mEnttMultiSelection.empty()) {
@@ -1243,10 +1259,10 @@ void Renderer::renderEnttEditor()
 		}
 
 		return duplicatedEntity;
-	};
+		};
 
 	ImGui::Begin("ECS Scene");
- if (ImGui::Button("Undo"))
+	if (ImGui::Button("Undo"))
 		performUndo();
 	ImGui::SameLine();
 	if (ImGui::Button("Redo"))
@@ -1270,19 +1286,19 @@ void Renderer::renderEnttEditor()
 
 	if (ImGui::Button("Create Entity"))
 	{
-        pushUndoSnapshot();
+		pushUndoSnapshot();
 		mEnttSelectedEntity = mEnttScene.createEntity("New Entity");
-       mEnttMultiSelection.clear();
+		mEnttMultiSelection.clear();
 		mEnttMultiSelection.push_back(mEnttSelectedEntity);
 	}
 	ImGui::Separator();
 
 	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent& tag)
 		{
-            ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
-            const bool isSelected = isInMultiSelection(entity);
-            if (ImGui::Selectable(tag.name.c_str(), isSelected)) {
-              const bool ctrlDown = ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl) || ImGui::GetIO().KeyCtrl;
+			ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
+			const bool isSelected = isInMultiSelection(entity);
+			if (ImGui::Selectable(tag.name.c_str(), isSelected)) {
+				const bool ctrlDown = ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl) || ImGui::GetIO().KeyCtrl;
 				if (ctrlDown) {
 					if (isInMultiSelection(entity)) {
 						removeFromMultiSelection(entity);
@@ -1299,9 +1315,9 @@ void Renderer::renderEnttEditor()
 					selectEntityAndSync(entity);
 				}
 			}
-         ImGui::PopID();
+			ImGui::PopID();
 		});
-   ImGui::Text("Selected: %d", static_cast<int>(mEnttMultiSelection.size()));
+	ImGui::Text("Selected: %d", static_cast<int>(mEnttMultiSelection.size()));
 	ImGui::End();
 
 	ImGui::Begin("ECS Lights");
@@ -1357,7 +1373,7 @@ void Renderer::renderEnttEditor()
 
 		if (tag)
 		{
-         if (sNameEditEntity != mEnttSelectedEntity) {
+			if (sNameEditEntity != mEnttSelectedEntity) {
 				sNameEditEntity = mEnttSelectedEntity;
 				std::snprintf(sNameEditBuffer, sizeof(sNameEditBuffer), "%s", tag->name.c_str());
 			}
@@ -1384,7 +1400,7 @@ void Renderer::renderEnttEditor()
 				transform->SetScale(scale);
 		}
 
-       ImGui::Separator();
+		ImGui::Separator();
 		ImGui::TextUnformatted("Components");
 		const bool hasAnimationComp = registry.any_of<AnimationComponent>(mEnttSelectedEntity);
 		if (!hasAnimationComp) {
@@ -1479,7 +1495,7 @@ void Renderer::renderEnttEditor()
 			ImGui::Separator();
 			ImGui::TextUnformatted("Point Light");
 			ImGui::Checkbox("Enabled", &pointLight->enabled);
-			ImGui::ColorEdit3("Light Color", &pointLight->color.x);
+			ImGui::DragFloat3("Light Color", &pointLight->color.x, 0.01f, 0.0f, 1000.0f, "%.2f");
 			ImGui::DragFloat("Intensity", &pointLight->intensity, 1.0f, 0.0f, 50000.0f, "%.1f");
 			ImGui::DragFloat("Range", &pointLight->range, 0.5f, 0.0f, 1000.0f, "%.1f");
 		}
@@ -1490,22 +1506,24 @@ void Renderer::renderEnttEditor()
 			ImGui::Text("Assimp Instance:");
 			if (mModelInstData.miModelList.empty()) {
 				ImGui::Text("No models loaded. Import a model first.");
-			} else {
+			}
+			else {
 				static int selModelIdx = 0;
 				std::vector<const char*> modelNames;
 				modelNames.reserve(mModelInstData.miModelList.size());
-				for (auto &m : mModelInstData.miModelList) modelNames.push_back(m->getModelFileName().c_str());
+				for (auto& m : mModelInstData.miModelList) modelNames.push_back(m->getModelFileName().c_str());
 				ImGui::PushItemWidth(200);
 				if (ImGui::Combo("Model to Add", &selModelIdx, modelNames.data(), static_cast<int>(modelNames.size()))) {}
 				ImGui::PopItemWidth();
 				ImGui::SameLine();
 				if (ImGui::Button("Add Instance")) {
-                    pushUndoSnapshot();
+					pushUndoSnapshot();
 					auto model = mModelInstData.miModelList.at(selModelIdx);
 					createAssimpInstanceForEntity(model, mEnttSelectedEntity);
 				}
 			}
-		} else {
+		}
+		else {
 			ImGui::Separator();
 			ImGui::Text("Assimp Instance Attached");
 			auto& comp = registry.get<AssimpInstanceComponent>(mEnttSelectedEntity);
@@ -1530,10 +1548,10 @@ void Renderer::renderEnttEditor()
 							animation->clipIndex = static_cast<unsigned int>(animClips.size() - 1);
 						}
 
-                     std::vector<std::string> clipNameStorage;
+						std::vector<std::string> clipNameStorage;
 						clipNameStorage.reserve(animClips.size());
 						for (const auto& clip : animClips) {
-                           clipNameStorage.push_back(clip->getClipName());
+							clipNameStorage.push_back(clip->getClipName());
 						}
 
 						std::vector<const char*> clipNames;
@@ -1561,15 +1579,15 @@ void Renderer::renderEnttEditor()
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("Remove Instance")) {
-                  pushUndoSnapshot();
+					pushUndoSnapshot();
 					removeInstanceFromEntity(mEnttSelectedEntity);
 				}
 			}
 		}
 
-     if (ImGui::Button("Duplicate Entity"))
+		if (ImGui::Button("Duplicate Entity"))
 		{
-           pushUndoSnapshot();
+			pushUndoSnapshot();
 			std::vector<entt::entity> sources = mEnttMultiSelection.empty() ? std::vector<entt::entity>{mEnttSelectedEntity} : mEnttMultiSelection;
 			mEnttMultiSelection.clear();
 			for (auto src : sources) {
@@ -1579,15 +1597,15 @@ void Renderer::renderEnttEditor()
 					mEnttSelectedEntity = duplicatedEntity;
 				}
 			}
-           if (!mEnttMultiSelection.empty()) {
+			if (!mEnttMultiSelection.empty()) {
 				selectEntityAndSync(mEnttMultiSelection.back());
 			}
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Delete Entity"))
 		{
-          pushUndoSnapshot();
-         std::vector<entt::entity> targets;
+			pushUndoSnapshot();
+			std::vector<entt::entity> targets;
 			if (!mEnttMultiSelection.empty() && isInMultiSelection(mEnttSelectedEntity)) {
 				targets = mEnttMultiSelection;
 			}
@@ -1603,7 +1621,7 @@ void Renderer::renderEnttEditor()
 				removeFromMultiSelection(entity);
 			}
 			mEnttSelectedEntity = entt::null;
-           mEnttMultiSelection.clear();
+			mEnttMultiSelection.clear();
 		}
 	}
 	else
@@ -1712,7 +1730,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 	std::vector<entt::entity> existingEntities;
 	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent&) {
 		existingEntities.push_back(entity);
-	});
+		});
 
 	for (auto entity : existingEntities) {
 		mEnttScene.destroyEntity(entity);
@@ -2282,7 +2300,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
 
 	auto& registry = mEnttScene.getRegistry();
-    std::array<glm::vec4, 4> pointLightPositions = {
+	std::array<glm::vec4, 4> pointLightPositions = {
 		glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
 		glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
 		glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
@@ -2315,7 +2333,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	{
 		(void)entity;
 
-      UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
+		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
 		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -2813,11 +2831,11 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
 	auto& registry = mEnttScene.getRegistry();
- std::array<glm::vec4, 4> pointLightPositions = {
-		glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
-		glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
-		glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
-		glm::vec4(20.0f, 40.0f, -10.0f, 1.0f)
+	std::array<glm::vec4, 4> pointLightPositions = {
+		   glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
+		   glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
+		   glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
+		   glm::vec4(20.0f, 40.0f, -10.0f, 1.0f)
 	};
 	std::array<glm::vec4, 4> pointLightColors = {
 		glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f),
@@ -2848,7 +2866,7 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 	{
 		(void)ecsEntity;
 
-      UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
+		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
 		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -3222,7 +3240,7 @@ void Renderer::initAssimpRenderData()
 	skinningDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	mRenderData.rdDescriptorPool = *skinningDescriptorPool;
 
-   // ---- 1×1 white fallback texture ----
+	// ---- 1×1 white fallback texture ----
 	{
 		const uint32_t white = 0xFFFFFFFF;
 		vk::raii::Buffer       stagingBuf({});
@@ -3483,7 +3501,7 @@ void Renderer::ensureComputeModelResources(const std::shared_ptr<AssimpModel>& m
 
 void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance)
 {
-  if (!instance)
+	if (!instance)
 		return;
 
 	auto existingIt = std::find_if(mAssimpGPUData.begin(), mAssimpGPUData.end(),
@@ -3616,18 +3634,18 @@ void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 			if (it->uboMapped[f])
 				it->uboMemories[f].unmapMemory();
 		}
-        mAssimpGPUData.erase(it);
+		mAssimpGPUData.erase(it);
 	}
 }
 
 // Helper triggered from Entt on_destroy to free GPU data when an AssimpInstanceComponent is removed.
 void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
 {
-  auto instance = AssimpSystems::FindInstance(mModelInstData, rawPtr);
+	auto instance = AssimpSystems::FindInstance(mModelInstData, rawPtr);
 	if (!instance)
 		return;
 
-    AssimpSystems::UnregisterInstance(mModelInstData, instance,
+	AssimpSystems::UnregisterInstance(mModelInstData, instance,
 		[this](const std::shared_ptr<AssimpInstance>& unregisteringInstance) {
 			deleteAssimpInstanceGPUData(unregisteringInstance);
 		});
@@ -3661,12 +3679,12 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 		return;
 
 	auto& registry = mEnttScene.getRegistry();
-   AssimpSystems::SyncTransformsFromEntt(registry);
+	AssimpSystems::SyncTransformsFromEntt(registry);
 	auto modelBatches = AssimpSystems::CollectValidModelInstanceBatches(mModelInstData.miAssimpInstancesPerModel);
 
 	/* calculate the size of the node matrix buffer over all animated instances */
 	size_t boneMatrixBufferSize = 0;
-    for (const auto& modelType : modelBatches) {
+	for (const auto& modelType : modelBatches) {
 		size_t numberOfInstances = modelType.instances->size();
 		std::shared_ptr<AssimpModel> model = modelType.model;
 		if (numberOfInstances > 0 && model->getTriangleCount() > 0) {
@@ -3694,10 +3712,10 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 
 	size_t instanceToStore = 0;
 	size_t animatedInstancesToStore = 0;
-    for (const auto& modelType : modelBatches) {
+	for (const auto& modelType : modelBatches) {
 		size_t numberOfInstances = modelType.instances->size();
 		if (numberOfInstances > 0) {
-            std::shared_ptr<AssimpModel> model = modelType.model;
+			std::shared_ptr<AssimpModel> model = modelType.model;
 
 			/* animated models */
 			if (model->hasAnimations() && !model->getBoneList().empty()) {
@@ -3705,10 +3723,10 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 				animatedModelLoaded = true;
 
 				for (unsigned int i = 0; i < numberOfInstances; ++i) {
-                 modelType.instances->at(i)->updateAnimation(deltaTime);
+					modelType.instances->at(i)->updateAnimation(deltaTime);
 					std::vector<NodeTransformData> instanceNodeTransform = modelType.instances->at(i)->getNodeTransformData();
 					std::copy(instanceNodeTransform.begin(), instanceNodeTransform.end(), mNodeTransFormData.begin() + animatedInstancesToStore + i * numberOfBones);
-                  mWorldPosMatrices.at(instanceToStore + i) = modelType.instances->at(i)->getWorldTransformMatrix();
+					mWorldPosMatrices.at(instanceToStore + i) = modelType.instances->at(i)->getWorldTransformMatrix();
 					mInstanceBoneOffsets[modelType.instances->at(i).get()] = static_cast<uint32_t>(animatedInstancesToStore + i * numberOfBones);
 				}
 
@@ -3721,7 +3739,7 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 			else {
 				/* non-animated models */
 				for (unsigned int i = 0; i < numberOfInstances; ++i) {
-                  mWorldPosMatrices.at(instanceToStore + i) = modelType.instances->at(i)->getWorldTransformMatrix();
+					mWorldPosMatrices.at(instanceToStore + i) = modelType.instances->at(i)->getWorldTransformMatrix();
 				}
 
 				mRenderData.rdMatricesSize += numberOfInstances * sizeof(glm::mat4);
@@ -3744,11 +3762,11 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 
 	if (animatedModelLoaded && mComputeSkinningEnabled) {
 		uint32_t computeShaderModelOffset = 0;
-        for (const auto& modelType : modelBatches) {
+		for (const auto& modelType : modelBatches) {
 			size_t numberOfInstances = modelType.instances->size();
 			if (numberOfInstances == 0)
 				continue;
-         std::shared_ptr<AssimpModel> modelRef = modelType.model;
+			std::shared_ptr<AssimpModel> modelRef = modelType.model;
 			if (modelRef && modelRef->hasAnimations() && !modelRef->getBoneList().empty()) {
 				runComputeShaders(modelRef, numberOfInstances, computeShaderModelOffset);
 				computeShaderModelOffset += static_cast<uint32_t>(numberOfInstances * modelRef->getBoneList().size());
@@ -3881,7 +3899,7 @@ void Renderer::runComputeShaders(const std::shared_ptr<AssimpModel>& model, size
 
 	mComputeCommandBuffer.end();
 
-    vk::CommandBuffer rawCmd = *mComputeCommandBuffer;
+	vk::CommandBuffer rawCmd = *mComputeCommandBuffer;
 	vk::SubmitInfo submitInfo{ .commandBufferCount = 1, .pCommandBuffers = &rawCmd };
 	queue.submit(submitInfo, nullptr);
 	queue.waitIdle();

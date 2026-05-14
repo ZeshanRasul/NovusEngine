@@ -55,7 +55,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	// ---------------------------------------------------------------------------
 	// Camera frustum parameters (must match the projection built above)
 	const float camNear = 0.005f;
-	const float camFar = 600.0f;
+	const float camFar = 3000.0f;
 	const float shadowMaxDistance = glm::clamp(shadowSettings.shadowMaxDistance, camNear, camFar);
 	const float cascadeFar = glm::min(camFar, shadowMaxDistance);
 	const float lambda = glm::clamp(shadowSettings.lambda, 0.0f, 1.0f);

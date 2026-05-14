@@ -379,16 +379,9 @@ void ImGuiVulkanUtil::initResources() {
 bool ImGuiVulkanUtil::newFrame() {
 	// Start a new ImGui frame
 	ImGui::NewFrame();
-
-	// Create your UI elements here
-	// For example:
-	ImGui::Begin("Vulkan ImGui Demo");
-	ImGui::Text("Hello, Vulkan!");
-	if (ImGui::Button("Click me!")) {
-		// Handle button click
-	}
-
-	ImGui::End();
+	//     e.g. ImGui::NewFrame(); ImGui::DockSpaceOverViewport();                                                   // Create a dockspace in main viewport.
+//      or: ImGui::NewFrame(); 
+	ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode); // Create a dockspace in main viewport, central node is transparent.
 
 	//// End the frame
 	//ImGui::EndFrame();

@@ -1,86 +1,13 @@
 {
   "entities": [
     {
-      "animation": {
-        "clipIndex": 1,
-        "speed": 1.0
-      },
-      "assimp": {
-        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
-        "settings": {
-          "clipIndex": 1,
-          "playTime": 498.48272705078125,
-          "position": [
-            -22.0,
-            0.0,
-            -1.0
-          ],
-          "rotation": [
-            0.0,
-            -0.0,
-            0.0
-          ],
-          "scale": 17.0,
-          "speed": 1.0,
-          "swapYZ": false
-        }
-      },
-      "hierarchy": {
-        "parent": 2
-      },
-      "id": 4,
-      "name": "New Entity Copy",
+      "id": 7,
+      "name": "Point Light",
       "transform": {
         "position": [
-          -22.0,
-          0.0,
-          -1.0
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          17.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "animation": {
-        "clipIndex": 1,
-        "speed": 1.0
-      },
-      "assimp": {
-        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
-        "settings": {
-          "clipIndex": 1,
-          "playTime": 498.48272705078125,
-          "position": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "rotation": [
-            0.0,
-            -0.0,
-            0.0
-          ],
-          "scale": 1.0,
-          "speed": 1.0,
-          "swapYZ": false
-        }
-      },
-      "id": 3,
-      "name": "New Entity",
-      "transform": {
-        "position": [
-          0.0,
-          0.0,
-          0.0
+          -211.54669189453125,
+          -284.96099853515625,
+          -79.06414031982422
         ],
         "rotation": [
           0.0,
@@ -104,9 +31,9 @@
         "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
         "settings": {
           "clipIndex": 0,
-          "playTime": 18.5322265625,
+          "playTime": 652.58935546875,
           "position": [
-            33.5,
+            0.0,
             0.0,
             0.0
           ],
@@ -120,14 +47,11 @@
           "swapYZ": false
         }
       },
-      "hierarchy": {
-        "parent": -1
-      },
-      "id": 2,
+      "id": 6,
       "name": "Assimp: Woman.gltf",
       "transform": {
         "position": [
-          33.5,
+          0.0,
           0.0,
           0.0
         ],
@@ -145,12 +69,140 @@
       }
     },
     {
-      "id": 1,
+      "id": 5,
       "name": "Sponza",
       "transform": {
         "position": [
           0.0,
           0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          0.25,
+          1.0,
+          0.8399999737739563
+        ],
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          77.4000015258789,
+          -8.399999618530273,
+          -10.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          0.25,
+          0.25,
+          1.0
+        ],
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          10.0,
+          -50.0,
+          -75.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          1.0,
+          0.25,
+          0.25
+        ],
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          -70.0,
+          -159.8000030517578,
+          5.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          5.480000019073486,
+          1.0,
+          1.0
+        ],
+        "enabled": true,
+        "intensity": 1000.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          0.0,
+          -45.0,
           0.0
         ],
         "rotation": [
@@ -189,5 +241,5 @@
       }
     }
   ],
-  "selected": 2
+  "selected": 1
 }

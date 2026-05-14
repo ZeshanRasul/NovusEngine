@@ -39,12 +39,14 @@ bool ShaderStorageBuffer::checkForResize(VkRenderData& renderData, VkShaderStora
 
 void ShaderStorageBuffer::cleanup(VkRenderData& renderData, VkShaderStorageBufferData& SSBOData)
 {
-    if (renderData.rdGraphicsQueue != VK_NULL_HANDLE)
+    // Ensure device is idle before destroying buffers. Using device waitIdle is more robust
+    // than waiting on a single queue handle and avoids stale queue handles causing DeviceLost.
+    if (renderData.rdDevice != VK_NULL_HANDLE)
     {
-        VkResult result = vkQueueWaitIdle(renderData.rdGraphicsQueue);
+        VkResult result = vkDeviceWaitIdle(renderData.rdDevice);
         if (result != VK_SUCCESS)
         {
-            Logger::log(1, "%s warning: could not wait for queue idle (error: %i)\n", __FUNCTION__, result);
+            Logger::log(1, "%s warning: could not wait for device idle (error: %i)\n", __FUNCTION__, result);
         }
     }
 

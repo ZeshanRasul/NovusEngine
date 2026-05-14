@@ -44,9 +44,10 @@ import vulkan_hpp;
 #include "../model/AssimpInstance.h"
 #include "physics/physics_system.h"
 #include "ECS/entt/scene.h"
+#include "ECS/entt/assimp_instance_component.h"
 
-constexpr uint32_t WIDTH               = 1920;
-constexpr uint32_t HEIGHT              = 1080;
+constexpr uint32_t WIDTH = 1920;
+constexpr uint32_t HEIGHT = 1080;
 constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<char const*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
@@ -60,7 +61,7 @@ constexpr bool enableValidationLayers = true;
 class Renderer
 {
 public:
-	Renderer()  = default;
+	Renderer() = default;
 	~Renderer() = default;
 
 	void run();
@@ -87,7 +88,7 @@ private:
 
 	bool deviceInit();
 
-   void recreateSwapChain();
+	void recreateSwapChain();
 
 	// Shaders / pipelines
 	void createGraphicsPipeline();
@@ -95,7 +96,7 @@ private:
 
 	// Commands
 	void                    recordCommandBuffer(uint32_t imageIndex);
-    void                    beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
+	void                    beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
 	void                    recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex);
 	void                    recordScenePass(vk::raii::CommandBuffer& commandBuffer);
 	void                    recordImguiPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
@@ -108,10 +109,10 @@ private:
 
 	// Images
 	void transition_image_layout(vk::Image image,
-								 vk::ImageLayout old_layout, vk::ImageLayout new_layout,
-								 vk::AccessFlags2 src_access_mask, vk::AccessFlags2 dst_access_mask,
-								 vk::PipelineStageFlags2 src_stage_mask, vk::PipelineStageFlags2 dst_stage_mask,
-								 vk::ImageAspectFlags image_aspect_flags);
+		vk::ImageLayout old_layout, vk::ImageLayout new_layout,
+		vk::AccessFlags2 src_access_mask, vk::AccessFlags2 dst_access_mask,
+		vk::PipelineStageFlags2 src_stage_mask, vk::PipelineStageFlags2 dst_stage_mask,
+		vk::ImageAspectFlags image_aspect_flags);
 
 	// Textures / samplers
 	void loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures);
@@ -132,8 +133,8 @@ private:
 	static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 	static VKAPI_ATTR vk::Bool32 VKAPI_CALL
 		debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-					  vk::DebugUtilsMessageTypeFlagsEXT type,
-					  const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*);
+			vk::DebugUtilsMessageTypeFlagsEXT type,
+			const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*);
 
 	// ImGUI
 	void renderImgui();
@@ -146,34 +147,34 @@ private:
 	GLFWwindow* window = nullptr;
 
 	vk::raii::Context                context;
-	vk::raii::Instance               instance       = nullptr;
+	vk::raii::Instance               instance = nullptr;
 	vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
 	vk::raii::PhysicalDevice         physicalDevice = nullptr;
-	vk::raii::Device                 device         = nullptr;
-	vk::raii::Queue                  queue          = nullptr;
-	uint32_t                         queueIndex     = ~0u;
+	vk::raii::Device                 device = nullptr;
+	vk::raii::Queue                  queue = nullptr;
+	uint32_t                         queueIndex = ~0u;
 
-	vk::raii::SurfaceKHR             surface               = nullptr;
-	vk::raii::SwapchainKHR           swapChain             = nullptr;
+	vk::raii::SurfaceKHR             surface = nullptr;
+	vk::raii::SwapchainKHR           swapChain = nullptr;
 	std::vector<vk::Image>           swapChainImages;
 	vk::Extent2D                     swapChainExtent;
 	vk::SurfaceFormatKHR             swapChainSurfaceFormat;
 	std::vector<vk::raii::ImageView> swapChainImageViews;
 	bool                             framebufferResized = false;
 
-	vk::raii::DescriptorPool             descriptorPool      = nullptr;
+	vk::raii::DescriptorPool             descriptorPool = nullptr;
 	vk::raii::DescriptorSetLayout        descriptorSetLayout = nullptr;
 	std::vector<vk::raii::DescriptorSet> descriptorSets;
 
-	vk::raii::PipelineLayout pipelineLayout   = nullptr;
+	vk::raii::PipelineLayout pipelineLayout = nullptr;
 	vk::raii::Pipeline       graphicsPipeline = nullptr;
 
 	vk::raii::PipelineLayout pbrPipelineLayout = nullptr;
-	vk::raii::Pipeline       pbrPipeline       = nullptr;
+	vk::raii::Pipeline       pbrPipeline = nullptr;
 	vk::raii::PipelineLayout shadowPipelineLayout = nullptr;
-	vk::raii::Pipeline       shadowPipeline       = nullptr;
+	vk::raii::Pipeline       shadowPipeline = nullptr;
 	vk::raii::PipelineLayout shadowSkinningPipelineLayout = nullptr;
-	vk::raii::Pipeline       shadowSkinningPipeline       = nullptr;
+	vk::raii::Pipeline       shadowSkinningPipeline = nullptr;
 
 	vk::raii::CommandPool                commandPool = nullptr;
 	std::vector<vk::raii::CommandBuffer> commandBuffers;
@@ -183,44 +184,44 @@ private:
 	std::vector<vk::raii::Fence>     inFlightFences;
 	uint32_t                         frameIndex = 0;
 
-	vk::raii::Buffer       vertexBuffer       = nullptr;
+	vk::raii::Buffer       vertexBuffer = nullptr;
 	vk::raii::DeviceMemory vertexBufferMemory = nullptr;
-	vk::raii::Buffer       indexBuffer        = nullptr;
-	vk::raii::DeviceMemory indexBufferMemory  = nullptr;
+	vk::raii::Buffer       indexBuffer = nullptr;
+	vk::raii::DeviceMemory indexBufferMemory = nullptr;
 
 	std::vector<vk::raii::Buffer>       uniformBuffers;
 	std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
 	std::vector<void*>                  uniformBuffersMapped;
 
-	vk::raii::Image        textureImage       = nullptr;
+	vk::raii::Image        textureImage = nullptr;
 	vk::raii::DeviceMemory textureImageMemory = nullptr;
-	vk::raii::ImageView    textureImageView   = nullptr;
-	vk::raii::Sampler      textureSampler     = nullptr;
+	vk::raii::ImageView    textureImageView = nullptr;
+	vk::raii::Sampler      textureSampler = nullptr;
 
-	vk::raii::Image        depthImage       = nullptr;
+	vk::raii::Image        depthImage = nullptr;
 	vk::raii::DeviceMemory depthImageMemory = nullptr;
-	vk::raii::ImageView    depthImageView   = nullptr;
+	vk::raii::ImageView    depthImageView = nullptr;
 
-	vk::raii::Image        defaultTextureImage  = nullptr;
+	vk::raii::Image        defaultTextureImage = nullptr;
 	vk::raii::DeviceMemory defaultTextureMemory = nullptr;
-	vk::raii::ImageView    defaultTextureView   = nullptr;
+	vk::raii::ImageView    defaultTextureView = nullptr;
 
-	vk::raii::Image        defaultNormalImage  = nullptr;
+	vk::raii::Image        defaultNormalImage = nullptr;
 	vk::raii::DeviceMemory defaultNormalMemory = nullptr;
-	vk::raii::ImageView    defaultNormalView   = nullptr;
+	vk::raii::ImageView    defaultNormalView = nullptr;
 
-   std::array<vk::raii::Image,        SHADOW_CASCADE_COUNT> shadowImages        = { nullptr, nullptr, nullptr, nullptr, nullptr };
+	std::array<vk::raii::Image, SHADOW_CASCADE_COUNT> shadowImages = { nullptr, nullptr, nullptr, nullptr, nullptr };
 	std::array<vk::raii::DeviceMemory, SHADOW_CASCADE_COUNT> shadowImageMemories = { nullptr, nullptr, nullptr, nullptr, nullptr };
-	std::array<vk::raii::ImageView,    SHADOW_CASCADE_COUNT> shadowImageViews    = { nullptr, nullptr, nullptr, nullptr, nullptr };
-	std::array<vk::ImageLayout,        SHADOW_CASCADE_COUNT> shadowImageLayouts  = { vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined };
-	vk::raii::Sampler                    shadowSampler             = nullptr;
+	std::array<vk::raii::ImageView, SHADOW_CASCADE_COUNT> shadowImageViews = { nullptr, nullptr, nullptr, nullptr, nullptr };
+	std::array<vk::ImageLayout, SHADOW_CASCADE_COUNT> shadowImageLayouts = { vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined, vk::ImageLayout::eUndefined };
+	vk::raii::Sampler                    shadowSampler = nullptr;
 	vk::raii::DescriptorSetLayout        shadowDescriptorSetLayout = nullptr;
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 
 	Camera camera;
-    ShadowSettings shadowSettings;
-    PhysicsSystem physicsSystem;
+	ShadowSettings shadowSettings;
+	PhysicsSystem physicsSystem;
 	bool physicsPaused = false;
 	int physicsSpawnCount = 24;
 	float physicsSpawnHeight = -800.0f;
@@ -244,15 +245,17 @@ private:
 	void deleteInstance(std::shared_ptr<AssimpInstance> instance);
 	void cloneInstance(std::shared_ptr<AssimpInstance> instance);
 	void updateTriangleCount();
+	entt::entity createAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& instance, const std::string& namePrefix = "Assimp: ");
+	void destroyAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& instance);
 
 	// Assimp / skinning pipeline
 	void initAssimpRenderData();
 	void createSkinningPipeline();
 	void createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
 	void deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
-   void updateDescriptorSets();
+	void updateDescriptorSets();
 	void updateComputeDescriptorSets();
-   void initComputeSkinningResources();
+	void initComputeSkinningResources();
 	void ensureComputeModelResources(const std::shared_ptr<AssimpModel>& model);
 	void runComputeShaders(const std::shared_ptr<AssimpModel>& model, size_t numberOfInstances, uint32_t modelOffset);
 	void updateAssimpAnimations(float deltaTime);
@@ -267,14 +270,14 @@ private:
 	};
 
 	vk::raii::DescriptorSetLayout skinningDescriptorSetLayout = nullptr;
-	vk::raii::PipelineLayout      skinningPipelineLayout      = nullptr;
-	vk::raii::Pipeline            skinningPipeline            = nullptr;
-	vk::raii::DescriptorPool      skinningDescriptorPool      = nullptr;
-	vk::raii::Sampler             skinningSampler             = nullptr;
-	vk::raii::Image               skinningWhiteImage          = nullptr;
-	vk::raii::DeviceMemory        skinningWhiteMemory         = nullptr;
-	vk::raii::ImageView           skinningWhiteView           = nullptr;
-	bool                          mCleanupDone                = false;
+	vk::raii::PipelineLayout      skinningPipelineLayout = nullptr;
+	vk::raii::Pipeline            skinningPipeline = nullptr;
+	vk::raii::DescriptorPool      skinningDescriptorPool = nullptr;
+	vk::raii::Sampler             skinningSampler = nullptr;
+	vk::raii::Image               skinningWhiteImage = nullptr;
+	vk::raii::DeviceMemory        skinningWhiteMemory = nullptr;
+	vk::raii::ImageView           skinningWhiteView = nullptr;
+	bool                          mCleanupDone = false;
 	int mManyInstanceCreateNum = 1;
 	std::vector<glm::mat4> mWorldPosMatrices{};
 	std::vector<NodeTransformData> mNodeTransFormData{};
@@ -291,9 +294,10 @@ private:
 	vk::raii::PipelineLayout mComputeBonePipelineLayout = nullptr;
 	vk::raii::Pipeline mComputeBonePipeline = nullptr;
 	vk::raii::CommandBuffer mComputeCommandBuffer = nullptr;
-    bool mComputeSkinningEnabled = false;
+	bool mComputeSkinningEnabled = false;
 	std::unordered_map<std::string, ComputeModelResources> mComputeModelResources{};
 	std::unordered_map<AssimpInstance*, uint32_t> mInstanceBoneOffsets{};
+	std::unordered_map<AssimpInstance*, entt::entity> mAssimpEntityMap{};
 
 
 	// FXAA Pass
@@ -310,7 +314,7 @@ private:
 	float fxaaGamma = 2.2f;
 
 	void createFxaaSampler();
-   void createBloomResources();
+	void createBloomResources();
 	void createBloomPipelines();
 	void createBloomDescriptorSets();
 	void recordBloomPasses(vk::raii::CommandBuffer& commandBuffer);
@@ -318,7 +322,7 @@ private:
 	void createFxaaPipeline();
 
 	vk::Format bloomFormat = vk::Format::eR16G16B16A16Sfloat;
-  vk::Extent2D bloomExtent{};
+	vk::Extent2D bloomExtent{};
 	vk::raii::Image bloomImageA = nullptr;
 	vk::raii::DeviceMemory bloomImageAMemory = nullptr;
 	vk::raii::ImageView bloomImageAView = nullptr;
@@ -341,11 +345,12 @@ private:
 	vk::raii::Pipeline bloomBlurPipeline = nullptr;
 
 	bool bloomEnabled = true;
-    float bloomThreshold = 0.7f;
+	float bloomThreshold = 0.7f;
 	float bloomSoftKnee = 0.5f;
 	float bloomPrefilterScale = 2.0f;
 	float bloomIntensity = 0.2f;
 	float bloomBlurScale = 1.0f;
-  int bloomBlurPasses = 2;
-  int postProcessDebugMode = 0;
+	int bloomBlurPasses = 2;
+	int postProcessDebugMode = 0;
+
 };

@@ -43,6 +43,60 @@ namespace {
 	}
 }
 
+void Renderer::createSkinningPipeline()
+{
+	auto bindingDesc = SkinnedVertex::getBindingDescription();
+	auto attribDescs = SkinnedVertex::getAttributeDescriptions();
+
+	Pipeline::PipelineConfig config{};
+	config.shaderStages = {
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
+		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+	};
+	config.vertexBindings = { bindingDesc };
+	config.vertexAttributes = { attribDescs.begin(), attribDescs.end() };
+	config.descriptorSetLayouts = { *skinningDescriptorSetLayout };
+	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+	config.cullMode = vk::CullModeFlagBits::eNone;
+
+	auto bundle = Pipeline::createPipeline(device, config);
+	skinningPipelineLayout = std::move(bundle.layout);
+	skinningPipeline = std::move(bundle.pipeline);
+}
+
+// ---------------------------------------------------------------------------
+// Scene
+// ---------------------------------------------------------------------------
+
+void Renderer::setupGameObjects()
+{
+	auto& registry = mEnttScene.getRegistry();
+	auto makeEntity = [&](const std::string& name,
+		glm::vec3 position, glm::vec3 rotation, glm::vec3 scale,
+		const std::string& modelPath) -> entt::entity {
+			auto ecsEntity = mEnttScene.createEntity(name);
+			auto& transform = registry.emplace_or_replace<TransformComponent>(ecsEntity);
+			transform.SetPosition(position);
+			transform.SetRotation(glm::quat(rotation));
+			transform.SetScale(scale);
+
+			if (!modelPath.empty())
+			{
+				auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
+				Model::loadModel(modelPath, renderable);
+				for (size_t i = 0; i < renderable.materials.size(); ++i)
+					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+			}
+
+			return ecsEntity;
+		};
+
+	makeEntity("Sponza",
+		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
+		"models/Sponza.gltf");
+}
+
 struct FxaaPushConstantsCPU
 {
 	glm::vec2 rcpFrame;
@@ -154,20 +208,20 @@ void Renderer::initVulkan()
 	createBloomPipelines();
 	createDefaultTextures();
 	setupGameObjects();
-    auto& registry = mEnttScene.getRegistry();
+	auto& registry = mEnttScene.getRegistry();
 	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
-      (void)entity;
+		(void)entity;
 		createVertexBuffer(renderable);
 		createIndexBuffer(renderable);
 	}
-    UniformBuffer::createUniformBuffers(registry, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
+	UniformBuffer::createUniformBuffers(registry, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createDescriptorPool(device, registry, descriptorPool, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createFxaaDescriptorPool(device, fxaaDescriptorPool, MAX_FRAMES_IN_FLIGHT);
 	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
 		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
-    DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
+	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
 	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
 	Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
@@ -193,14 +247,14 @@ void Renderer::initVulkan()
 
 	initAssimpRenderData();
 
-	if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf")) {
-		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf");
-	}
-	else {
-		/* select new model and new instance */
-		mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
-		mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-	}
+	//if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf")) {
+	//	Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf");
+	//}
+	//else {
+	//	/* select new model and new instance */
+	//	mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
+	//	mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+	//}
 }
 
 void Renderer::initEnttDemoScene()
@@ -245,6 +299,8 @@ bool Renderer::addModel(std::string modelFileName) {
 
 	/* also add a new instance here to see the model */
 	auto newInstance = addInstance(model);
+	
+	mEnttSelectedEntity = mEnttScene.createEntity(modelFileName);
 
 	// Apply known import presets for assets authored with different up/scale conventions.
 	std::string fileNameLower = std::filesystem::path(modelFileName).filename().generic_string();
@@ -268,6 +324,14 @@ bool Renderer::addModel(std::string modelFileName) {
 
 void Renderer::deleteModel(std::string modelFileName) {
 	std::string shortModelFileName = std::filesystem::path(modelFileName).filename().generic_string();
+
+	if (!mModelInstData.miAssimpInstances.empty()) {
+		for (const auto& instance : mModelInstData.miAssimpInstances)
+		{
+			if (instance && instance->getModel() && instance->getModel()->getModelFileName() == shortModelFileName)
+				destroyAssimpEnttEntity(instance);
+		}
+	}
 
 	if (!mModelInstData.miAssimpInstances.empty()) {
 		mModelInstData.miAssimpInstances.erase(
@@ -311,6 +375,7 @@ std::shared_ptr<AssimpInstance> Renderer::addInstance(std::shared_ptr<AssimpMode
 	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
 	mModelInstData.miAssimpInstances.emplace_back(newInstance);
 	mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
+	createAssimpEnttEntity(newInstance);
 
 	if (*skinningPipeline != VK_NULL_HANDLE) {
 		createAssimpInstanceGPUData(newInstance);
@@ -338,6 +403,7 @@ void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances
 
 		mModelInstData.miAssimpInstances.emplace_back(newInstance);
 		mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
+		createAssimpEnttEntity(newInstance);
 	}
 	updateTriangleCount();
 }
@@ -345,6 +411,7 @@ void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances
 void Renderer::deleteInstance(std::shared_ptr<AssimpInstance> instance) {
 	std::shared_ptr<AssimpModel> currentModel = instance->getModel();
 	std::string currentModelName = currentModel->getModelFileName();
+	destroyAssimpEnttEntity(instance);
 
 	deleteAssimpInstanceGPUData(instance);
 
@@ -355,7 +422,8 @@ void Renderer::deleteInstance(std::shared_ptr<AssimpInstance> instance) {
 			[instance](std::shared_ptr<AssimpInstance> inst) {
 				return inst == instance;
 			}
-		));
+     ),
+		mModelInstData.miAssimpInstances.end());
 
 
 	mModelInstData.miAssimpInstancesPerModel[currentModelName].erase(
@@ -365,7 +433,8 @@ void Renderer::deleteInstance(std::shared_ptr<AssimpInstance> instance) {
 			[instance](std::shared_ptr<AssimpInstance> inst) {
 				return inst == instance;
 			}
-		));
+     ),
+		mModelInstData.miAssimpInstancesPerModel[currentModelName].end());
 
 	updateTriangleCount();
 }
@@ -381,6 +450,7 @@ void Renderer::cloneInstance(std::shared_ptr<AssimpInstance> instance) {
 
 	mModelInstData.miAssimpInstances.emplace_back(newInstance);
 	mModelInstData.miAssimpInstancesPerModel[currentModel->getModelFileName()].emplace_back(newInstance);
+	createAssimpEnttEntity(newInstance);
 
 	if (*skinningPipeline != VK_NULL_HANDLE) {
 		createAssimpInstanceGPUData(newInstance);
@@ -395,6 +465,63 @@ void Renderer::updateTriangleCount()
 	for (const auto& instance : mModelInstData.miAssimpInstances) {
 		mRenderData.rdTriangleCount += instance->getModel()->getTriangleCount();
 	}
+}
+
+entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& instance, const std::string& namePrefix)
+{
+	if (!instance)
+		return entt::null;
+
+	auto* key = instance.get();
+	auto& registry = mEnttScene.getRegistry();
+
+	auto it = mAssimpEntityMap.find(key);
+	if (it != mAssimpEntityMap.end() && registry.valid(it->second))
+	{
+		auto* transform = registry.try_get<TransformComponent>(it->second);
+		if (transform)
+		{
+			InstanceSettings settings = instance->getInstanceSettings();
+			transform->SetPosition(settings.isWorldPosition);
+			transform->SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
+			transform->SetScale(glm::vec3(settings.isScale));
+		}
+		return it->second;
+	}
+
+	std::string modelName = "Instance";
+	if (instance->getModel())
+		modelName = instance->getModel()->getModelFileName();
+
+	entt::entity entity = mEnttScene.createEntity(namePrefix + modelName);
+	auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
+	InstanceSettings settings = instance->getInstanceSettings();
+	transform.SetPosition(settings.isWorldPosition);
+	transform.SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
+	transform.SetScale(glm::vec3(settings.isScale));
+
+	mAssimpEntityMap[key] = entity;
+	return entity;
+}
+
+void Renderer::destroyAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& instance)
+{
+	if (!instance)
+		return;
+
+	auto it = mAssimpEntityMap.find(instance.get());
+	if (it == mAssimpEntityMap.end())
+		return;
+
+	entt::entity entity = it->second;
+	auto& registry = mEnttScene.getRegistry();
+	if (registry.valid(entity))
+		registry.destroy(entity);
+
+	if (mEnttSelectedEntity == entity)
+		mEnttSelectedEntity = entt::null;
+
+	mAssimpEntityMap.erase(it);
 }
 
 void Renderer::mainLoop()
@@ -1003,7 +1130,7 @@ void Renderer::renderEnttEditor()
 	if (mEnttScene.isValid(mEnttSelectedEntity))
 	{
 		auto* tag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
-        auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity);
+		auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity);
 
 		if (tag)
 		{
@@ -1015,7 +1142,7 @@ void Renderer::renderEnttEditor()
 
 		if (transform)
 		{
-          glm::vec3 position = transform->GetPosition();
+			glm::vec3 position = transform->GetPosition();
 			glm::vec3 rotation = glm::eulerAngles(transform->GetRotation());
 			glm::vec3 scale = transform->GetScale();
 
@@ -1151,6 +1278,7 @@ bool Renderer::isDeviceSuitable(vk::raii::PhysicalDevice const& pd)
 		});
 
 	auto features = pd.template getFeatures2<vk::PhysicalDeviceFeatures2,
+		vk::PhysicalDeviceVulkan11Features,
 		vk::PhysicalDeviceVulkan13Features,
 		vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
 		vk::PhysicalDeviceDynamicRenderingLocalReadFeaturesKHR>();
@@ -1440,7 +1568,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	int cascadeIndexInt = static_cast<int>(cascadeIndex);
 	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
 
-    auto& registry = mEnttScene.getRegistry();
+	auto& registry = mEnttScene.getRegistry();
 	for (auto [entity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
 	{
 		(void)entity;
@@ -1474,16 +1602,16 @@ void Renderer::recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, ui
 		return;
 
 	const UniformBufferObject* shadowTemplateUbo = nullptr;
-    auto& registry = mEnttScene.getRegistry();
+	auto& registry = mEnttScene.getRegistry();
 	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
-      (void)entity;
+		(void)entity;
 		if (renderable.uniformBuffersMapped.size() <= frameIndex)
 			continue;
-      if (!renderable.uniformBuffersMapped[frameIndex])
+		if (!renderable.uniformBuffersMapped[frameIndex])
 			continue;
 
-     shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable.uniformBuffersMapped[frameIndex]);
+		shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable.uniformBuffersMapped[frameIndex]);
 		break;
 	}
 
@@ -1716,6 +1844,7 @@ void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
 		.storeOp = vk::AttachmentStoreOp::eStore,
 		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
 	};
+
 	vk::RenderingInfo bloomRenderInfoA{
 	 .renderArea = {.offset = { 0, 0 }, .extent = bloomExtent },
 		.layerCount = 1,
@@ -1942,7 +2071,7 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
 	auto& registry = mEnttScene.getRegistry();
-    for (auto [ecsEntity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
+	for (auto [ecsEntity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
 	{
 		(void)ecsEntity;
 
@@ -1950,19 +2079,19 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-     commandBuffer.bindIndexBuffer(*renderable.indexBuffer, 0, vk::IndexType::eUint32);
+		commandBuffer.bindIndexBuffer(*renderable.indexBuffer, 0, vk::IndexType::eUint32);
 
-     for (const auto& mesh : renderable.meshes)
+		for (const auto& mesh : renderable.meshes)
 		{
-           const Material& material = renderable.materials[mesh.materialIndex < renderable.materials.size() ? mesh.materialIndex : 0];
+			const Material& material = renderable.materials[mesh.materialIndex < renderable.materials.size() ? mesh.materialIndex : 0];
 			MaterialPushConstants::push(commandBuffer, *pbrPipelineLayout, material);
-         uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable.materialDescriptorSets.size() ? mesh.materialIndex : 0;
+			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable.materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
 			commandBuffer.bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics,
 				*pbrPipelineLayout,
 				0,
-               *renderable.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
+				*renderable.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
 				nullptr);
 
 			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
@@ -2120,23 +2249,25 @@ void Renderer::createDefaultTextures()
 		const uint32_t white = 0xFFFFFFFF;
 		vk::DeviceSize imageSize = sizeof(uint32_t);
 
-		vk::raii::Buffer       stagingBuffer({});
-		vk::raii::DeviceMemory stagingBufferMemory({});
-		Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+		vk::raii::Buffer       stagingBuf({});
+		vk::raii::DeviceMemory stagingMem({});
+		Buffer::createBuffer(device, physicalDevice, sizeof(uint32_t),
+			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-			stagingBuffer, stagingBufferMemory);
+			stagingBuf, stagingMem);
+		void* d = stagingMem.mapMemory(0, sizeof(uint32_t));
+		memcpy(d, &white, sizeof(uint32_t));
+		stagingMem.unmapMemory();
 
-		void* data = stagingBufferMemory.mapMemory(0, imageSize);
-		memcpy(data, &white, imageSize);
-		stagingBufferMemory.unmapMemory();
-
-		Image::createImage(device, physicalDevice, 1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+		Image::createImage(device, physicalDevice, 1, 1, vk::Format::eR8G8B8A8Unorm,
+			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal, defaultTextureImage, defaultTextureMemory);
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			defaultTextureImage, defaultTextureMemory);
 
 		vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
 		Image::transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		Buffer::copyBufferToImage(commandBuffer, stagingBuffer, defaultTextureImage, 1, 1);
+		Buffer::copyBufferToImage(commandBuffer, stagingBuf, defaultTextureImage, 1, 1);
 		Image::transitionImageLayout(commandBuffer, defaultTextureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
@@ -2148,23 +2279,25 @@ void Renderer::createDefaultTextures()
 		const uint32_t flatNormal = 0xFFFF7F7F;
 		vk::DeviceSize imageSize = sizeof(uint32_t);
 
-		vk::raii::Buffer       stagingBuffer({});
-		vk::raii::DeviceMemory stagingBufferMemory({});
-		Buffer::createBuffer(device, physicalDevice, imageSize, vk::BufferUsageFlagBits::eTransferSrc,
+		vk::raii::Buffer       stagingBuf({});
+		vk::raii::DeviceMemory stagingMem({});
+		Buffer::createBuffer(device, physicalDevice, sizeof(uint32_t),
+			vk::BufferUsageFlagBits::eTransferSrc,
 			vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-			stagingBuffer, stagingBufferMemory);
+			stagingBuf, stagingMem);
+		void* d = stagingMem.mapMemory(0, sizeof(uint32_t));
+		memcpy(d, &flatNormal, sizeof(uint32_t));
+		stagingMem.unmapMemory();
 
-		void* data = stagingBufferMemory.mapMemory(0, imageSize);
-		memcpy(data, &flatNormal, imageSize);
-		stagingBufferMemory.unmapMemory();
-
-		Image::createImage(device, physicalDevice, 1, 1, vk::Format::eR8G8B8A8Unorm, vk::ImageTiling::eOptimal,
+		Image::createImage(device, physicalDevice, 1, 1, vk::Format::eR8G8B8A8Unorm,
+			vk::ImageTiling::eOptimal,
 			vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-			vk::MemoryPropertyFlagBits::eDeviceLocal, defaultNormalImage, defaultNormalMemory);
+			vk::MemoryPropertyFlagBits::eDeviceLocal,
+			defaultNormalImage, defaultNormalMemory);
 
 		vk::raii::CommandBuffer commandBuffer = CommandBuffer::beginSingleTimeCommands(device, commandPool);
 		Image::transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-		Buffer::copyBufferToImage(commandBuffer, stagingBuffer, defaultNormalImage, 1, 1);
+		Buffer::copyBufferToImage(commandBuffer, stagingBuf, defaultNormalImage, 1, 1);
 		Image::transitionImageLayout(commandBuffer, defaultNormalImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 		CommandBuffer::endSingleTimeCommands(std::move(commandBuffer), queue);
 
@@ -2316,7 +2449,7 @@ void Renderer::initAssimpRenderData()
 	skinningDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	mRenderData.rdDescriptorPool = *skinningDescriptorPool;
 
-	// ---- 1×1 white fallback texture ----
+   // ---- 1×1 white fallback texture ----
 	{
 		const uint32_t white = 0xFFFFFFFF;
 		vk::raii::Buffer       stagingBuf({});
@@ -2390,28 +2523,6 @@ void Renderer::initAssimpRenderData()
 		shadowSkinningPipelineLayout = std::move(bundle.layout);
 		shadowSkinningPipeline = std::move(bundle.pipeline);
 	}
-}
-
-void Renderer::createSkinningPipeline()
-{
-	auto bindingDesc = SkinnedVertex::getBindingDescription();
-	auto attribDescs = SkinnedVertex::getAttributeDescriptions();
-
-	Pipeline::PipelineConfig config{};
-	config.shaderStages = {
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
-	};
-	config.vertexBindings = { bindingDesc };
-	config.vertexAttributes = { attribDescs.begin(), attribDescs.end() };
-	config.descriptorSetLayouts = { *skinningDescriptorSetLayout };
-	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
-	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
-	config.cullMode = vk::CullModeFlagBits::eNone;
-
-	auto bundle = Pipeline::createPipeline(device, config);
-	skinningPipelineLayout = std::move(bundle.layout);
-	skinningPipeline = std::move(bundle.pipeline);
 }
 
 void Renderer::initComputeSkinningResources()
@@ -2730,6 +2841,26 @@ void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 
 void Renderer::updateAssimpAnimations(float deltaTime)
 {
+    auto& registry = mEnttScene.getRegistry();
+	auto syncTransformFromEnttToAssimp = [&](const std::shared_ptr<AssimpInstance>& assimpInstance) {
+		if (!assimpInstance)
+			return;
+
+		auto it = mAssimpEntityMap.find(assimpInstance.get());
+		if (it == mAssimpEntityMap.end() || !registry.valid(it->second))
+			return;
+
+		auto* transform = registry.try_get<TransformComponent>(it->second);
+		if (!transform)
+			return;
+
+		InstanceSettings settings = assimpInstance->getInstanceSettings();
+		settings.isWorldPosition = transform->GetPosition();
+		settings.isWorldRotation = glm::degrees(glm::eulerAngles(transform->GetRotation()));
+		settings.isScale = transform->GetScale().x;
+		assimpInstance->setInstanceSettings(settings);
+	};
+
 	/* calculate the size of the node matrix buffer over all animated instances */
 	size_t boneMatrixBufferSize = 0;
 	for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
@@ -2764,6 +2895,10 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 		size_t numberOfInstances = modelType.second.size();
 		if (numberOfInstances > 0) {
 			std::shared_ptr<AssimpModel> model = modelType.second.at(0)->getModel();
+
+			for (unsigned int i = 0; i < numberOfInstances; ++i) {
+				syncTransformFromEnttToAssimp(modelType.second.at(i));
+			}
 
 			/* animated models */
 			if (model->hasAnimations() && !model->getBoneList().empty()) {
@@ -2947,7 +3082,7 @@ void Renderer::runComputeShaders(const std::shared_ptr<AssimpModel>& model, size
 
 	mComputeCommandBuffer.end();
 
-	vk::CommandBuffer rawCmd = *mComputeCommandBuffer;
+    vk::CommandBuffer rawCmd = *mComputeCommandBuffer;
 	vk::SubmitInfo submitInfo{ .commandBufferCount = 1, .pCommandBuffers = &rawCmd };
 	queue.submit(submitInfo, nullptr);
 	queue.waitIdle();
@@ -2959,16 +3094,16 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 		return;
 
 	const UniformBufferObject* shadowTemplateUbo = nullptr;
-    auto& registry = mEnttScene.getRegistry();
+	auto& registry = mEnttScene.getRegistry();
 	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
-      (void)entity;
+		(void)entity;
 		if (renderable.uniformBuffersMapped.size() <= frameIndex)
 			continue;
-      if (!renderable.uniformBuffersMapped[frameIndex])
+		if (!renderable.uniformBuffersMapped[frameIndex])
 			continue;
 
-     shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable.uniformBuffersMapped[frameIndex]);
+		shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable.uniformBuffersMapped[frameIndex]);
 		break;
 	}
 
@@ -3020,45 +3155,3 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Scene
-// ---------------------------------------------------------------------------
-
-void Renderer::setupGameObjects()
-{
-	auto& registry = mEnttScene.getRegistry();
-  auto makeEntity = [&](const std::string& name,
-		glm::vec3 position, glm::vec3 rotation, glm::vec3 scale,
-      const std::string& modelPath) -> entt::entity {
-			auto ecsEntity = mEnttScene.createEntity(name);
-         auto& transform = registry.emplace_or_replace<TransformComponent>(ecsEntity);
-			transform.SetPosition(position);
-			transform.SetRotation(glm::quat(rotation));
-			transform.SetScale(scale);
-
-            if (!modelPath.empty())
-			{
-              auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
-				Model::loadModel(modelPath, renderable);
-				for (size_t i = 0; i < renderable.materials.size(); ++i)
-					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
-			}
-
-          return ecsEntity;
-		};
-
-	//makeEntity("FlightHelmet_Left",
-	//	{ -13.0f, -10.5f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
-	//	"../models/FlightHelmet.gltf");
-
-	//{
-	//	Entity& e = makeEntity("DamagedHelmet",
-	//		{ 13.0f, -5.0f, 10.0f }, { -90.0f, 0.0f, 0.0f }, { 10.0f, 10.0f, 10.0f },
-	//		"../models/DamagedHelmet.gltf");
-	//}
-
-	makeEntity("Sponza",
-		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
-		"models/Sponza.gltf");
-
-}

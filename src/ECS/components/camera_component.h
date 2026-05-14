@@ -36,13 +36,13 @@ private:
 public:
 
 	Camera(
-		glm::vec3 position = glm::vec3(0.0f, 0.0f, 2.0f),
+		glm::vec3 position = glm::vec3(400.0f, -120.0f, 0.0f),
 		glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f),
-		float yaw = -90.0f,                                 // Look along negative Z-axis (OpenGL convention)
+		float yaw = 180.0f,
 		float pitch = 0.0f
 	)
 		: position(position), worldUp(up), yaw(yaw), pitch(pitch),
-		movementSpeed(100.0f), mouseSensitivity(0.1f), zoom(45.0f)
+		movementSpeed(700.0f), mouseSensitivity(0.1f), zoom(45.0f)
 	{
 		updateCameraVectors();
 	};
@@ -69,21 +69,21 @@ public:
 
 	void processInput(GLFWwindow* window, Camera& camera, float deltaTime) {
 		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-				camera.processKeyboard(CameraMovement::FORWARD, deltaTime);
+			camera.processKeyboard(CameraMovement::FORWARD, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-				camera.processKeyboard(CameraMovement::BACKWARD, deltaTime);
+			camera.processKeyboard(CameraMovement::BACKWARD, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-				camera.processKeyboard(CameraMovement::LEFT, deltaTime);
+			camera.processKeyboard(CameraMovement::LEFT, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-				camera.processKeyboard(CameraMovement::RIGHT, deltaTime);
+			camera.processKeyboard(CameraMovement::RIGHT, deltaTime);
 
 		// Vertical movement controls for 3D navigation
 		// Space and Control provide intuitive up/down movement
 		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-				camera.processKeyboard(CameraMovement::UP, deltaTime);
+			camera.processKeyboard(CameraMovement::UP, deltaTime);
 		if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-				camera.processKeyboard(CameraMovement::DOWN, deltaTime);
-		}
+			camera.processKeyboard(CameraMovement::DOWN, deltaTime);
+	}
 
 	static void mouseCallback(GLFWwindow* window, double xpos, double ypos) {
 		// Static variables maintain state between callback invocations

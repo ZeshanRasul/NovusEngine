@@ -263,10 +263,10 @@ void Renderer::initWindow()
 	camera.setupInputCallbacks(window);
 	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
-	camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
-	camera.setYaw(90.0f);
+	camera.setPosition(glm::vec3(400.0f, -120.0f, 0.0f));
+	camera.setYaw(180.0f);
 	camera.setPitch(-5.0f);
-	camera.setMovementSpeed(40.0f);
+	camera.setMovementSpeed(140.0f);
 	camera.setZoom(55.0f);
 	camera.getViewMatrix();
 	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
@@ -450,7 +450,8 @@ bool Renderer::addModel(std::string modelFileName) {
 
 	InstanceSettings settings = newInstance->getInstanceSettings();
 	if (fileNameLower == "woman.gltf") {
-		settings.isScale = 10.0f;
+		settings.isScale = 30.0f;
+		settings.isWorldRotation.y = -90.0f;
 		settings.isWorldRotation.z = 180.0f;
 	}
 	else if (fileNameLower == "man.gltf") {
@@ -831,11 +832,13 @@ void Renderer::renderImgui()
 
 	// Add a button to reset camera position
 	if (ImGui::Button("Reset Camera")) {
-		camera.setPosition(glm::vec3(0.0f, -90.0f, 18.0f));
-		camera.setYaw(90.0f);
+		camera.setPosition(glm::vec3(400.0f, -120.0f, 0.0f));
+		camera.setYaw(180.0f);
 		camera.setPitch(-5.0f);
-		camera.setMovementSpeed(40.0f);
+		camera.setMovementSpeed(140.0f);
 		camera.setZoom(55.0f);
+		camera.getViewMatrix();
+		camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 	}
 
 	// Add sliders for camera settings
@@ -853,6 +856,14 @@ void Renderer::renderImgui()
 	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 90.0f)) {
 		camera.setZoom(zoom);
 	}
+
+	const glm::vec3 camPos = camera.getPosition();
+	ImGui::Text("Position: (%.2f, %.2f, %.2f)", camPos.x, camPos.y, camPos.z);
+
+	ImGuiIO& io = ImGui::GetIO();
+	const float fps = io.Framerate;
+	const float frameMs = fps > 0.0f ? (1000.0f / fps) : 0.0f;
+	ImGui::Text("FPS: %.1f (%.2f ms)", fps, frameMs);
 
 	ImGui::End();
 

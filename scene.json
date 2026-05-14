@@ -1,8 +1,57 @@
 {
   "entities": [
     {
-      "id": 1048582,
-      "name": "Main Camera",
+      "animation": {
+        "clipIndex": 0,
+        "speed": 1.0
+      },
+      "assimp": {
+        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
+        "settings": {
+          "clipIndex": 0,
+          "playTime": 534.6224975585938,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            180.0,
+            -89.98021697998047,
+            0.0
+          ],
+          "scale": 30.0,
+          "speed": 1.0,
+          "swapYZ": false
+        }
+      },
+      "id": 6,
+      "name": "Assimp: Woman.gltf",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.7071067690849304,
+          3.0908619663705394e-08,
+          0.7071067690849304,
+          -3.0908619663705394e-08
+        ],
+        "scale": [
+          30.0,
+          30.0,
+          30.0
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "name": "Sponza",
+      "renderable": {
+        "modelPath": "models/Sponza.gltf"
+      },
       "transform": {
         "position": [
           0.0,
@@ -23,103 +72,7 @@
       }
     },
     {
-      "id": 1048581,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "enabled": true,
-        "intensity": 1000.0,
-        "range": 120.0
-      },
-      "transform": {
-        "position": [
-          0.0,
-          -45.0,
-          0.0
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "id": 1048580,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          1.0,
-          0.25,
-          0.25
-        ],
-        "enabled": true,
-        "intensity": 800.0,
-        "range": 120.0
-      },
-      "transform": {
-        "position": [
-          -70.0,
-          -80.0,
-          5.0
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "id": 1048579,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          0.25,
-          0.25,
-          1.0
-        ],
-        "enabled": true,
-        "intensity": 800.0,
-        "range": 120.0
-      },
-      "transform": {
-        "position": [
-          10.0,
-          -50.0,
-          -75.0
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "id": 1048578,
+      "id": 4,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -151,15 +104,86 @@
       }
     },
     {
-      "id": 1048577,
-      "name": "Sponza",
-      "renderable": {
-        "modelPath": "models/Sponza.gltf"
+      "id": 3,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          0.25,
+          0.25,
+          1.0
+        ],
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          10.0,
+          -50.0,
+          -75.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          1.0,
+          0.25,
+          0.25
+        ],
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          -70.0,
+          -80.0,
+          5.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "enabled": true,
+        "intensity": 1000.0,
+        "range": 120.0
       },
       "transform": {
         "position": [
           0.0,
-          0.0,
+          -45.0,
           0.0
         ],
         "rotation": [
@@ -176,51 +200,27 @@
       }
     },
     {
-      "animation": {
-        "clipIndex": 0,
-        "speed": 1.0
-      },
-      "assimp": {
-        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
-        "settings": {
-          "clipIndex": 0,
-          "playTime": 309.7658386230469,
-          "position": [
-            -33.099998474121094,
-            -100.19999694824219,
-            0.0
-          ],
-          "rotation": [
-            0.0,
-            -0.0,
-            180.0
-          ],
-          "scale": 10.0,
-          "speed": 1.0,
-          "swapYZ": false
-        }
-      },
-      "id": 1048576,
-      "name": "Assimp: Woman.gltf",
+      "id": 0,
+      "name": "Main Camera",
       "transform": {
         "position": [
-          -33.099998474121094,
-          -100.19999694824219,
+          0.0,
+          0.0,
           0.0
         ],
         "rotation": [
-          -0.0,
           0.0,
-          -1.0,
-          -4.371138828673793e-08
+          0.0,
+          0.0,
+          1.0
         ],
         "scale": [
-          10.0,
-          10.0,
-          10.0
+          1.0,
+          1.0,
+          1.0
         ]
       }
     }
   ],
-  "selected": 1048576
+  "selected": 4
 }

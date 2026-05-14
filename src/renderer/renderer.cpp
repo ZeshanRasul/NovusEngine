@@ -78,21 +78,12 @@ void Renderer::removeInstanceFromEntity(entt::entity entity)
 	auto& comp = registry.get<AssimpInstanceComponent>(entity);
 	if (!comp.instance) return;
 
-	// Delete GPU data then remove from our instance lists
-	deleteAssimpInstanceGPUData(comp.instance);
+	// Full cleanup via the shared path (GPU data, instance lists, entity map)
+	onAssimpInstanceDestroyed(comp.instance.get());
 
-	mModelInstData.miAssimpInstances.erase(
-		std::remove_if(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(),
-			[&](const std::shared_ptr<AssimpInstance>& inst) { return inst == comp.instance; }),
-		mModelInstData.miAssimpInstances.end());
-
-	std::string modelName = comp.instance->getModel()->getModelFileName();
-	auto &vec = mModelInstData.miAssimpInstancesPerModel[modelName];
-	vec.erase(std::remove_if(vec.begin(), vec.end(), [&](const std::shared_ptr<AssimpInstance>& inst) { return inst == comp.instance; }), vec.end());
-
-	mAssimpEntityMap.erase(comp.instance.get());
-
-	registry.remove<AssimpInstanceComponent>(entity);
+	// Remove the component so the inspector shows "Add Instance" again
+	if (registry.valid(entity))
+		registry.remove<AssimpInstanceComponent>(entity);
 }
 
 
@@ -2992,12 +2983,31 @@ void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 // Helper triggered from Entt on_destroy to free GPU data when an AssimpInstanceComponent is removed.
 void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
 {
-	// Find associated shared_ptr in miAssimpInstances (if present) and delete GPU data
+	// Find associated shared_ptr in miAssimpInstances
 	auto it = std::find_if(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(),
 		[rawPtr](const std::shared_ptr<AssimpInstance>& sp) { return sp.get() == rawPtr; });
-	if (it != mModelInstData.miAssimpInstances.end()) {
-		deleteAssimpInstanceGPUData(*it);
-	}
+	if (it == mModelInstData.miAssimpInstances.end())
+		return;
+
+	std::shared_ptr<AssimpInstance> instance = *it;
+
+	// Free GPU resources
+	deleteAssimpInstanceGPUData(instance);
+
+	// Remove from the flat instance list
+	mModelInstData.miAssimpInstances.erase(it);
+
+	// Remove from the per-model instance list
+	std::string modelName = instance->getModel()->getModelFileName();
+	auto& perModel = mModelInstData.miAssimpInstancesPerModel[modelName];
+	perModel.erase(std::remove_if(perModel.begin(), perModel.end(),
+		[&](const std::shared_ptr<AssimpInstance>& sp) { return sp == instance; }),
+		perModel.end());
+
+	// Remove entity map entry
+	mAssimpEntityMap.erase(rawPtr);
+
+	updateTriangleCount();
 }
 
 void Renderer::updateAssimpAnimations(float deltaTime)

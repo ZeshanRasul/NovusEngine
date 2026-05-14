@@ -30,7 +30,6 @@ import vulkan_hpp;
 #include <GLFW/glfw3.h>
 
 #include "ECS/components/camera_component.h"
-#include "ECS/entity.h"
 #include "ECS/components/transform_component.h"
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"
@@ -44,6 +43,7 @@ import vulkan_hpp;
 #include "vulkan/shader_storage_buffer.h"
 #include "../model/AssimpInstance.h"
 #include "physics/physics_system.h"
+#include "ECS/entt/scene.h"
 
 constexpr uint32_t WIDTH               = 1920;
 constexpr uint32_t HEIGHT              = 1080;
@@ -137,6 +137,8 @@ private:
 
 	// ImGUI
 	void renderImgui();
+	void initEnttDemoScene();
+	void renderEnttEditor();
 
 	// -------------------------------------------------------------------------
 	// Members
@@ -216,8 +218,6 @@ private:
 
 	std::vector<const char*> requiredDeviceExtension = { vk::KHRSwapchainExtensionName };
 
-	std::vector<std::unique_ptr<Entity>> entities;
-
 	Camera camera;
     ShadowSettings shadowSettings;
     PhysicsSystem physicsSystem;
@@ -231,6 +231,8 @@ private:
 	VkRenderData mRenderData{};
 	ModelAndInstanceData mModelInstData{};
 	std::vector<AssimpInstanceGPUData> mAssimpGPUData{};
+	EnttScene mEnttScene{};
+	entt::entity mEnttSelectedEntity = entt::null;
 
 	bool hasModel(std::string modelFileName);
 	std::shared_ptr<AssimpModel> getModel(std::string modelFileName);

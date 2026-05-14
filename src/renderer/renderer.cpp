@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/component_wise.hpp>
 #include "../vulkan/command_pool.h"
 #include "../vulkan/command_buffer.h"
@@ -19,7 +20,6 @@
 #include "../model/model.h"
 #include "../vulkan/uniform_buffer.h"
 #include "../vulkan/descriptors.h"
-#include "../ECS/entity.h"
 #include "../model/AssimpModel.h"
 #include "../model/AssimpInstance.h"
 #include "../model/InstanceSettings.h"
@@ -48,15 +48,15 @@ struct FxaaPushConstantsCPU
 	glm::vec2 rcpFrame;
 	float exposure;
 	float gamma;
-  float bloomIntensity;
- int debugMode;
+	float bloomIntensity;
+	int debugMode;
 	glm::vec2 _pad{};
 };
 
 struct BloomExtractPushConstantsCPU
 {
 	float threshold;
- float softKnee;
+	float softKnee;
 	float prefilterScale;
 	float _pad = 0.0f;
 };
@@ -65,7 +65,7 @@ struct BloomBlurPushConstantsCPU
 {
 	glm::vec2 direction;
 	float blurScale;
-  float _pad = 0.0f;
+	float _pad = 0.0f;
 };
 
 
@@ -111,13 +111,14 @@ void Renderer::initWindow()
 	camera.setMovementSpeed(40.0f);
 	camera.setZoom(55.0f);
 	camera.getViewMatrix();
-	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 600.0f);
+	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 }
 
 void Renderer::initVulkan()
 {
 	deviceInit();
-   physicsSystem.initialize();
+	physicsSystem.initialize();
+	initEnttDemoScene();
 	SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
 	Image::createImage(device, physicalDevice,
@@ -126,50 +127,48 @@ void Renderer::initVulkan()
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		fxaaImage, fxaaImageMemory);	
-  fxaaImageView = ImageView::createImageView(device, fxaaImage, vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor);
+		fxaaImage, fxaaImageMemory);
+	fxaaImageView = ImageView::createImageView(device, fxaaImage, vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 7);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, shadowDescriptorSetLayout, 7);
 	DescriptorSetLayout::createFxaaDescriptorSetLayout(device, fxaaDescriptorSetLayout);
-   createBloomResources();
+	createBloomResources();
 	if (!createPBRPipeline())
 	{
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
 	}
-
 	ShadowPass::createPipeline(device, physicalDevice, shadowPipelineLayout, shadowPipeline, shadowDescriptorSetLayout);
 
 	auto pipelineBundle = Pipeline::createFxaaPipeline(device, swapChainSurfaceFormat.format, fxaaDescriptorSetLayout);
 	fxaaPipelineLayout = std::move(pipelineBundle.layout);
 	fxaaPipeline = std::move(pipelineBundle.pipeline);
 
-	
+
 	CommandPool::init(device, queueIndex, commandPool);
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
 	for (uint32_t i = 0; i < SHADOW_CASCADE_COUNT; ++i)
 		ShadowPass::createResources(device, physicalDevice, shadowImages[i], shadowImageMemories[i], shadowImageViews[i], shadowSampler);
 	createTextureSampler();
 	createFxaaSampler();
-    createBloomDescriptorSets();
+	createBloomDescriptorSets();
 	createBloomPipelines();
 	createDefaultTextures();
 	setupGameObjects();
-	for (auto& entityPtr : entities)
+    auto& registry = mEnttScene.getRegistry();
+	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
-        auto* renderable = entityPtr->GetComponent<RenderableComponent>();
-		if (!renderable)
-			continue;
-		createVertexBuffer(*renderable);
-		createIndexBuffer(*renderable);
+      (void)entity;
+		createVertexBuffer(renderable);
+		createIndexBuffer(renderable);
 	}
-	UniformBuffer::createUniformBuffers(entities, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
-	DescriptorPool::createDescriptorPool(device, entities, descriptorPool, MAX_FRAMES_IN_FLIGHT);
+    UniformBuffer::createUniformBuffers(registry, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
+	DescriptorPool::createDescriptorPool(device, registry, descriptorPool, MAX_FRAMES_IN_FLIGHT);
 	DescriptorPool::createFxaaDescriptorPool(device, fxaaDescriptorPool, MAX_FRAMES_IN_FLIGHT);
 	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
 		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
-	DescriptorSet::createDescriptorSets(device, entities, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
- DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
+    DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
+	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
 	Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
@@ -202,6 +201,15 @@ void Renderer::initVulkan()
 		mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
 		mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
 	}
+}
+
+void Renderer::initEnttDemoScene()
+{
+	auto& registry = mEnttScene.getRegistry();
+	if (!registry.view<EnttTagComponent>().empty())
+		return;
+
+	mEnttSelectedEntity = mEnttScene.createEntity("Main Camera");
 }
 
 bool Renderer::hasModel(std::string modelFileName) {
@@ -579,16 +587,7 @@ void Renderer::renderImgui()
 
 	ImGui::End();
 
-	ImGui::Begin("Post Processing");
-	ImGui::SliderFloat("Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
-	ImGui::SliderFloat("Gamma", &fxaaGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::Separator();
-	ImGui::Checkbox("Bloom Enabled", &bloomEnabled);
-	ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.1f, 4.0f, "%.2f");
-	ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 2.0f, "%.3f");
-	ImGui::SliderFloat("Bloom Blur Scale", &bloomBlurScale, 0.25f, 3.0f, "%.2f");
-	ImGui::SliderInt("Bloom Blur Passes", &bloomBlurPasses, 1, 8);
-	ImGui::End();
+	renderEnttEditor();
 
 	ImGui::Begin("Shadow Tuning");
 	ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
@@ -935,8 +934,8 @@ void Renderer::renderImgui()
 	ImGui::Begin("Post Processing");
 	ImGui::SliderFloat("FXAA Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
 	ImGui::SliderFloat("FXAA Gamma", &fxaaGamma, 1.0f, 3.0f, "%.2f");
-   ImGui::Checkbox("Bloom Enabled", &bloomEnabled);
- ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.05f, 4.0f, "%.2f");
+	ImGui::Checkbox("Bloom Enabled", &bloomEnabled);
+	ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.05f, 4.0f, "%.2f");
 	ImGui::SliderFloat("Bloom Soft Knee", &bloomSoftKnee, 0.0f, 1.0f, "%.2f");
 	ImGui::SliderFloat("Bloom Prefilter", &bloomPrefilterScale, 0.5f, 6.0f, "%.2f");
 	ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 4.0f, "%.3f");
@@ -979,6 +978,66 @@ void Renderer::renderImgui()
 //	}
 //}
 	imGui->updateBuffers();
+}
+
+void Renderer::renderEnttEditor()
+{
+	auto& registry = mEnttScene.getRegistry();
+
+	ImGui::Begin("ECS Scene");
+	if (ImGui::Button("Create Entity"))
+	{
+		mEnttSelectedEntity = mEnttScene.createEntity("New Entity");
+	}
+	ImGui::Separator();
+
+	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent& tag)
+		{
+			const bool isSelected = (mEnttSelectedEntity == entity);
+			if (ImGui::Selectable(tag.name.c_str(), isSelected))
+				mEnttSelectedEntity = entity;
+		});
+	ImGui::End();
+
+	ImGui::Begin("ECS Inspector");
+	if (mEnttScene.isValid(mEnttSelectedEntity))
+	{
+		auto* tag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
+        auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity);
+
+		if (tag)
+		{
+			char buffer[256]{};
+			std::snprintf(buffer, sizeof(buffer), "%s", tag->name.c_str());
+			if (ImGui::InputText("Name", buffer, sizeof(buffer)))
+				tag->name = buffer;
+		}
+
+		if (transform)
+		{
+          glm::vec3 position = transform->GetPosition();
+			glm::vec3 rotation = glm::eulerAngles(transform->GetRotation());
+			glm::vec3 scale = transform->GetScale();
+
+			if (ImGui::DragFloat3("Translation", &position.x, 0.1f))
+				transform->SetPosition(position);
+			if (ImGui::DragFloat3("Rotation", &rotation.x, 0.1f))
+				transform->SetRotation(glm::quat(rotation));
+			if (ImGui::DragFloat3("Scale", &scale.x, 0.1f, 0.01f, 100.0f))
+				transform->SetScale(scale);
+		}
+
+		if (ImGui::Button("Delete Entity"))
+		{
+			mEnttScene.destroyEntity(mEnttSelectedEntity);
+			mEnttSelectedEntity = entt::null;
+		}
+	}
+	else
+	{
+		ImGui::TextUnformatted("Select an entity from ECS Scene.");
+	}
+	ImGui::End();
 }
 
 // ---------------------------------------------------------------------------
@@ -1288,14 +1347,14 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
 
-  recordBloomPasses(commandBuffer);
+	recordBloomPasses(commandBuffer);
 
 	recordFxaaPass(commandBuffer, imageIndex);
 
 	recordImguiPass(commandBuffer, imageIndex);
 
 	endMainPass(commandBuffer, imageIndex);
-	
+
 	commandBuffer.end();
 }
 
@@ -1381,30 +1440,26 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	int cascadeIndexInt = static_cast<int>(cascadeIndex);
 	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
 
-	for (auto& entityPtr : entities)
+    auto& registry = mEnttScene.getRegistry();
+	for (auto [entity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
 	{
-		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
-		auto* transform = entityPtr->GetComponent<TransformComponent>();
-		if (!renderable || !transform)
-			continue;
+		(void)entity;
 
-		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
-		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
+		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings);
+		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-		commandBuffer.bindIndexBuffer(*renderable->indexBuffer, 0, vk::IndexType::eUint32);
+		commandBuffer.bindIndexBuffer(*renderable.indexBuffer, 0, vk::IndexType::eUint32);
 
-		for (const auto& mesh : renderable->meshes)
+		for (const auto& mesh : renderable.meshes)
 		{
-			//	const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
-			//	MaterialPushConstants::push(commandBuffer, *shadowPipelineLayout, material);
-			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
+			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable.materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
 			commandBuffer.bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics,
 				*shadowPipelineLayout,
 				0,
-				*renderable->materialDescriptorSets[descriptorMaterialIndex][frameIndex],
+				*renderable.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
 				nullptr);
 
 			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
@@ -1419,17 +1474,16 @@ void Renderer::recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, ui
 		return;
 
 	const UniformBufferObject* shadowTemplateUbo = nullptr;
-	for (auto& entityPtr : entities)
+    auto& registry = mEnttScene.getRegistry();
+	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
-		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
-		if (!renderable)
+      (void)entity;
+		if (renderable.uniformBuffersMapped.size() <= frameIndex)
 			continue;
-		if (renderable->uniformBuffersMapped.size() <= frameIndex)
-			continue;
-		if (!renderable->uniformBuffersMapped[frameIndex])
+      if (!renderable.uniformBuffersMapped[frameIndex])
 			continue;
 
-		shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable->uniformBuffersMapped[frameIndex]);
+     shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable.uniformBuffersMapped[frameIndex]);
 		break;
 	}
 
@@ -1440,7 +1494,7 @@ void Renderer::recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, ui
 
 	for (auto& gpuData : mAssimpGPUData)
 	{
-        UniformBufferObject ubo{};
+		UniformBufferObject ubo{};
 		if (shadowTemplateUbo)
 			ubo = *shadowTemplateUbo;
 		ubo.model = gpuData.instance->getWorldTransformMatrix();
@@ -1488,13 +1542,13 @@ void Renderer::createFxaaSampler()
 
 void Renderer::createBloomResources()
 {
-  bloomExtent = {
-		.width = std::max(1u, swapChainExtent.width / 2),
-		.height = std::max(1u, swapChainExtent.height / 2)
+	bloomExtent = {
+		  .width = std::max(1u, swapChainExtent.width / 2),
+		  .height = std::max(1u, swapChainExtent.height / 2)
 	};
 
 	Image::createImage(device, physicalDevice,
-      bloomExtent.width, bloomExtent.height,
+		bloomExtent.width, bloomExtent.height,
 		bloomFormat,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
@@ -1503,7 +1557,7 @@ void Renderer::createBloomResources()
 	bloomImageAView = ImageView::createImageView(device, bloomImageA, bloomFormat, vk::ImageAspectFlagBits::eColor);
 
 	Image::createImage(device, physicalDevice,
-      bloomExtent.width, bloomExtent.height,
+		bloomExtent.width, bloomExtent.height,
 		bloomFormat,
 		vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
@@ -1525,7 +1579,7 @@ void Renderer::createBloomDescriptorSets()
 	bloomBlurDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
 
 	std::array<vk::DescriptorPoolSize, 1> poolSizes{ {
-		{ .type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT }
+		{.type = vk::DescriptorType::eCombinedImageSampler, .descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT }
 	} };
 	vk::DescriptorPoolCreateInfo poolInfo{
 		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
@@ -1633,7 +1687,7 @@ void Renderer::createBloomPipelines()
 
 void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
 {
- if (!bloomEnabled)
+	if (!bloomEnabled)
 		return;
 
 	transition_image_layout(*fxaaImage,
@@ -1663,7 +1717,7 @@ void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
 		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
 	};
 	vk::RenderingInfo bloomRenderInfoA{
-     .renderArea = {.offset = { 0, 0 }, .extent = bloomExtent },
+	 .renderArea = {.offset = { 0, 0 }, .extent = bloomExtent },
 		.layerCount = 1,
 		.colorAttachmentCount = 1,
 		.pColorAttachments = &bloomAttachmentA
@@ -1678,16 +1732,16 @@ void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
 	commandBuffer.beginRendering(bloomRenderInfoA);
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloomExtractPipeline);
 	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
-      static_cast<float>(bloomExtent.width),
+		static_cast<float>(bloomExtent.width),
 		static_cast<float>(bloomExtent.height), 0.0f, 1.0f));
 	commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, bloomExtent));
 	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
 		*bloomExtractPipelineLayout, 0,
 		*bloomExtractDescriptorSets[frameIndex], nullptr);
-  BloomExtractPushConstantsCPU extractPc{
-		.threshold = bloomThreshold,
-		.softKnee = bloomSoftKnee,
-		.prefilterScale = bloomPrefilterScale
+	BloomExtractPushConstantsCPU extractPc{
+		  .threshold = bloomThreshold,
+		  .softKnee = bloomSoftKnee,
+		  .prefilterScale = bloomPrefilterScale
 	};
 	commandBuffer.pushConstants<BloomExtractPushConstantsCPU>(
 		*bloomExtractPipelineLayout,
@@ -1717,19 +1771,19 @@ void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
 		vk::ImageAspectFlagBits::eColor);
 	bloomImageBLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
-   vk::RenderingAttachmentInfo bloomAttachmentB{
-		.imageView = bloomImageBView,
-		.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		.loadOp = vk::AttachmentLoadOp::eClear,
-		.storeOp = vk::AttachmentStoreOp::eStore,
-		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
+	vk::RenderingAttachmentInfo bloomAttachmentB{
+		 .imageView = bloomImageBView,
+		 .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+		 .loadOp = vk::AttachmentLoadOp::eClear,
+		 .storeOp = vk::AttachmentStoreOp::eStore,
+		 .clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
 	};
- bloomRenderInfoB.pColorAttachments = &bloomAttachmentB;
+	bloomRenderInfoB.pColorAttachments = &bloomAttachmentB;
 
 	const int blurPassPairs = std::max(1, bloomBlurPasses);
 	for (int i = 0; i < blurPassPairs; ++i)
 	{
-     if (i > 0)
+		if (i > 0)
 		{
 			transition_image_layout(*bloomImageB,
 				vk::ImageLayout::eShaderReadOnlyOptimal,
@@ -1856,7 +1910,7 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
 	commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, swapChainExtent));
 
- 	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
 		*fxaaPipelineLayout, 0,
 		*fxaaDescriptorSets[frameIndex], nullptr);
 
@@ -1867,8 +1921,8 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 			1.0f / static_cast<float>(swapChainExtent.height)
 		},
 		.exposure = fxaaExposure,
-      .gamma = fxaaGamma,
-      .bloomIntensity = bloomEnabled ? bloomIntensity : 0.0f,
+	  .gamma = fxaaGamma,
+	  .bloomIntensity = bloomEnabled ? bloomIntensity : 0.0f,
 		.debugMode = postProcessDebugMode
 	};
 
@@ -1887,30 +1941,28 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
-	for (auto& entityPtr : entities)
+	auto& registry = mEnttScene.getRegistry();
+    for (auto [ecsEntity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
 	{
-		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
-		auto* transform = entityPtr->GetComponent<TransformComponent>();
-		if (!renderable || !transform)
-			continue;
+		(void)ecsEntity;
 
-		UniformBuffer::updateUniformBuffer(frameIndex, renderable, transform, &camera, swapChainExtent, shadowSettings);
-		vk::Buffer     vertexBuffers[] = { renderable->vertexBuffer };
+		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings);
+		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-		commandBuffer.bindIndexBuffer(*renderable->indexBuffer, 0, vk::IndexType::eUint32);
+     commandBuffer.bindIndexBuffer(*renderable.indexBuffer, 0, vk::IndexType::eUint32);
 
-		for (const auto& mesh : renderable->meshes)
+     for (const auto& mesh : renderable.meshes)
 		{
-			const Material& material = renderable->materials[mesh.materialIndex < renderable->materials.size() ? mesh.materialIndex : 0];
+           const Material& material = renderable.materials[mesh.materialIndex < renderable.materials.size() ? mesh.materialIndex : 0];
 			MaterialPushConstants::push(commandBuffer, *pbrPipelineLayout, material);
-			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable->materialDescriptorSets.size() ? mesh.materialIndex : 0;
+         uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable.materialDescriptorSets.size() ? mesh.materialIndex : 0;
 
 			commandBuffer.bindDescriptorSets(
 				vk::PipelineBindPoint::eGraphics,
 				*pbrPipelineLayout,
 				0,
-				*renderable->materialDescriptorSets[descriptorMaterialIndex][frameIndex],
+               *renderable.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
 				nullptr);
 
 			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
@@ -2907,17 +2959,16 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 		return;
 
 	const UniformBufferObject* shadowTemplateUbo = nullptr;
-	for (auto& entityPtr : entities)
+    auto& registry = mEnttScene.getRegistry();
+	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
-		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
-		if (!renderable)
+      (void)entity;
+		if (renderable.uniformBuffersMapped.size() <= frameIndex)
 			continue;
-		if (renderable->uniformBuffersMapped.size() <= frameIndex)
-			continue;
-		if (!renderable->uniformBuffersMapped[frameIndex])
+      if (!renderable.uniformBuffersMapped[frameIndex])
 			continue;
 
-		shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable->uniformBuffersMapped[frameIndex]);
+     shadowTemplateUbo = reinterpret_cast<const UniformBufferObject*>(renderable.uniformBuffersMapped[frameIndex]);
 		break;
 	}
 
@@ -2943,11 +2994,11 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 
 		// Update the persistent per-frame UBO
 		UniformBufferObject ubo{};
-        if (shadowTemplateUbo)
+		if (shadowTemplateUbo)
 			ubo = *shadowTemplateUbo;
 		ubo.model = gpuData.instance->getWorldTransformMatrix();
 		ubo.view = camera.getViewMatrix();
-		ubo.proj = camera.getProjectionMatrix(aspect, 0.1f, 600.0f);
+		ubo.proj = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f);
 		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);
 		ubo.directionalLightColor = glm::vec4(1.0f);
 		memcpy(gpuData.uboMapped[frameIndex], &ubo, sizeof(UniformBufferObject));
@@ -2975,26 +3026,25 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 
 void Renderer::setupGameObjects()
 {
-	auto makeEntity = [&](const std::string& name,
+	auto& registry = mEnttScene.getRegistry();
+  auto makeEntity = [&](const std::string& name,
 		glm::vec3 position, glm::vec3 rotation, glm::vec3 scale,
-		const std::string& modelPath) -> Entity& {
-			entities.push_back(std::make_unique<Entity>(name));
-			Entity& entity = *entities.back();
+      const std::string& modelPath) -> entt::entity {
+			auto ecsEntity = mEnttScene.createEntity(name);
+         auto& transform = registry.emplace_or_replace<TransformComponent>(ecsEntity);
+			transform.SetPosition(position);
+			transform.SetRotation(glm::quat(rotation));
+			transform.SetScale(scale);
 
-			auto* transform = entity.AddComponent<TransformComponent>();
-			transform->SetPosition(position);
-			transform->SetRotation(glm::quat(rotation));
-			transform->SetScale(scale);
-
-          if (!modelPath.empty())
+            if (!modelPath.empty())
 			{
-				auto* renderable = entity.AddComponent<RenderableComponent>();
-				Model::loadModel(modelPath, *renderable);
-				for (size_t i = 0; i < renderable->materials.size(); ++i)
-					loadPBRTextures(renderable->materials[i], renderable->materialTextures[i]);
+              auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
+				Model::loadModel(modelPath, renderable);
+				for (size_t i = 0; i < renderable.materials.size(); ++i)
+					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
 			}
 
-			return entity;
+          return ecsEntity;
 		};
 
 	//makeEntity("FlightHelmet_Left",
@@ -3008,7 +3058,7 @@ void Renderer::setupGameObjects()
 	//}
 
 	makeEntity("Sponza",
-		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.3f, 0.3f, 0.3f },
+		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
 		"models/Sponza.gltf");
 
 }

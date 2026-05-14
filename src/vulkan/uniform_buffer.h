@@ -6,7 +6,7 @@
 import vulkan_hpp;
 #endif
 
-#include "../ECS/entity.h"
+#include <entt/entt.hpp>
 #include "../ECS/components/renderable_component.h"
 #include "../ECS/components/transform_component.h"
 #include "../ECS/components/camera_component.h"
@@ -54,7 +54,7 @@ struct UniformBufferObject
 class UniformBuffer
 {
 public:
-	static void createUniformBuffers(std::vector<std::unique_ptr<Entity>>& entities, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight);
+  static void createUniformBuffers(entt::registry& registry, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight);
 
 	static void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
         TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings);

@@ -6,6 +6,7 @@
     "tinyobjloader",
     "tinygltf",
     "ktx",
-    "assimp"
+    "assimp",
+    "entt"
   ]
 }

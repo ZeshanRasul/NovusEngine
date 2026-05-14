@@ -53,6 +53,7 @@ add_executable(NovusEngine
     "src/model/InstanceSettings.h" "src/model/AssimpLoadedModel.cpp" "src/model/AssimpLoadedModel.h" "src/model/ModelAndInstanceData.h" "src/renderer/VkRenderData.h" "src/Logger.cpp" "src/Logger.h" 
     "src/vulkan/IndexBuffer.cpp" "src/vulkan/IndexBuffer.h" "src/vulkan/Texture (2).cpp" "src/vulkan/Texture (2).h" "src/vulkan/VertexBuffer.cpp" "src/vulkan/VertexBuffer.h" "src/vulkan/CommandBuffer.cpp" 
     "src/vulkan/CommandBuffer.h" "lib/ImGuiFileDialog.cpp"
+    "src/ECS/entt/scene.h"
     "src/physics/physics_system.h" "src/physics/physics_system.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)
@@ -174,7 +175,7 @@ endif()
 add_custom_target(compute_shaders DEPENDS ${SPIRV_BINARY_FILES})
 add_dependencies(NovusEngine compute_shaders)
 
-target_include_directories(NovusEngine PRIVATE src include build/vcpkg_installed/x64-windows/include build/vcpkg_installed/x64-windows/include/nlohmann)
+target_include_directories(NovusEngine PRIVATE src include build/vcpkg_installed/x64-windows/include build/vcpkg_installed/x64-windows/include/nlohmann build/vcpkg-release/vcpkg_installed/x64-windows/include)
 include_directories(${GLFW3_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${ASSIMP_INCLUDE_DIR} ${VMA_SOURCE_DIR}/vma)
 
 

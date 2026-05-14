@@ -5,17 +5,15 @@
 #include "../renderer/shadow_pass.h"
 #include "uniform_buffer.h"
 
-void UniformBuffer::createUniformBuffers(std::vector<std::unique_ptr<Entity>>& entities, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight)
+void UniformBuffer::createUniformBuffers(entt::registry& registry, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight)
 {
-	for (auto& entityPtr : entities)
+    for (auto [entity, gameObject] : registry.view<RenderableComponent>().each())
 	{
-		auto* gameObject = entityPtr->GetComponent<RenderableComponent>();
-		if (!gameObject)
-			continue;
+      (void)entity;
 
-		gameObject->uniformBuffers.clear();
-		gameObject->uniformBuffersMemory.clear();
-		gameObject->uniformBuffersMapped.clear();
+     gameObject.uniformBuffers.clear();
+		gameObject.uniformBuffersMemory.clear();
+		gameObject.uniformBuffersMapped.clear();
 
 		for (size_t i = 0; i < framesInFlight; i++)
 		{
@@ -25,9 +23,9 @@ void UniformBuffer::createUniformBuffers(std::vector<std::unique_ptr<Entity>>& e
 			Buffer::createBuffer(device, physicalDevice, bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
 				vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 				buffer, bufferMem);
-			gameObject->uniformBuffers.emplace_back(std::move(buffer));
-			gameObject->uniformBuffersMemory.emplace_back(std::move(bufferMem));
-			gameObject->uniformBuffersMapped.emplace_back(gameObject->uniformBuffersMemory[i].mapMemory(0, bufferSize));
+         gameObject.uniformBuffers.emplace_back(std::move(buffer));
+			gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
+			gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));
 		}
 	}
 }
@@ -41,12 +39,12 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	if (cam)
 	{
 		ubo.view = cam->getViewMatrix();
-		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.005f, 600.0f);
+		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.005f, 3000.0f);
 	}
 	else
 	{
 		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(55.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.005f, 600.0f);
+		ubo.proj = glm::perspective(glm::radians(55.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.005f, 3000.0f);
 		ubo.proj[1][1] *= -1;
 	}
 

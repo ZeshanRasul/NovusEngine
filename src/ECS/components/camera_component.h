@@ -48,7 +48,7 @@ public:
 	};
 
 	glm::mat4 getViewMatrix() const;
-	glm::mat4 getProjectionMatrix(float aspectRatio, float nearPlane = 0.1f, float farPlane = 3000.0f) const;
+	glm::mat4 getProjectionMatrix(float aspectRatio, float nearPlane = 0.1f, float farPlane = 10000.0f) const;
 
 	void processKeyboard(CameraMovement direction, float deltaTime);
 	void processMouseMovement(float xOffset, float yOffset, bool constrainPitch = true);

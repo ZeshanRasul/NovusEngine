@@ -4,14 +4,13 @@
 #include "../ECS/components/renderable_component.h"
 #include "uniform_buffer.h"
 
-void DescriptorPool::createDescriptorPool(vk::raii::Device& device, std::vector<std::unique_ptr<Entity>>& entities, vk::raii::DescriptorPool& descriptorPool, uint32_t framesInFlight)
+void DescriptorPool::createDescriptorPool(vk::raii::Device& device, entt::registry& registry, vk::raii::DescriptorPool& descriptorPool, uint32_t framesInFlight)
 {
 	uint32_t materialCount = 0;
-	for (auto& entityPtr : entities)
+    for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
-		auto* renderable = entityPtr->GetComponent<RenderableComponent>();
-		if (renderable)
-			materialCount += static_cast<uint32_t>(std::max<size_t>(1, renderable->materials.size()));
+      (void)entity;
+		materialCount += static_cast<uint32_t>(std::max<size_t>(1, renderable.materials.size()));
 	}
 
 	std::array<vk::DescriptorPoolSize, 2> poolSize{ {
@@ -46,21 +45,19 @@ void DescriptorPool::createFxaaDescriptorPool(vk::raii::Device& device, vk::raii
 	descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 }
 
-void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<std::unique_ptr<Entity>>& entities, vk::raii::DescriptorPool& descriptorPool, vk::raii::DescriptorSetLayout& descriptorSetLayout,
+void DescriptorSet::createDescriptorSets(vk::raii::Device& device, entt::registry& registry, vk::raii::DescriptorPool& descriptorPool, vk::raii::DescriptorSetLayout& descriptorSetLayout,
 	vk::raii::ImageView& defaultTextureView, vk::raii::ImageView& defaultNormalView, vk::raii::Sampler& textureSampler,
 	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowImageViews, vk::raii::Sampler& shadowSampler, uint32_t framesInFlight)
 {
-	for (auto& entityPtr : entities)
+    for (auto [entity, gameObject] : registry.view<RenderableComponent>().each())
 	{
-		auto* gameObject = entityPtr->GetComponent<RenderableComponent>();
-		if (!gameObject)
-			continue;
-		gameObject->materialDescriptorSets.clear();
-		gameObject->materialDescriptorSets.resize(gameObject->materials.size());
-		for (size_t materialIndex = 0; materialIndex < gameObject->materials.size(); ++materialIndex)
+      (void)entity;
+		gameObject.materialDescriptorSets.clear();
+		gameObject.materialDescriptorSets.resize(gameObject.materials.size());
+		for (size_t materialIndex = 0; materialIndex < gameObject.materials.size(); ++materialIndex)
 		{
-			auto& materialTextures = gameObject->materialTextures[materialIndex];
-			auto& descriptorSetsForMaterial = gameObject->materialDescriptorSets[materialIndex];
+           auto& materialTextures = gameObject.materialTextures[materialIndex];
+			auto& descriptorSetsForMaterial = gameObject.materialDescriptorSets[materialIndex];
 
 			std::vector<vk::DescriptorSetLayout> layouts(framesInFlight, *descriptorSetLayout);
 			vk::DescriptorSetAllocateInfo allocInfo{
@@ -74,7 +71,7 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, std::vector<s
 			for (size_t i = 0; i < framesInFlight; i++)
 			{
 				vk::DescriptorBufferInfo bufferInfo{
-					.buffer = *gameObject->uniformBuffers[i],
+                   .buffer = *gameObject.uniformBuffers[i],
 					.offset = 0,
 					.range = sizeof(UniformBufferObject)
 				};

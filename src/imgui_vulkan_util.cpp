@@ -415,6 +415,7 @@ void ImGuiVulkanUtil::initResources() {
 bool ImGuiVulkanUtil::newFrame() {
 	// Start a new ImGui frame
 	ImGui::NewFrame();
+	ImGuizmo::BeginFrame();
 
 	return true;
 }

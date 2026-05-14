@@ -143,10 +143,10 @@ private:
 
 	// ImGUI
 	void renderImgui();
-   void buildEditorDockspace();
+	void buildEditorDockspace();
 	void renderViewportPanel();
 	void initEnttDemoScene();
-	void renderEnttEditor();
+	void renderEnttEditor(glm::mat4 view, glm::mat4 projection);
 	std::string serializeEnttScene() const;
 	bool deserializeEnttScene(const std::string& sceneJson);
 	std::shared_ptr<AssimpModel> ensureModelLoadedForScene(const std::string& modelFileName);
@@ -241,7 +241,7 @@ private:
 	float  lastFrameTime = 0.0f;
 
 	ImGuiVulkanUtil* imGui;
-   ImTextureID mViewportTextureId = 0;
+	ImTextureID mViewportTextureId = 0;
 	bool mEditorDockLayoutInitialized = false;
 	bool mViewportFocused = false;
 	bool mViewportHovered = false;
@@ -329,7 +329,7 @@ private:
 	vk::raii::Image 	fxaaImage = nullptr;
 	vk::raii::DeviceMemory fxaaImageMemory = nullptr;
 	vk::raii::ImageView fxaaImageView = nullptr;
-    vk::raii::Image viewportPreviewImage = nullptr;
+	vk::raii::Image viewportPreviewImage = nullptr;
 	vk::raii::DeviceMemory viewportPreviewImageMemory = nullptr;
 	vk::raii::ImageView viewportPreviewImageView = nullptr;
 	vk::ImageLayout viewportPreviewImageLayout = vk::ImageLayout::eUndefined;
@@ -382,4 +382,10 @@ private:
 	int bloomBlurPasses = 2;
 	int postProcessDebugMode = 0;
 
+
+
+	//IMGUIZMO
+
+	ImGuizmo::OPERATION currentOperation = ImGuizmo::OPERATION::TRANSLATE;
+	ImGuizmo::MODE currentMode = ImGuizmo::MODE::LOCAL;
 };

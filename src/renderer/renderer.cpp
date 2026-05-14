@@ -932,6 +932,11 @@ void Renderer::renderViewportPanel()
 	mViewportFocused = ImGui::IsWindowFocused();
 	mViewportHovered = ImGui::IsWindowHovered();
 
+	const ImVec2 viewportPos = ImGui::GetWindowPos();
+	const ImVec2 viewportSize = ImGui::GetWindowSize();
+	ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+	ImGuizmo::SetRect(viewportPos.x, viewportPos.y, viewportSize.x, viewportSize.y);
+
 	const ImVec2 available = ImGui::GetContentRegionAvail();
 	if (mViewportTextureId && available.x > 1.0f && available.y > 1.0f)
 	{
@@ -991,7 +996,7 @@ void Renderer::renderImgui()
 
 	ImGui::End();
 
-	renderEnttEditor();
+	renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f));
 
 	ImGui::Begin("Shadow Tuning");
 	ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
@@ -1201,7 +1206,7 @@ void Renderer::renderImgui()
 	imGui->updateBuffers();
 }
 
-void Renderer::renderEnttEditor()
+void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 {
 	auto& registry = mEnttScene.getRegistry();
 	static entt::entity sNameEditEntity = entt::null;
@@ -1549,6 +1554,34 @@ void Renderer::renderEnttEditor()
 
 		if (transform)
 		{
+
+			if (ImGui::IsKeyPressed(ImGuiKey_T))
+				currentOperation = ImGuizmo::OPERATION::TRANSLATE;
+			if (ImGui::IsKeyPressed(ImGuiKey_E))
+				currentOperation = ImGuizmo::OPERATION::ROTATE;
+			if (ImGui::IsKeyPressed(ImGuiKey_S))
+				currentOperation = ImGuizmo::OPERATION::SCALE;
+			if (ImGui::RadioButton("Translate", currentOperation == ImGuizmo::OPERATION::TRANSLATE))
+			{
+				currentOperation = ImGuizmo::OPERATION::TRANSLATE;
+				ImGuizmo::Enable(true);
+			}
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Rotate", currentOperation == ImGuizmo::OPERATION::ROTATE))
+			{
+				currentOperation = ImGuizmo::OPERATION::ROTATE;
+				ImGuizmo::Enable(true);
+			}
+			ImGui::SameLine();
+			if (ImGui::RadioButton("Scale", currentOperation == ImGuizmo::OPERATION::SCALE))
+			{
+				currentOperation = ImGuizmo::OPERATION::SCALE;
+				ImGuizmo::Enable(true);
+			}
+			ImGui::SameLine();
+			if (ImGui::RadioButton("None", currentOperation == -1))
+				ImGuizmo::Enable(false);
+
 			glm::vec3 position = transform->GetPosition();
 			glm::vec3 rotation = glm::eulerAngles(transform->GetRotation());
 			glm::vec3 scale = transform->GetScale();
@@ -1559,6 +1592,30 @@ void Renderer::renderEnttEditor()
 				transform->SetRotation(glm::quat(rotation));
 			if (ImGui::DragFloat3("Scale", &scale.x, 0.1f, 0.01f, 100.0f))
 				transform->SetScale(scale);
+
+			glm::mat4 transformMatrix = transform->GetTransformMatrix();
+			glm::mat4 proj = projection;
+			ImGuizmo::Manipulate(glm::value_ptr(view),
+				glm::value_ptr(proj),
+				currentOperation,
+				currentMode,
+				glm::value_ptr(transformMatrix));
+
+			if (ImGuizmo::IsUsing())
+			{
+				glm::vec3 pos, rot, scale;
+				ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform->GetTransformMatrix()),
+					glm::value_ptr(pos),
+					glm::value_ptr(rot),
+					glm::value_ptr(scale));
+
+
+				transform->SetPosition(glm::vec3(pos.x, pos.y, pos.z));
+				transform->SetScale(glm::vec3(scale.x, scale.y, scale.z));
+
+				// rot is Euler degrees from ImGuizmo (XYZ)
+				transform->SetRotation(glm::quat(glm::radians(rot)));
+			}
 		}
 
 		ImGui::Separator();
@@ -2327,7 +2384,7 @@ void Renderer::createGraphicsPipeline()
 	};
 
 	config.descriptorSetLayouts = { *descriptorSetLayout };
-    config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
 	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 
 	auto pipelineBundle = Pipeline::createPipeline(device, config);

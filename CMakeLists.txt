@@ -16,6 +16,8 @@ set(IMGUI_SOURCES
     include/imgui.h
     include/imconfig.h
     include/imgui_internal.h
+    include/ImGuizmo.h
+    include/ImGuizmo.cpp
 )
 
 # Our custom ImGui Vulkan integration
@@ -64,6 +66,7 @@ find_package(tinyobjloader CONFIG REQUIRED)
 find_package(ktx CONFIG REQUIRED)
 find_package(Vulkan 1.4 REQUIRED)
 find_package(assimp REQUIRED)
+find_package(imguizmo CONFIG REQUIRED)
 
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
 

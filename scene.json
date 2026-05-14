@@ -1,0 +1,193 @@
+{
+  "entities": [
+    {
+      "animation": {
+        "clipIndex": 1,
+        "speed": 1.0
+      },
+      "assimp": {
+        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
+        "settings": {
+          "clipIndex": 1,
+          "playTime": 498.48272705078125,
+          "position": [
+            -22.0,
+            0.0,
+            -1.0
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "scale": 17.0,
+          "speed": 1.0,
+          "swapYZ": false
+        }
+      },
+      "hierarchy": {
+        "parent": 2
+      },
+      "id": 4,
+      "name": "New Entity Copy",
+      "transform": {
+        "position": [
+          -22.0,
+          0.0,
+          -1.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          17.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "animation": {
+        "clipIndex": 1,
+        "speed": 1.0
+      },
+      "assimp": {
+        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
+        "settings": {
+          "clipIndex": 1,
+          "playTime": 498.48272705078125,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "scale": 1.0,
+          "speed": 1.0,
+          "swapYZ": false
+        }
+      },
+      "id": 3,
+      "name": "New Entity",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "animation": {
+        "clipIndex": 0,
+        "speed": 1.0
+      },
+      "assimp": {
+        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
+        "settings": {
+          "clipIndex": 0,
+          "playTime": 18.5322265625,
+          "position": [
+            33.5,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            -0.0,
+            -180.0
+          ],
+          "scale": 10.0,
+          "speed": 1.0,
+          "swapYZ": false
+        }
+      },
+      "hierarchy": {
+        "parent": -1
+      },
+      "id": 2,
+      "name": "Assimp: Woman.gltf",
+      "transform": {
+        "position": [
+          33.5,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          -0.0,
+          0.0,
+          1.0,
+          -4.371138828673793e-08
+        ],
+        "scale": [
+          10.0,
+          10.0,
+          10.0
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "name": "Sponza",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 0,
+      "name": "Main Camera",
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "selected": 2
+}

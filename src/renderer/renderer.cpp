@@ -3,6 +3,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/component_wise.hpp>
@@ -26,6 +27,8 @@
 #include "../../lib/ImGuiFileDialog.h"
 
 namespace {
+   using json = nlohmann::json;
+
 	std::vector<uint32_t> readSpvU32(const std::string& filePath)
 	{
 		std::ifstream file(filePath, std::ios::ate | std::ios::binary);
@@ -347,6 +350,10 @@ void Renderer::initEnttDemoScene()
 			onAssimpInstanceDestroyed(inst.get());
 		}
 	});
+
+	mUndoSnapshots.clear();
+	mRedoSnapshots.clear();
+	pushUndoSnapshot();
 }
 
 bool Renderer::hasModel(std::string modelFileName) {
@@ -1009,8 +1016,82 @@ void Renderer::renderImgui()
 void Renderer::renderEnttEditor()
 {
 	auto& registry = mEnttScene.getRegistry();
+ static entt::entity sNameEditEntity = entt::null;
+	static char sNameEditBuffer[256]{};
+   auto isInMultiSelection = [&](entt::entity entity) {
+		return std::find(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), entity) != mEnttMultiSelection.end();
+	};
+	auto removeFromMultiSelection = [&](entt::entity entity) {
+		auto it = std::remove(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), entity);
+		if (it != mEnttMultiSelection.end())
+			mEnttMultiSelection.erase(it, mEnttMultiSelection.end());
+	};
+	auto detachHierarchy = [&](entt::entity entity) {
+		auto* hc = registry.try_get<HierarchyComponent>(entity);
+		if (!hc)
+			return;
+
+		if (hc->parent != entt::null && registry.valid(hc->parent)) {
+			auto* parentHc = registry.try_get<HierarchyComponent>(hc->parent);
+			if (parentHc) {
+				auto it = std::remove(parentHc->children.begin(), parentHc->children.end(), entity);
+				if (it != parentHc->children.end())
+					parentHc->children.erase(it, parentHc->children.end());
+			}
+		}
+
+		for (auto child : hc->children) {
+			if (!registry.valid(child))
+				continue;
+			auto& childHc = registry.emplace_or_replace<HierarchyComponent>(child);
+			childHc.parent = entt::null;
+		}
+		hc->children.clear();
+		hc->parent = entt::null;
+	};
+	auto isDescendantOf = [&](entt::entity child, entt::entity possibleAncestor) {
+		entt::entity cursor = child;
+		while (cursor != entt::null && registry.valid(cursor)) {
+			auto* hc = registry.try_get<HierarchyComponent>(cursor);
+			if (!hc)
+				return false;
+			cursor = hc->parent;
+			if (cursor == possibleAncestor)
+				return true;
+		}
+		return false;
+	};
+	auto setParent = [&](entt::entity child, entt::entity newParent) {
+		if (!registry.valid(child))
+			return;
+		if (newParent == child)
+			return;
+		if (newParent != entt::null && isDescendantOf(newParent, child))
+			return;
+
+		auto& childHc = registry.emplace_or_replace<HierarchyComponent>(child);
+		if (childHc.parent != entt::null && registry.valid(childHc.parent)) {
+			auto* oldParentHc = registry.try_get<HierarchyComponent>(childHc.parent);
+			if (oldParentHc) {
+				auto it = std::remove(oldParentHc->children.begin(), oldParentHc->children.end(), child);
+				if (it != oldParentHc->children.end())
+					oldParentHc->children.erase(it, oldParentHc->children.end());
+			}
+		}
+
+		childHc.parent = newParent;
+		if (newParent != entt::null && registry.valid(newParent)) {
+			auto& parentHc = registry.emplace_or_replace<HierarchyComponent>(newParent);
+			if (std::find(parentHc.children.begin(), parentHc.children.end(), child) == parentHc.children.end()) {
+				parentHc.children.push_back(child);
+			}
+		}
+	};
 	auto selectEntityAndSync = [&](entt::entity entity) {
 		mEnttSelectedEntity = entity;
+		mEnttMultiSelection.clear();
+		mEnttMultiSelection.push_back(entity);
+		sNameEditEntity = entt::null;
 
 		if (auto* assimp = registry.try_get<AssimpInstanceComponent>(entity); assimp && assimp->instance) {
 			auto instanceIt = std::find(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(), assimp->instance);
@@ -1027,6 +1108,21 @@ void Renderer::renderEnttEditor()
 			}
 		}
 	};
+
+	// Keep selection state clean to avoid deleting stale entities.
+	mEnttMultiSelection.erase(
+		std::remove_if(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), [&](entt::entity e) {
+			return !mEnttScene.isValid(e);
+		}),
+		mEnttMultiSelection.end());
+	std::sort(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), [](entt::entity a, entt::entity b) {
+		return entt::to_integral(a) < entt::to_integral(b);
+	});
+	mEnttMultiSelection.erase(std::unique(mEnttMultiSelection.begin(), mEnttMultiSelection.end()), mEnttMultiSelection.end());
+
+	if (mEnttScene.isValid(mEnttSelectedEntity) && mEnttMultiSelection.empty()) {
+		mEnttMultiSelection.push_back(mEnttSelectedEntity);
+	}
 
 	auto duplicateEntity = [&](entt::entity sourceEntity) -> entt::entity {
 		if (!mEnttScene.isValid(sourceEntity))
@@ -1073,21 +1169,62 @@ void Renderer::renderEnttEditor()
 	};
 
 	ImGui::Begin("ECS Scene");
+ if (ImGui::Button("Undo"))
+		performUndo();
+	ImGui::SameLine();
+	if (ImGui::Button("Redo"))
+		performRedo();
+	ImGui::SameLine();
+	if (ImGui::Button("Save Scene")) {
+		std::ofstream outFile(mSceneFilePath, std::ios::out | std::ios::trunc);
+		if (outFile.is_open()) {
+			outFile << serializeEnttScene();
+		}
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Load Scene")) {
+		std::ifstream inFile(mSceneFilePath);
+		if (inFile.is_open()) {
+			std::string jsonContent((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+			pushUndoSnapshot();
+			deserializeEnttScene(jsonContent);
+		}
+	}
+
 	if (ImGui::Button("Create Entity"))
 	{
+        pushUndoSnapshot();
 		mEnttSelectedEntity = mEnttScene.createEntity("New Entity");
+       mEnttMultiSelection.clear();
+		mEnttMultiSelection.push_back(mEnttSelectedEntity);
 	}
 	ImGui::Separator();
 
 	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent& tag)
 		{
             ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
-			const bool isSelected = (mEnttSelectedEntity == entity);
+            const bool isSelected = isInMultiSelection(entity);
             if (ImGui::Selectable(tag.name.c_str(), isSelected)) {
-               selectEntityAndSync(entity);
+              const bool ctrlDown = ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl) || ImGui::GetIO().KeyCtrl;
+				if (ctrlDown) {
+					if (isInMultiSelection(entity)) {
+						removeFromMultiSelection(entity);
+						if (mEnttSelectedEntity == entity) {
+							mEnttSelectedEntity = mEnttMultiSelection.empty() ? entt::null : mEnttMultiSelection.back();
+						}
+					}
+					else {
+						mEnttMultiSelection.push_back(entity);
+						mEnttSelectedEntity = entity;
+					}
+				}
+				else {
+					selectEntityAndSync(entity);
+				}
 			}
          ImGui::PopID();
 		});
+   ImGui::Text("Selected: %d", static_cast<int>(mEnttMultiSelection.size()));
 	ImGui::End();
 
 	ImGui::Begin("ECS Inspector");
@@ -1099,10 +1236,17 @@ void Renderer::renderEnttEditor()
 
 		if (tag)
 		{
-			char buffer[256]{};
-			std::snprintf(buffer, sizeof(buffer), "%s", tag->name.c_str());
-			if (ImGui::InputText("Name", buffer, sizeof(buffer)))
-				tag->name = buffer;
+         if (sNameEditEntity != mEnttSelectedEntity) {
+				sNameEditEntity = mEnttSelectedEntity;
+				std::snprintf(sNameEditBuffer, sizeof(sNameEditBuffer), "%s", tag->name.c_str());
+			}
+
+			if (ImGui::InputText("Name", sNameEditBuffer, sizeof(sNameEditBuffer))) {
+				if (ImGui::IsItemActivated()) {
+					pushUndoSnapshot();
+				}
+				tag->name = sNameEditBuffer;
+			}
 		}
 
 		if (transform)
@@ -1117,6 +1261,80 @@ void Renderer::renderEnttEditor()
 				transform->SetRotation(glm::quat(rotation));
 			if (ImGui::DragFloat3("Scale", &scale.x, 0.1f, 0.01f, 100.0f))
 				transform->SetScale(scale);
+		}
+
+       ImGui::Separator();
+		ImGui::TextUnformatted("Components");
+		const bool hasAnimationComp = registry.any_of<AnimationComponent>(mEnttSelectedEntity);
+		if (!hasAnimationComp) {
+			if (ImGui::Button("Add AnimationComponent")) {
+				pushUndoSnapshot();
+				registry.emplace_or_replace<AnimationComponent>(mEnttSelectedEntity);
+				animation = registry.try_get<AnimationComponent>(mEnttSelectedEntity);
+			}
+		}
+		else {
+			if (ImGui::Button("Remove AnimationComponent")) {
+				pushUndoSnapshot();
+				registry.remove<AnimationComponent>(mEnttSelectedEntity);
+				animation = nullptr;
+			}
+		}
+
+		if (!registry.any_of<HierarchyComponent>(mEnttSelectedEntity)) {
+			if (ImGui::Button("Add HierarchyComponent")) {
+				pushUndoSnapshot();
+				registry.emplace_or_replace<HierarchyComponent>(mEnttSelectedEntity);
+			}
+		}
+		else {
+			if (ImGui::Button("Remove HierarchyComponent")) {
+				pushUndoSnapshot();
+				detachHierarchy(mEnttSelectedEntity);
+				registry.remove<HierarchyComponent>(mEnttSelectedEntity);
+			}
+		}
+
+		if (registry.any_of<HierarchyComponent>(mEnttSelectedEntity)) {
+			auto& hc = registry.get<HierarchyComponent>(mEnttSelectedEntity);
+			std::vector<entt::entity> candidates{};
+			std::vector<std::string> candidateLabels{};
+			std::vector<const char*> candidateCStr{};
+			candidates.push_back(entt::null);
+			candidateLabels.emplace_back("<None>");
+			for (auto [entity, entityTag] : registry.view<EnttTagComponent>().each()) {
+				if (entity == mEnttSelectedEntity)
+					continue;
+				if (isDescendantOf(entity, mEnttSelectedEntity))
+					continue;
+				candidates.push_back(entity);
+				candidateLabels.push_back(entityTag.name);
+			}
+			for (auto& label : candidateLabels)
+				candidateCStr.push_back(label.c_str());
+
+			int selectedParentIdx = 0;
+			for (int i = 0; i < static_cast<int>(candidates.size()); ++i) {
+				if (candidates[i] == hc.parent) {
+					selectedParentIdx = i;
+					break;
+				}
+			}
+
+			if (ImGui::Combo("Parent", &selectedParentIdx, candidateCStr.data(), static_cast<int>(candidateCStr.size()))) {
+				pushUndoSnapshot();
+				setParent(mEnttSelectedEntity, candidates[selectedParentIdx]);
+			}
+
+			ImGui::Text("Children: %d", static_cast<int>(hc.children.size()));
+			for (auto child : hc.children) {
+				if (!registry.valid(child))
+					continue;
+				auto* childTag = registry.try_get<EnttTagComponent>(child);
+				if (childTag) {
+					ImGui::BulletText("%s", childTag->name.c_str());
+				}
+			}
 		}
 
 		// Assimp instance controls (add/remove instance for this entity)
@@ -1135,6 +1353,7 @@ void Renderer::renderEnttEditor()
 				ImGui::PopItemWidth();
 				ImGui::SameLine();
 				if (ImGui::Button("Add Instance")) {
+                    pushUndoSnapshot();
 					auto model = mModelInstData.miModelList.at(selModelIdx);
 					createAssimpInstanceForEntity(model, mEnttSelectedEntity);
 				}
@@ -1195,6 +1414,7 @@ void Renderer::renderEnttEditor()
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("Remove Instance")) {
+                  pushUndoSnapshot();
 					removeInstanceFromEntity(mEnttSelectedEntity);
 				}
 			}
@@ -1202,16 +1422,41 @@ void Renderer::renderEnttEditor()
 
      if (ImGui::Button("Duplicate Entity"))
 		{
-			entt::entity duplicatedEntity = duplicateEntity(mEnttSelectedEntity);
-			if (duplicatedEntity != entt::null) {
-				selectEntityAndSync(duplicatedEntity);
+           pushUndoSnapshot();
+			std::vector<entt::entity> sources = mEnttMultiSelection.empty() ? std::vector<entt::entity>{mEnttSelectedEntity} : mEnttMultiSelection;
+			mEnttMultiSelection.clear();
+			for (auto src : sources) {
+				entt::entity duplicatedEntity = duplicateEntity(src);
+				if (duplicatedEntity != entt::null) {
+					mEnttMultiSelection.push_back(duplicatedEntity);
+					mEnttSelectedEntity = duplicatedEntity;
+				}
+			}
+           if (!mEnttMultiSelection.empty()) {
+				selectEntityAndSync(mEnttMultiSelection.back());
 			}
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Delete Entity"))
 		{
-			mEnttScene.destroyEntity(mEnttSelectedEntity);
+          pushUndoSnapshot();
+         std::vector<entt::entity> targets;
+			if (!mEnttMultiSelection.empty() && isInMultiSelection(mEnttSelectedEntity)) {
+				targets = mEnttMultiSelection;
+			}
+			else if (mEnttScene.isValid(mEnttSelectedEntity)) {
+				targets.push_back(mEnttSelectedEntity);
+			}
+
+			for (auto entity : targets) {
+				if (!mEnttScene.isValid(entity))
+					continue;
+				detachHierarchy(entity);
+				mEnttScene.destroyEntity(entity);
+				removeFromMultiSelection(entity);
+			}
 			mEnttSelectedEntity = entt::null;
+           mEnttMultiSelection.clear();
 		}
 	}
 	else
@@ -1219,6 +1464,253 @@ void Renderer::renderEnttEditor()
 		ImGui::TextUnformatted("Select an entity from ECS Scene.");
 	}
 	ImGui::End();
+}
+
+std::string Renderer::serializeEnttScene() const
+{
+	const auto& registry = mEnttScene.getRegistry();
+	json root;
+	root["entities"] = json::array();
+	root["selected"] = (mEnttSelectedEntity != entt::null) ? static_cast<uint32_t>(entt::to_integral(mEnttSelectedEntity)) : 0u;
+
+	for (auto [entity, tag] : registry.view<EnttTagComponent>().each())
+	{
+		json node;
+		node["id"] = static_cast<uint32_t>(entt::to_integral(entity));
+		node["name"] = tag.name;
+
+		if (const auto* transform = registry.try_get<TransformComponent>(entity)) {
+			const auto& pos = transform->GetPosition();
+			const auto& rot = transform->GetRotation();
+			const auto& scale = transform->GetScale();
+			node["transform"] = {
+				{ "position", { pos.x, pos.y, pos.z } },
+				{ "rotation", { rot.x, rot.y, rot.z, rot.w } },
+				{ "scale", { scale.x, scale.y, scale.z } }
+			};
+		}
+
+		if (const auto* animation = registry.try_get<AnimationComponent>(entity)) {
+			node["animation"] = {
+				{ "clipIndex", animation->clipIndex },
+				{ "speed", animation->speed }
+			};
+		}
+
+		if (const auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity); assimpComp && assimpComp->instance) {
+			json assimp;
+			auto model = assimpComp->instance->getModel();
+			assimp["model"] = model ? model->getModelFileNamePath() : "";
+
+			InstanceSettings settings = assimpComp->instance->getInstanceSettings();
+			assimp["settings"] = {
+				{ "position", { settings.isWorldPosition.x, settings.isWorldPosition.y, settings.isWorldPosition.z } },
+				{ "rotation", { settings.isWorldRotation.x, settings.isWorldRotation.y, settings.isWorldRotation.z } },
+				{ "scale", settings.isScale },
+				{ "swapYZ", settings.isSwapYZAxis },
+				{ "clipIndex", settings.isAnimClipNr },
+				{ "playTime", settings.isAnimPlayTimePos },
+				{ "speed", settings.isAnimSpeedFactor }
+			};
+			node["assimp"] = assimp;
+		}
+
+		if (const auto* hierarchy = registry.try_get<HierarchyComponent>(entity)) {
+			node["hierarchy"] = {
+				{ "parent", hierarchy->parent == entt::null ? -1 : static_cast<int64_t>(entt::to_integral(hierarchy->parent)) }
+			};
+		}
+
+		root["entities"].push_back(node);
+	}
+
+	return root.dump(2);
+}
+
+std::shared_ptr<AssimpModel> Renderer::ensureModelLoadedForScene(const std::string& modelFileName)
+{
+	if (modelFileName.empty())
+		return nullptr;
+
+	if (auto existing = getModel(modelFileName)) {
+		return existing;
+	}
+
+	std::shared_ptr<AssimpModel> model = std::make_shared<AssimpModel>();
+	if (!model->loadModel(mRenderData, modelFileName)) {
+		return nullptr;
+	}
+
+	mModelInstData.miModelList.emplace_back(model);
+	return model;
+}
+
+bool Renderer::deserializeEnttScene(const std::string& sceneJson)
+{
+	json root = json::parse(sceneJson, nullptr, false);
+	if (root.is_discarded() || !root.contains("entities") || !root["entities"].is_array()) {
+		return false;
+	}
+
+	auto& registry = mEnttScene.getRegistry();
+	std::vector<entt::entity> existingEntities;
+	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent&) {
+		existingEntities.push_back(entity);
+	});
+
+	for (auto entity : existingEntities) {
+		mEnttScene.destroyEntity(entity);
+	}
+
+	mEnttSelectedEntity = entt::null;
+	mEnttMultiSelection.clear();
+
+	std::unordered_map<uint32_t, entt::entity> entityMap;
+	struct PendingHierarchy {
+		entt::entity child = entt::null;
+		int64_t parentId = -1;
+	};
+	std::vector<PendingHierarchy> pendingHierarchy;
+
+	for (const auto& node : root["entities"]) {
+		const uint32_t sourceId = node.value("id", 0u);
+		const std::string name = node.value("name", std::string("Entity"));
+		entt::entity entity = mEnttScene.createEntity(name);
+		entityMap[sourceId] = entity;
+
+		if (node.contains("transform")) {
+			auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
+			const auto& t = node["transform"];
+			if (t.contains("position") && t["position"].is_array() && t["position"].size() == 3) {
+				transform.SetPosition(glm::vec3(t["position"][0].get<float>(), t["position"][1].get<float>(), t["position"][2].get<float>()));
+			}
+			if (t.contains("rotation") && t["rotation"].is_array() && t["rotation"].size() == 4) {
+				transform.SetRotation(glm::quat(t["rotation"][3].get<float>(), t["rotation"][0].get<float>(), t["rotation"][1].get<float>(), t["rotation"][2].get<float>()));
+			}
+			if (t.contains("scale") && t["scale"].is_array() && t["scale"].size() == 3) {
+				transform.SetScale(glm::vec3(t["scale"][0].get<float>(), t["scale"][1].get<float>(), t["scale"][2].get<float>()));
+			}
+		}
+
+		if (node.contains("animation")) {
+			auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
+			anim.clipIndex = node["animation"].value("clipIndex", 0u);
+			anim.speed = node["animation"].value("speed", 1.0f);
+		}
+
+		if (node.contains("assimp") && node["assimp"].is_object()) {
+			const auto& assimpNode = node["assimp"];
+			const std::string modelName = assimpNode.value("model", std::string());
+			auto model = ensureModelLoadedForScene(modelName);
+			if (model) {
+				createAssimpInstanceForEntity(model, entity);
+				auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity);
+				if (assimpComp && assimpComp->instance && assimpNode.contains("settings")) {
+					InstanceSettings settings = assimpComp->instance->getInstanceSettings();
+					const auto& s = assimpNode["settings"];
+					if (s.contains("position") && s["position"].is_array() && s["position"].size() == 3) {
+						settings.isWorldPosition = glm::vec3(s["position"][0].get<float>(), s["position"][1].get<float>(), s["position"][2].get<float>());
+					}
+					if (s.contains("rotation") && s["rotation"].is_array() && s["rotation"].size() == 3) {
+						settings.isWorldRotation = glm::vec3(s["rotation"][0].get<float>(), s["rotation"][1].get<float>(), s["rotation"][2].get<float>());
+					}
+					settings.isScale = s.value("scale", settings.isScale);
+					settings.isSwapYZAxis = s.value("swapYZ", settings.isSwapYZAxis);
+					settings.isAnimClipNr = s.value("clipIndex", settings.isAnimClipNr);
+					settings.isAnimPlayTimePos = s.value("playTime", settings.isAnimPlayTimePos);
+					settings.isAnimSpeedFactor = s.value("speed", settings.isAnimSpeedFactor);
+					assimpComp->instance->setInstanceSettings(settings);
+
+					auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
+					anim.clipIndex = settings.isAnimClipNr;
+					anim.speed = settings.isAnimSpeedFactor;
+
+					auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
+					transform.SetPosition(settings.isWorldPosition);
+					transform.SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
+					transform.SetScale(glm::vec3(settings.isScale));
+				}
+			}
+		}
+
+		if (node.contains("hierarchy") && node["hierarchy"].is_object()) {
+			const int64_t parentId = node["hierarchy"].value("parent", -1ll);
+			registry.emplace_or_replace<HierarchyComponent>(entity);
+			pendingHierarchy.push_back({ entity, parentId });
+		}
+	}
+
+	for (const auto& entry : pendingHierarchy) {
+		if (!registry.valid(entry.child))
+			continue;
+		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
+		childHierarchy.parent = entt::null;
+		if (entry.parentId < 0)
+			continue;
+		auto it = entityMap.find(static_cast<uint32_t>(entry.parentId));
+		if (it == entityMap.end())
+			continue;
+		entt::entity parent = it->second;
+		if (!registry.valid(parent) || parent == entry.child)
+			continue;
+
+		childHierarchy.parent = parent;
+		auto& parentHierarchy = registry.emplace_or_replace<HierarchyComponent>(parent);
+		if (std::find(parentHierarchy.children.begin(), parentHierarchy.children.end(), entry.child) == parentHierarchy.children.end()) {
+			parentHierarchy.children.push_back(entry.child);
+		}
+	}
+
+	const uint32_t selectedId = root.value("selected", 0u);
+	auto selectedIt = entityMap.find(selectedId);
+	if (selectedIt != entityMap.end() && mEnttScene.isValid(selectedIt->second)) {
+		mEnttSelectedEntity = selectedIt->second;
+		mEnttMultiSelection.push_back(mEnttSelectedEntity);
+	}
+
+	return true;
+}
+
+void Renderer::pushUndoSnapshot()
+{
+	if (mHistoryMuted)
+		return;
+
+	mUndoSnapshots.push_back(serializeEnttScene());
+	if (mUndoSnapshots.size() > 100) {
+		mUndoSnapshots.erase(mUndoSnapshots.begin());
+	}
+	mRedoSnapshots.clear();
+}
+
+void Renderer::performUndo()
+{
+	if (mUndoSnapshots.empty())
+		return;
+
+	mRedoSnapshots.push_back(serializeEnttScene());
+	std::string targetSnapshot = mUndoSnapshots.back();
+	mUndoSnapshots.pop_back();
+
+	const bool prevMute = mHistoryMuted;
+	mHistoryMuted = true;
+	deserializeEnttScene(targetSnapshot);
+	mHistoryMuted = prevMute;
+}
+
+void Renderer::performRedo()
+{
+	if (mRedoSnapshots.empty())
+		return;
+
+	mUndoSnapshots.push_back(serializeEnttScene());
+	std::string targetSnapshot = mRedoSnapshots.back();
+	mRedoSnapshots.pop_back();
+
+	const bool prevMute = mHistoryMuted;
+	mHistoryMuted = true;
+	deserializeEnttScene(targetSnapshot);
+	mHistoryMuted = prevMute;
 }
 
 // ---------------------------------------------------------------------------

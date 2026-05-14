@@ -161,10 +161,10 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 		ubo.lightSpaceMatrices[cascade] = lightProj * lightView;
 	}
 
-	ubo.lightPositions[0] = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
-	ubo.lightPositions[1] = glm::vec4(-10.0f, 10.0f, 5.0f, 1.0f);
-	ubo.lightPositions[2] = glm::vec4(10.0f, 10.0f, -5.0f, 1.0f);
-	ubo.lightPositions[3] = glm::vec4(0.0f, 10.0f, -10.0f, 1.0f);
+	ubo.lightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
+	ubo.lightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
+	ubo.lightPositions[2] = glm::vec4(10.0f, -50.0f, -75.0f, 1.0f);
+	ubo.lightPositions[3] = glm::vec4(20.0f, 40.0f, -10.0f, 1.0f);
 
 	ubo.lightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
 	ubo.lightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);

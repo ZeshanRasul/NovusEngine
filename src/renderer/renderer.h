@@ -31,6 +31,7 @@ import vulkan_hpp;
 
 #include "ECS/components/camera_component.h"
 #include "ECS/components/animation_component.h"
+#include "ECS/components/hierarchy_component.h"
 #include "ECS/components/transform_component.h"
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"
@@ -142,6 +143,12 @@ private:
 	void renderImgui();
 	void initEnttDemoScene();
 	void renderEnttEditor();
+	std::string serializeEnttScene() const;
+	bool deserializeEnttScene(const std::string& sceneJson);
+	std::shared_ptr<AssimpModel> ensureModelLoadedForScene(const std::string& modelFileName);
+	void pushUndoSnapshot();
+	void performUndo();
+	void performRedo();
 
 	// -------------------------------------------------------------------------
 	// Members
@@ -236,6 +243,11 @@ private:
 	std::vector<AssimpInstanceGPUData> mAssimpGPUData{};
 	EnttScene mEnttScene{};
 	entt::entity mEnttSelectedEntity = entt::null;
+	std::vector<entt::entity> mEnttMultiSelection{};
+	std::vector<std::string> mUndoSnapshots{};
+	std::vector<std::string> mRedoSnapshots{};
+	bool mHistoryMuted = false;
+	std::string mSceneFilePath = "scene.json";
 
 	bool hasModel(std::string modelFileName);
 	std::shared_ptr<AssimpModel> getModel(std::string modelFileName);

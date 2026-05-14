@@ -253,6 +253,8 @@ private:
 	void createSkinningPipeline();
 	void createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
 	void deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance);
+	void onAssimpInstanceDestroyed(AssimpInstance* rawPtr);
+    void onAssimpInstanceComponentDestroyed(entt::registry& reg, entt::entity e);
 	void updateDescriptorSets();
 	void updateComputeDescriptorSets();
 	void initComputeSkinningResources();

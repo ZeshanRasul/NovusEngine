@@ -43,6 +43,14 @@ namespace {
 	}
 }
 
+void Renderer::onAssimpInstanceComponentDestroyed(entt::registry& reg, entt::entity e)
+{
+	auto* comp = reg.try_get<AssimpInstanceComponent>(e);
+	if (comp && comp->instance) {
+		onAssimpInstanceDestroyed(comp->instance.get());
+	}
+}
+
 void Renderer::createSkinningPipeline()
 {
 	auto bindingDesc = SkinnedVertex::getBindingDescription();
@@ -247,14 +255,14 @@ void Renderer::initVulkan()
 
 	initAssimpRenderData();
 
-	//if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf")) {
-	//	Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf");
-	//}
-	//else {
-	//	/* select new model and new instance */
-	//	mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
-	//	mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-	//}
+	if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf")) {
+		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf");
+	}
+	else {
+		/* select new model and new instance */
+		mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
+		mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+	}
 }
 
 void Renderer::initEnttDemoScene()
@@ -264,6 +272,14 @@ void Renderer::initEnttDemoScene()
 		return;
 
 	mEnttSelectedEntity = mEnttScene.createEntity("Main Camera");
+
+	// Register a callback in the EnttScene so destroyEntity will notify us when
+	// an entity holding an AssimpInstanceComponent is destroyed.
+	mEnttScene.setAssimpInstanceDestroyCallback([this](std::shared_ptr<AssimpInstance> inst) {
+		if (inst) {
+			onAssimpInstanceDestroyed(inst.get());
+		}
+	});
 }
 
 bool Renderer::hasModel(std::string modelFileName) {
@@ -500,6 +516,20 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 	transform.SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
 	transform.SetScale(glm::vec3(settings.isScale));
 
+	// Attach AssimpInstanceComponent so the ECS can reference the AssimpInstance
+	auto& assimpComp = registry.emplace_or_replace<AssimpInstanceComponent>(entity);
+	assimpComp.instance = instance;
+
+	// Ensure GPU resources exist for this instance if skinning is enabled.
+	// Some codepaths may call createAssimpEnttEntity without allocating GPU data (e.g. when
+	// recreating entities from saved state), so create them here if missing.
+	if (*skinningPipeline != VK_NULL_HANDLE) {
+		bool hasGpu = std::any_of(mAssimpGPUData.begin(), mAssimpGPUData.end(), [&](const AssimpInstanceGPUData& d) { return d.instance == instance; });
+		if (!hasGpu) {
+			createAssimpInstanceGPUData(instance);
+		}
+	}
+
 	mAssimpEntityMap[key] = entity;
 	return entity;
 }
@@ -522,6 +552,13 @@ void Renderer::destroyAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& in
 		mEnttSelectedEntity = entt::null;
 
 	mAssimpEntityMap.erase(it);
+
+	// Also remove AssimpInstanceComponent if any lingering references remain in the registry
+	if (registry.valid(entity)) {
+		if (registry.any_of<AssimpInstanceComponent>(entity)) {
+			registry.remove<AssimpInstanceComponent>(entity);
+		}
+	}
 }
 
 void Renderer::mainLoop()
@@ -2835,7 +2872,18 @@ void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 			if (it->uboMapped[f])
 				it->uboMemories[f].unmapMemory();
 		}
-		mAssimpGPUData.erase(it);
+        mAssimpGPUData.erase(it);
+	}
+}
+
+// Helper triggered from Entt on_destroy to free GPU data when an AssimpInstanceComponent is removed.
+void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
+{
+	// Find associated shared_ptr in miAssimpInstances (if present) and delete GPU data
+	auto it = std::find_if(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(),
+		[rawPtr](const std::shared_ptr<AssimpInstance>& sp) { return sp.get() == rawPtr; });
+	if (it != mModelInstData.miAssimpInstances.end()) {
+		deleteAssimpInstanceGPUData(*it);
 	}
 }
 

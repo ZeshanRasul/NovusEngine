@@ -1595,16 +1595,16 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 
 			glm::mat4 transformMatrix = transform->GetTransformMatrix();
 			glm::mat4 proj = projection;
-			ImGuizmo::Manipulate(glm::value_ptr(view),
+          const bool manipulated = ImGuizmo::Manipulate(glm::value_ptr(view),
 				glm::value_ptr(proj),
 				currentOperation,
-				currentMode,
+				currentMode,		
 				glm::value_ptr(transformMatrix));
 
-			if (ImGuizmo::IsUsing())
+            if (manipulated || ImGuizmo::IsUsing())
 			{
 				glm::vec3 pos, rot, scale;
-				ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform->GetTransformMatrix()),
+              ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transformMatrix),
 					glm::value_ptr(pos),
 					glm::value_ptr(rot),
 					glm::value_ptr(scale));
@@ -1615,6 +1615,8 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 
 				// rot is Euler degrees from ImGuizmo (XYZ)
 				transform->SetRotation(glm::quat(glm::radians(rot)));
+
+				transform->GetTransformMatrix();
 			}
 		}
 

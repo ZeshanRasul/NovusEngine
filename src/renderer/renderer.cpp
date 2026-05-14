@@ -1072,6 +1072,61 @@ void Renderer::renderEnttEditor()
 		}
 		return false;
 	};
+  auto recalcLocalFromParent = [&](entt::entity child) {
+		auto* childHc = registry.try_get<HierarchyComponent>(child);
+		auto* childTransform = registry.try_get<TransformComponent>(child);
+		if (!childHc || !childTransform)
+			return;
+
+		if (childHc->parent == entt::null || !registry.valid(childHc->parent)) {
+			childHc->localPosition = childTransform->GetPosition();
+			childHc->localRotation = childTransform->GetRotation();
+			childHc->localScale = childTransform->GetScale();
+			return;
+		}
+
+		auto* parentTransform = registry.try_get<TransformComponent>(childHc->parent);
+		if (!parentTransform)
+			return;
+
+		const glm::vec3 parentScale = parentTransform->GetScale();
+		const glm::vec3 safeParentScale(
+			std::abs(parentScale.x) < 1e-5f ? 1.0f : parentScale.x,
+			std::abs(parentScale.y) < 1e-5f ? 1.0f : parentScale.y,
+			std::abs(parentScale.z) < 1e-5f ? 1.0f : parentScale.z);
+
+		childHc->localPosition = glm::inverse(parentTransform->GetRotation()) *
+			((childTransform->GetPosition() - parentTransform->GetPosition()) / safeParentScale);
+		childHc->localRotation = glm::inverse(parentTransform->GetRotation()) * childTransform->GetRotation();
+		childHc->localScale = childTransform->GetScale() / safeParentScale;
+	};
+	std::function<void(entt::entity)> applyWorldFromParent = [&](entt::entity parentEntity) {
+		auto* parentHc = registry.try_get<HierarchyComponent>(parentEntity);
+		auto* parentTransform = registry.try_get<TransformComponent>(parentEntity);
+		if (!parentHc || !parentTransform)
+			return;
+
+		for (auto child : parentHc->children) {
+			if (!registry.valid(child))
+				continue;
+			auto* childTransform = registry.try_get<TransformComponent>(child);
+			auto* childHc = registry.try_get<HierarchyComponent>(child);
+			if (!childTransform || !childHc)
+				continue;
+
+			const glm::vec3 parentScale = parentTransform->GetScale();
+			const glm::vec3 worldPos = parentTransform->GetPosition() +
+				(parentTransform->GetRotation() * (childHc->localPosition * parentScale));
+			const glm::quat worldRot = parentTransform->GetRotation() * childHc->localRotation;
+			const glm::vec3 worldScale = parentScale * childHc->localScale;
+
+			childTransform->SetPosition(worldPos);
+			childTransform->SetRotation(worldRot);
+			childTransform->SetScale(worldScale);
+
+			applyWorldFromParent(child);
+		}
+	};
 	auto setParent = [&](entt::entity child, entt::entity newParent) {
 		if (!registry.valid(child))
 			return;
@@ -1097,6 +1152,10 @@ void Renderer::renderEnttEditor()
 				parentHc.children.push_back(child);
 			}
 		}
+
+		recalcLocalFromParent(child);
+		if (newParent != entt::null)
+			applyWorldFromParent(newParent);
 	};
 	auto selectEntityAndSync = [&](entt::entity entity) {
 		mEnttSelectedEntity = entity;
@@ -1133,6 +1192,13 @@ void Renderer::renderEnttEditor()
 
 	if (mEnttScene.isValid(mEnttSelectedEntity) && mEnttMultiSelection.empty()) {
 		mEnttMultiSelection.push_back(mEnttSelectedEntity);
+	}
+
+	for (auto [entity, hierarchy, transform] : registry.view<HierarchyComponent, TransformComponent>().each()) {
+		if (hierarchy.parent == entt::null || !registry.valid(hierarchy.parent)) {
+			recalcLocalFromParent(entity);
+			applyWorldFromParent(entity);
+		}
 	}
 
 	auto duplicateEntity = [&](entt::entity sourceEntity) -> entt::entity {
@@ -1236,6 +1302,50 @@ void Renderer::renderEnttEditor()
          ImGui::PopID();
 		});
    ImGui::Text("Selected: %d", static_cast<int>(mEnttMultiSelection.size()));
+	ImGui::End();
+
+	ImGui::Begin("ECS Lights");
+	if (ImGui::Button("Create Point Light")) {
+		pushUndoSnapshot();
+		auto lightEntity = mEnttScene.createEntity("Point Light");
+		auto& lightTransform = registry.emplace_or_replace<TransformComponent>(lightEntity);
+		lightTransform.SetPosition(camera.getPosition() + camera.getFront() * 8.0f);
+		auto& light = registry.emplace_or_replace<PointLightComponent>(lightEntity);
+		light.color = glm::vec3(1.0f);
+		light.intensity = 800.0f;
+		light.range = 100.0f;
+		light.enabled = true;
+		selectEntityAndSync(lightEntity);
+	}
+
+	entt::entity lightEntityToDelete = entt::null;
+	for (auto [entity, tag, light, transform] : registry.view<EnttTagComponent, PointLightComponent, TransformComponent>().each())
+	{
+		ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
+		const bool selected = (mEnttSelectedEntity == entity);
+		if (ImGui::Selectable(tag.name.c_str(), selected)) {
+			selectEntityAndSync(entity);
+		}
+		ImGui::SameLine();
+		ImGui::Checkbox("##Enabled", &light.enabled);
+		ImGui::SameLine();
+		ImGui::Text("I: %.0f", light.intensity);
+		ImGui::SameLine();
+		if (ImGui::SmallButton("Delete")) {
+			lightEntityToDelete = entity;
+		}
+		ImGui::PopID();
+	}
+
+	if (lightEntityToDelete != entt::null && mEnttScene.isValid(lightEntityToDelete)) {
+		pushUndoSnapshot();
+		detachHierarchy(lightEntityToDelete);
+		mEnttScene.destroyEntity(lightEntityToDelete);
+		if (mEnttSelectedEntity == lightEntityToDelete) {
+			mEnttSelectedEntity = entt::null;
+			mEnttMultiSelection.clear();
+		}
+	}
 	ImGui::End();
 
 	ImGui::Begin("ECS Inspector");

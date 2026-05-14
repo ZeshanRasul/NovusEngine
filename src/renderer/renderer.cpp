@@ -53,15 +53,7 @@ void Renderer::createAssimpInstanceForEntity(std::shared_ptr<AssimpModel> model,
 	// Create an AssimpInstance and attach it to the entity
 	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
 	auto& registry = mEnttScene.getRegistry();
-	auto& comp = registry.emplace_or_replace<AssimpInstanceComponent>(entity);
-	comp.instance = newInstance;
-
-	// Map instance -> entity for transform sync
-	mAssimpEntityMap[newInstance.get()] = entity;
-
-	// Add to our global instance lists for rendering
-	mModelInstData.miAssimpInstances.emplace_back(newInstance);
-	mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
+  AssimpSystems::RegisterInstance(mModelInstData, registry, mAssimpEntityMap, entity, newInstance);
 
 	// Ensure GPU data if skinning pipeline exists
 	if (*skinningPipeline != VK_NULL_HANDLE)
@@ -399,11 +391,17 @@ bool Renderer::addModel(std::string modelFileName) {
 void Renderer::deleteModel(std::string modelFileName) {
 	std::string shortModelFileName = std::filesystem::path(modelFileName).filename().generic_string();
 
-	if (!mModelInstData.miAssimpInstances.empty()) {
+    if (!mModelInstData.miAssimpInstances.empty()) {
+		std::vector<std::shared_ptr<AssimpInstance>> instancesToDestroy;
 		for (const auto& instance : mModelInstData.miAssimpInstances)
 		{
 			if (instance && instance->getModel() && instance->getModel()->getModelFileName() == shortModelFileName)
-				destroyAssimpEnttEntity(instance);
+				instancesToDestroy.emplace_back(instance);
+		}
+
+		for (const auto& instance : instancesToDestroy)
+		{
+			destroyAssimpEnttEntity(instance);
 		}
 	}
 
@@ -447,8 +445,6 @@ void Renderer::deleteModel(std::string modelFileName) {
 
 std::shared_ptr<AssimpInstance> Renderer::addInstance(std::shared_ptr<AssimpModel> model) {
 	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
-	mModelInstData.miAssimpInstances.emplace_back(newInstance);
-	mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
 	createAssimpEnttEntity(newInstance);
 
 	if (*skinningPipeline != VK_NULL_HANDLE) {
@@ -466,7 +462,7 @@ void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances
 		int xPos = std::rand() % 50 - 25;
 		int zPos = std::rand() % 50 - 25;
 		int rotation = std::rand() % 360 - 180;
-		int clipNr = std::rand() % animClipNum;
+     int clipNr = animClipNum > 0 ? std::rand() % animClipNum : 0;
 
 		std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model, glm::vec3(xPos, 0.0f, zPos), glm::vec3(0.0f, rotation, 0.0f));
 		if (animClipNum > 0) {
@@ -475,44 +471,23 @@ void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances
 			newInstance->setInstanceSettings(instSettings);
 		}
 
-		mModelInstData.miAssimpInstances.emplace_back(newInstance);
-		mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
 		createAssimpEnttEntity(newInstance);
+
+		if (*skinningPipeline != VK_NULL_HANDLE) {
+			createAssimpInstanceGPUData(newInstance);
+		}
 	}
 	updateTriangleCount();
 }
 
 void Renderer::deleteInstance(std::shared_ptr<AssimpInstance> instance) {
-	std::shared_ptr<AssimpModel> currentModel = instance->getModel();
-	std::string currentModelName = currentModel->getModelFileName();
+   if (!instance)
+		return;
+
 	destroyAssimpEnttEntity(instance);
-
-	deleteAssimpInstanceGPUData(instance);
-
-	mModelInstData.miAssimpInstances.erase(
-		std::remove_if(
-			mModelInstData.miAssimpInstances.begin(),
-			mModelInstData.miAssimpInstances.end(),
-			[instance](std::shared_ptr<AssimpInstance> inst) {
-				return inst == instance;
-			}
-     ),
-		mModelInstData.miAssimpInstances.end());
-
-	auto& perModelVec = mModelInstData.miAssimpInstancesPerModel[currentModelName];
-	perModelVec.erase(
-		std::remove_if(
-			perModelVec.begin(),
-			perModelVec.end(),
-			[instance](std::shared_ptr<AssimpInstance> inst) {
-				return inst == instance;
-			}
-		),
-		perModelVec.end());
-	if (perModelVec.empty())
-		mModelInstData.miAssimpInstancesPerModel.erase(currentModelName);
-
-	updateTriangleCount();
+	if (AssimpSystems::FindInstance(mModelInstData, instance.get())) {
+		onAssimpInstanceDestroyed(instance.get());
+	}
 }
 
 void Renderer::cloneInstance(std::shared_ptr<AssimpInstance> instance) {
@@ -524,8 +499,6 @@ void Renderer::cloneInstance(std::shared_ptr<AssimpInstance> instance) {
 	newInstanceSettings.isWorldPosition += glm::vec3(1.0f, 0.0f, -1.0f);
 	newInstance->setInstanceSettings(newInstanceSettings);
 
-	mModelInstData.miAssimpInstances.emplace_back(newInstance);
-	mModelInstData.miAssimpInstancesPerModel[currentModel->getModelFileName()].emplace_back(newInstance);
 	createAssimpEnttEntity(newInstance);
 
 	if (*skinningPipeline != VK_NULL_HANDLE) {
@@ -554,6 +527,7 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 	auto it = mAssimpEntityMap.find(key);
 	if (it != mAssimpEntityMap.end() && registry.valid(it->second))
 	{
+     AssimpSystems::RegisterInstance(mModelInstData, registry, mAssimpEntityMap, it->second, instance);
 		auto* transform = registry.try_get<TransformComponent>(it->second);
 		if (transform)
 		{
@@ -576,21 +550,7 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 	transform.SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
 	transform.SetScale(glm::vec3(settings.isScale));
 
-	// Attach AssimpInstanceComponent so the ECS can reference the AssimpInstance
-	auto& assimpComp = registry.emplace_or_replace<AssimpInstanceComponent>(entity);
-	assimpComp.instance = instance;
-
-	// Ensure GPU resources exist for this instance if skinning is enabled.
-	// Some codepaths may call createAssimpEnttEntity without allocating GPU data (e.g. when
-	// recreating entities from saved state), so create them here if missing.
-	if (*skinningPipeline != VK_NULL_HANDLE) {
-		bool hasGpu = std::any_of(mAssimpGPUData.begin(), mAssimpGPUData.end(), [&](const AssimpInstanceGPUData& d) { return d.instance == instance; });
-		if (!hasGpu) {
-			createAssimpInstanceGPUData(instance);
-		}
-	}
-
-	mAssimpEntityMap[key] = entity;
+   AssimpSystems::RegisterInstance(mModelInstData, registry, mAssimpEntityMap, entity, instance);
 	return entity;
 }
 
@@ -604,21 +564,11 @@ void Renderer::destroyAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& in
 		return;
 
 	entt::entity entity = it->second;
-	auto& registry = mEnttScene.getRegistry();
-	if (registry.valid(entity))
-		registry.destroy(entity);
+  if (mEnttScene.isValid(entity))
+		mEnttScene.destroyEntity(entity);
 
 	if (mEnttSelectedEntity == entity)
 		mEnttSelectedEntity = entt::null;
-
-	mAssimpEntityMap.erase(it);
-
-	// Also remove AssimpInstanceComponent if any lingering references remain in the registry
-	if (registry.valid(entity)) {
-		if (registry.any_of<AssimpInstanceComponent>(entity)) {
-			registry.remove<AssimpInstanceComponent>(entity);
-		}
-	}
 }
 
 void Renderer::mainLoop()
@@ -2985,34 +2935,14 @@ void Renderer::deleteAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 // Helper triggered from Entt on_destroy to free GPU data when an AssimpInstanceComponent is removed.
 void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
 {
-	// Find associated shared_ptr in miAssimpInstances
-	auto it = std::find_if(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(),
-		[rawPtr](const std::shared_ptr<AssimpInstance>& sp) { return sp.get() == rawPtr; });
-	if (it == mModelInstData.miAssimpInstances.end())
+  auto instance = AssimpSystems::FindInstance(mModelInstData, rawPtr);
+	if (!instance)
 		return;
-
-	std::shared_ptr<AssimpInstance> instance = *it;
 
 	// Free GPU resources
 	deleteAssimpInstanceGPUData(instance);
 
-	// Remove from the flat instance list
-	mModelInstData.miAssimpInstances.erase(it);
-
-	// Remove from the per-model instance list; erase the map entry if now empty
-	std::string modelName = instance->getModel()->getModelFileName();
-	auto perModelIt = mModelInstData.miAssimpInstancesPerModel.find(modelName);
-	if (perModelIt != mModelInstData.miAssimpInstancesPerModel.end()) {
-		auto& perModel = perModelIt->second;
-		perModel.erase(std::remove_if(perModel.begin(), perModel.end(),
-			[&](const std::shared_ptr<AssimpInstance>& sp) { return sp == instance; }),
-			perModel.end());
-		if (perModel.empty())
-			mModelInstData.miAssimpInstancesPerModel.erase(perModelIt);
-	}
-
-	// Remove entity map entry
-	mAssimpEntityMap.erase(rawPtr);
+   AssimpSystems::UnregisterInstance(mModelInstData, mAssimpEntityMap, instance);
 
 	updateTriangleCount();
 }

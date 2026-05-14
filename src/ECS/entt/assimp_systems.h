@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -11,11 +12,96 @@
 
 #include "../components/transform_component.h"
 #include "assimp_instance_component.h"
+#include "../../model/ModelAndInstanceData.h"
 #include "../../model/AssimpInstance.h"
 #include "../../model/AssimpModel.h"
 
 namespace AssimpSystems
 {
+ inline void AttachInstanceComponent(
+        entt::registry& registry,
+        entt::entity entity,
+        const std::shared_ptr<AssimpInstance>& instance)
+    {
+        auto& assimpComponent = registry.emplace_or_replace<AssimpInstanceComponent>(entity);
+        assimpComponent.instance = instance;
+    }
+
+    inline void RegisterInstance(
+        ModelAndInstanceData& modelData,
+        entt::registry& registry,
+        std::unordered_map<AssimpInstance*, entt::entity>& entityMap,
+        entt::entity entity,
+        const std::shared_ptr<AssimpInstance>& instance)
+    {
+        if (!instance || !registry.valid(entity))
+            return;
+
+        AttachInstanceComponent(registry, entity, instance);
+
+        if (std::find(modelData.miAssimpInstances.begin(), modelData.miAssimpInstances.end(), instance) == modelData.miAssimpInstances.end())
+        {
+            modelData.miAssimpInstances.emplace_back(instance);
+        }
+
+        auto model = instance->getModel();
+        if (model)
+        {
+            auto& perModelInstances = modelData.miAssimpInstancesPerModel[model->getModelFileName()];
+            if (std::find(perModelInstances.begin(), perModelInstances.end(), instance) == perModelInstances.end())
+            {
+                perModelInstances.emplace_back(instance);
+            }
+        }
+
+        entityMap[instance.get()] = entity;
+    }
+
+    inline std::shared_ptr<AssimpInstance> FindInstance(
+        const ModelAndInstanceData& modelData,
+        AssimpInstance* rawInstance)
+    {
+        auto it = std::find_if(modelData.miAssimpInstances.begin(), modelData.miAssimpInstances.end(),
+            [rawInstance](const std::shared_ptr<AssimpInstance>& instance) {
+                return instance.get() == rawInstance;
+            });
+
+        if (it == modelData.miAssimpInstances.end())
+            return nullptr;
+
+        return *it;
+    }
+
+    inline void UnregisterInstance(
+        ModelAndInstanceData& modelData,
+        std::unordered_map<AssimpInstance*, entt::entity>& entityMap,
+        const std::shared_ptr<AssimpInstance>& instance)
+    {
+        if (!instance)
+            return;
+
+        modelData.miAssimpInstances.erase(
+            std::remove(modelData.miAssimpInstances.begin(), modelData.miAssimpInstances.end(), instance),
+            modelData.miAssimpInstances.end());
+
+        auto model = instance->getModel();
+        if (model)
+        {
+            auto perModelIt = modelData.miAssimpInstancesPerModel.find(model->getModelFileName());
+            if (perModelIt != modelData.miAssimpInstancesPerModel.end())
+            {
+                auto& perModel = perModelIt->second;
+                perModel.erase(std::remove(perModel.begin(), perModel.end(), instance), perModel.end());
+                if (perModel.empty())
+                {
+                    modelData.miAssimpInstancesPerModel.erase(perModelIt);
+                }
+            }
+        }
+
+        entityMap.erase(instance.get());
+    }
+
     inline void SyncTransformsFromEntt(
         entt::registry& registry,
         const std::unordered_map<AssimpInstance*, entt::entity>& entityMap)

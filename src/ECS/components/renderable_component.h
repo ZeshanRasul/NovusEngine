@@ -55,4 +55,6 @@ public:
 
     // Submesh ranges (one entry per glTF primitive)
     std::vector<Mesh> meshes;
+
+	std::string sourceModelFile;
 };

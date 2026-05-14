@@ -162,6 +162,7 @@ void Renderer::setupGameObjects()
 			if (!modelPath.empty())
 			{
 				auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
+				renderable.sourceModelFile = modelPath;
 				Model::loadModel(modelPath, renderable);
 				for (size_t i = 0; i < renderable.materials.size(); ++i)
 					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
@@ -173,6 +174,31 @@ void Renderer::setupGameObjects()
 	makeEntity("Sponza",
 		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
 		"models/Sponza.gltf");
+}
+
+void Renderer::rebuildRenderableRuntimeResources()
+{
+	auto& registry = mEnttScene.getRegistry();
+
+	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
+	{
+		(void)entity;
+		if (renderable.vertices.empty() || renderable.indices.empty())
+			continue;
+
+		createVertexBuffer(renderable);
+		createIndexBuffer(renderable);
+		for (size_t i = 0; i < renderable.materials.size(); ++i)
+			loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+	}
+
+	UniformBuffer::createUniformBuffers(registry, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
+
+	DescriptorPool::createDescriptorPool(device, registry, descriptorPool, MAX_FRAMES_IN_FLIGHT);
+	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
+		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
+	};
+	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
 }
 
 struct FxaaPushConstantsCPU
@@ -1669,6 +1695,8 @@ std::string Renderer::serializeEnttScene() const
 
 			InstanceSettings settings = assimpComp->instance->getInstanceSettings();
 			assimp["settings"] = {
+
+
 				{ "position", { settings.isWorldPosition.x, settings.isWorldPosition.y, settings.isWorldPosition.z } },
 				{ "rotation", { settings.isWorldRotation.x, settings.isWorldRotation.y, settings.isWorldRotation.z } },
 				{ "scale", settings.isScale },
@@ -1678,6 +1706,12 @@ std::string Renderer::serializeEnttScene() const
 				{ "speed", settings.isAnimSpeedFactor }
 			};
 			node["assimp"] = assimp;
+		}
+
+		if (const auto* renderableComp = registry.try_get<RenderableComponent>(entity)) {
+			json renderable;
+			renderable["modelPath"] = renderableComp->sourceModelFile;
+			node["renderable"] = renderable;
 		}
 
 		if (const auto* hierarchy = registry.try_get<HierarchyComponent>(entity)) {
@@ -1772,6 +1806,16 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			anim.speed = node["animation"].value("speed", 1.0f);
 		}
 
+		if (node.contains("renderable") && node["renderable"].is_object()) {
+			const auto& renderableNode = node["renderable"];
+			const std::string modelPath = renderableNode.value("modelPath", std::string());
+			if (!modelPath.empty()) {
+				auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
+				Model::loadModel(modelPath, renderableComp);
+				renderableComp.sourceModelFile = modelPath;
+			}
+		}
+
 		if (node.contains("assimp") && node["assimp"].is_object()) {
 			const auto& assimpNode = node["assimp"];
 			const std::string modelName = assimpNode.value("model", std::string());
@@ -1852,6 +1896,8 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 		mEnttSelectedEntity = selectedIt->second;
 		mEnttMultiSelection.push_back(mEnttSelectedEntity);
 	}
+
+	rebuildRenderableRuntimeResources();
 
 	return true;
 }

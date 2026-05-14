@@ -125,6 +125,7 @@ private:
 
 	// Frame
 	void drawFrame();
+	void rebuildRenderableRuntimeResources();
 
 	// Scene
 	void setupGameObjects();

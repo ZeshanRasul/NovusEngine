@@ -82,7 +82,7 @@ static void glfwCursorPosCallback(GLFWwindow* window, double xpos, double ypos) 
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddMousePosEvent(static_cast<float>(xpos), static_cast<float>(ypos));
 
- if (mouseCaptureMode && !io.WantCaptureMouse) {
+    if (mouseCaptureMode) {
 		Camera::mouseCallback(window, xpos, ypos);
 	}
 }
@@ -93,7 +93,7 @@ static void glfwScrollCallback(GLFWwindow* window, double xoffset, double yoffse
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddMouseWheelEvent(static_cast<float>(xoffset), static_cast<float>(yoffset));
 
- if (mouseCaptureMode && !io.WantCaptureMouse) {
+    if (mouseCaptureMode) {
 		Camera::scrollCallback(window, xoffset, yoffset);
 	}
 }
@@ -112,7 +112,6 @@ static void glfwKeyCallback(GLFWwindow* window, int key, int scancode, int actio
 			}
 			else {
 				glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-				ImGui::GetIO().WantCaptureMouse = true;
 			}
 		}
 

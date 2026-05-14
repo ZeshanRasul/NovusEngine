@@ -1,0 +1,5 @@
+AnimatedSoldier.glb filter=lfs diff=lfs merge=lfs -text
+Knight.glb filter=lfs diff=lfs merge=lfs -text
+Knight2.glb filter=lfs diff=lfs merge=lfs -text
+knight.fbx filter=lfs diff=lfs merge=lfs -text
+knight.obj filter=lfs diff=lfs merge=lfs -text

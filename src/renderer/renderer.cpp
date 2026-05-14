@@ -420,8 +420,8 @@ void Renderer::initVulkan()
 
 	initAssimpRenderData();
 
-	if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf")) {
-		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf");
+	if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Knight.glb")) {
+		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Knight.glb");
 	}
 	else {
 		/* select new model and new instance */

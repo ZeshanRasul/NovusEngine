@@ -1,5 +1,7 @@
 #include "AssimpAnimChannel.h"
 
+#include <cmath>
+
 #include "Logger.h"
 
 void AssimpAnimChannel::loadChannelData(aiNodeAnim* nodeAnim) {
@@ -65,48 +67,47 @@ glm::vec3 AssimpAnimChannel::getTranslation(float time) {
     return glm::vec3(0.0f);
   }
 
+  if (mTranslations.size() == 1 || mTranslationTiminngs.size() <= 1) {
+    return mTranslations.front();
+  }
+
+  const float firstTime = mTranslationTiminngs.front();
+  const float lastTime = mTranslationTiminngs.back();
+
+  if (lastTime <= firstTime) {
+    return mTranslations.front();
+  }
+
+  if (mPreState == aiAnimBehaviour_REPEAT || mPostState == aiAnimBehaviour_REPEAT) {
+    const float duration = lastTime - firstTime;
+    if (duration > 0.0f) {
+      time = std::fmod(time - firstTime, duration);
+      if (time < 0.0f) {
+        time += duration;
+      }
+      time += firstTime;
+    }
+  }
+
   /* handle time before and after */
-  switch (mPreState) {
-    case 0:
-      /* do not change vertex position-> aiAnimBehaviour_DEFAULT */
-      if (time < mTranslationTiminngs.at(0)) {
-        return glm::vec3(0.0f);
-      }
-      break;
-    case 1:
-      /* use value at zero time "aiAnimBehaviour_CONSTANT" */
-      if (time < mTranslationTiminngs.at(0)) {
-        return mTranslations.at(0);
-      }
-      break;
-    default:
-      Logger::log(1, "%s error: preState %i not implmented\n", __FUNCTION__, mPreState);
-      break;
+  if (time <= firstTime) {
+    return mTranslations.front();
   }
 
-  switch(mPostState) {
-    case 0:
-      if (time > mTranslationTiminngs.at(mTranslationTiminngs.size() - 1)) {
-        return glm::vec3(0.0f);
-      }
-      break;
-    case 1:
-      if (time >= mTranslationTiminngs.at(mTranslationTiminngs.size() - 1)) {
-        return mTranslations.at(mTranslations.size() - 1);
-      }
-      break;
-    default:
-      Logger::log(1, "%s error: postState %i not implented\n", __FUNCTION__, mPostState);
-      break;
+  if (time >= lastTime) {
+    return mTranslations.back();
   }
 
-  auto timeIndexPos = std::lower_bound(mTranslationTiminngs.begin(), mTranslationTiminngs.end(), time);
-  /* catch rare cases where time is exaclty zero */
-  int timeIndex = std::max(static_cast<int>(std::distance(mTranslationTiminngs.begin(), timeIndexPos)) - 1, 0);
+  auto upper = std::upper_bound(mTranslationTiminngs.begin(), mTranslationTiminngs.end(), time);
+  size_t index1 = static_cast<size_t>(std::distance(mTranslationTiminngs.begin(), upper));
+  size_t index0 = index1 - 1;   
 
-  float interpolatedTime = (time - mTranslationTiminngs.at(timeIndex)) * mInverseTranslationTimeDiffs.at(timeIndex);
+  const float t0 = mTranslationTiminngs[index0];
+  const float t1 = mTranslationTiminngs[index1];
+  const float dt = t1 - t0;
+  const float alpha = dt > 0.0f ? (time - t0) / dt : 0.0f;
 
-  return glm::mix(mTranslations.at(timeIndex), mTranslations.at(timeIndex + 1), interpolatedTime);
+  return glm::mix(mTranslations[index0], mTranslations[index1], alpha);
 }
 
 glm::vec3 AssimpAnimChannel::getScaling(float time) {
@@ -114,47 +115,47 @@ glm::vec3 AssimpAnimChannel::getScaling(float time) {
     return glm::vec3(1.0f);
   }
 
+  if (mScalings.size() == 1 || mScaleTimings.size() <= 1) {
+    return mScalings.front();
+  }
+
+  const float firstTime = mScaleTimings.front();
+  const float lastTime = mScaleTimings.back();
+
+  if (lastTime <= firstTime) {
+    return mScalings.front();
+  }
+
+  if (mPreState == aiAnimBehaviour_REPEAT || mPostState == aiAnimBehaviour_REPEAT) {
+    const float duration = lastTime - firstTime;
+    if (duration > 0.0f) {
+      time = std::fmod(time - firstTime, duration);
+      if (time < 0.0f) {
+        time += duration;
+      }
+      time += firstTime;
+    }
+  }
+
   /* handle time before and after */
-  switch (mPreState) {
-    case 0:
-      /* do not change vertex position-> aiAnimBehaviour_DEFAULT */
-      if (time < mScaleTimings.at(0)) {
-        return glm::vec3(0.0f);
-      }
-      break;
-    case 1:
-      /* use value at zero time "aiAnimBehaviour_CONSTANT" */
-      if (time < mScaleTimings.at(0)) {
-        return mScalings.at(0);
-      }
-      break;
-    default:
-      Logger::log(1, "%s error: preState %i not implented\n", __FUNCTION__, mPreState);
-      break;
+  if (time <= firstTime) {
+    return mScalings.front();
   }
 
-  switch(mPostState) {
-    case 0:
-      if (time > mScaleTimings.at(mScaleTimings.size() - 1)) {
-        return glm::vec3(0.0f);
-      }
-      break;
-    case 1:
-      if (time >= mScaleTimings.at(mScaleTimings.size() - 1)) {
-        return mScalings.at(mScalings.size() - 1);
-      }
-      break;
-    default:
-      Logger::log(1, "%s error: postState %i not implented\n", __FUNCTION__, mPostState);
-      break;
+  if (time >= lastTime) {
+    return mScalings.back();
   }
 
-  auto timeIndexPos = std::lower_bound(mScaleTimings.begin(), mScaleTimings.end(), time);
-  int timeIndex = std::max(static_cast<int>(std::distance(mScaleTimings.begin(), timeIndexPos)) - 1, 0);
+  auto upper = std::upper_bound(mScaleTimings.begin(), mScaleTimings.end(), time);
+  size_t index1 = static_cast<size_t>(std::distance(mScaleTimings.begin(), upper));
+  size_t index0 = index1 - 1;
 
-  float interpolatedTime = (time - mScaleTimings.at(timeIndex)) * mInverseScaleTimeDiffs.at(timeIndex);
+  const float t0 = mScaleTimings[index0];
+  const float t1 = mScaleTimings[index1];
+  const float dt = t1 - t0;
+  const float alpha = dt > 0.0f ? (time - t0) / dt : 0.0f;
 
-  return glm::mix(mScalings.at(timeIndex), mScalings.at(timeIndex + 1), interpolatedTime);
+  return glm::mix(mScalings[index0], mScalings[index1], alpha);
 }
 
 glm::quat AssimpAnimChannel::getRotation(float time) {
@@ -162,48 +163,48 @@ glm::quat AssimpAnimChannel::getRotation(float time) {
     return glm::identity<glm::quat>();
   }
 
+  if (mRotations.size() == 1 || mRotationTiminigs.size() <= 1) {
+    return glm::normalize(mRotations.front());
+  }
+
+  const float firstTime = mRotationTiminigs.front();
+  const float lastTime = mRotationTiminigs.back();
+
+  if (lastTime <= firstTime) {
+    return glm::normalize(mRotations.front());
+  }
+
+  if (mPreState == aiAnimBehaviour_REPEAT || mPostState == aiAnimBehaviour_REPEAT) {
+    const float duration = lastTime - firstTime;
+    if (duration > 0.0f) {
+      time = std::fmod(time - firstTime, duration);
+      if (time < 0.0f) {
+        time += duration;
+      }
+      time += firstTime;
+    }
+  }
+
   /* handle time before and after */
-  switch (mPreState) {
-    case 0:
-      /* do not change vertex position-> aiAnimBehaviour_DEFAULT */
-      if (time < mRotationTiminigs.at(0)) {
-        return glm::identity<glm::quat>();
-      }
-      break;
-    case 1:
-      /* use value at zero time "aiAnimBehaviour_CONSTANT" */
-      if (time < mRotationTiminigs.at(0)) {
-        return mRotations.at(0);
-      }
-      break;
-    default:
-      Logger::log(1, "%s error: preState %i not implented\n", __FUNCTION__, mPreState);
-      break;
+  if (time <= firstTime) {
+    return glm::normalize(mRotations.front());
   }
 
-  switch(mPostState) {
-    case 0:
-      if (time > mRotationTiminigs.at(mRotationTiminigs.size() - 1)) {
-        return glm::identity<glm::quat>();
-      }
-      break;
-    case 1:
-      if (time >= mRotationTiminigs.at(mRotationTiminigs.size() - 1)) {
-        return mRotations.at(mRotations.size() - 1);
-      }
-      break;
-    default:
-      Logger::log(1, "%s error: postState %i not implented\n", __FUNCTION__, mPostState);
-      break;
+  if (time >= lastTime) {
+    return glm::normalize(mRotations.back());
   }
 
-  auto timeIndexPos = std::lower_bound(mRotationTiminigs.begin(), mRotationTiminigs.end(), time);
-  int timeIndex = std::max(static_cast<int>(std::distance(mRotationTiminigs.begin(), timeIndexPos)) - 1, 0);
+  auto upper = std::upper_bound(mRotationTiminigs.begin(), mRotationTiminigs.end(), time);
+  size_t index1 = static_cast<size_t>(std::distance(mRotationTiminigs.begin(), upper));
+  size_t index0 = index1 - 1;
 
-  float interpolatedTime = (time - mRotationTiminigs.at(timeIndex)) * mInverseRotationTimeDiffs.at(timeIndex);
+  const float t0 = mRotationTiminigs[index0];
+  const float t1 = mRotationTiminigs[index1];
+  const float dt = t1 - t0;
+  const float alpha = dt > 0.0f ? (time - t0) / dt : 0.0f;
 
-  /* roiations are interpolated via SLERP */
-  return glm::normalize(glm::slerp(mRotations.at(timeIndex), mRotations.at(timeIndex + 1), interpolatedTime));
+  /* rotations are interpolated via SLERP */
+  return glm::normalize(glm::slerp(mRotations[index0], mRotations[index1], alpha));
 }
 
 int AssimpAnimChannel::getBoneId() {

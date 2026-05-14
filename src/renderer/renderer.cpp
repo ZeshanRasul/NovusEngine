@@ -41,7 +41,63 @@ namespace {
 		file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(fileSize));
 		return buffer;
 	}
+
 }
+
+
+void Renderer::createAssimpInstanceForEntity(std::shared_ptr<AssimpModel> model, entt::entity entity)
+{
+	if (!model)
+		return;
+
+	// Create an AssimpInstance and attach it to the entity
+	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
+	auto& registry = mEnttScene.getRegistry();
+	auto& comp = registry.emplace_or_replace<AssimpInstanceComponent>(entity);
+	comp.instance = newInstance;
+
+	// Map instance -> entity for transform sync
+	mAssimpEntityMap[newInstance.get()] = entity;
+
+	// Add to our global instance lists for rendering
+	mModelInstData.miAssimpInstances.emplace_back(newInstance);
+	mModelInstData.miAssimpInstancesPerModel[model->getModelFileName()].emplace_back(newInstance);
+
+	// Ensure GPU data if skinning pipeline exists
+	if (*skinningPipeline != VK_NULL_HANDLE)
+	{
+		createAssimpInstanceGPUData(newInstance);
+	}
+}
+
+void Renderer::removeInstanceFromEntity(entt::entity entity)
+{
+	auto& registry = mEnttScene.getRegistry();
+	if (!registry.valid(entity)) return;
+	if (!registry.any_of<AssimpInstanceComponent>(entity)) return;
+	auto& comp = registry.get<AssimpInstanceComponent>(entity);
+	if (!comp.instance) return;
+
+	// Delete GPU data then remove from our instance lists
+	deleteAssimpInstanceGPUData(comp.instance);
+
+	mModelInstData.miAssimpInstances.erase(
+		std::remove_if(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(),
+			[&](const std::shared_ptr<AssimpInstance>& inst) { return inst == comp.instance; }),
+		mModelInstData.miAssimpInstances.end());
+
+	std::string modelName = comp.instance->getModel()->getModelFileName();
+	auto &vec = mModelInstData.miAssimpInstancesPerModel[modelName];
+	vec.erase(std::remove_if(vec.begin(), vec.end(), [&](const std::shared_ptr<AssimpInstance>& inst) { return inst == comp.instance; }), vec.end());
+
+	mAssimpEntityMap.erase(comp.instance.get());
+
+	registry.remove<AssimpInstanceComponent>(entity);
+}
+
+
+
+
 
 void Renderer::onAssimpInstanceComponentDestroyed(entt::registry& reg, entt::entity e)
 {
@@ -315,8 +371,6 @@ bool Renderer::addModel(std::string modelFileName) {
 
 	/* also add a new instance here to see the model */
 	auto newInstance = addInstance(model);
-	
-	mEnttSelectedEntity = mEnttScene.createEntity(modelFileName);
 
 	// Apply known import presets for assets authored with different up/scale conventions.
 	std::string fileNameLower = std::filesystem::path(modelFileName).filename().generic_string();
@@ -334,6 +388,19 @@ bool Renderer::addModel(std::string modelFileName) {
 		settings.isScale = 10.0f;
 	}
 	newInstance->setInstanceSettings(settings);
+
+	// Select the entity that createAssimpEnttEntity already created for this instance and
+	// sync its ECS transform to match the applied presets.
+	auto entityIt = mAssimpEntityMap.find(newInstance.get());
+	if (entityIt != mAssimpEntityMap.end()) {
+		mEnttSelectedEntity = entityIt->second;
+		auto& registry = mEnttScene.getRegistry();
+		if (auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity)) {
+			transform->SetPosition(settings.isWorldPosition);
+			transform->SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
+			transform->SetScale(glm::vec3(settings.isScale));
+		}
+	}
 
 	return true;
 }
@@ -367,9 +434,9 @@ void Renderer::deleteModel(std::string modelFileName) {
 		mModelInstData.miAssimpInstancesPerModel.erase(shortModelFileName);
 	}
 
-	/* add models to pending delete list */
+	/* add the deleted model to pending delete list so its GPU resources are freed next frame */
 	for (const auto& model : mModelInstData.miModelList) {
-		if (model && (model->getTriangleCount() > 0)) {
+		if (model && model->getModelFileName() == shortModelFileName && model->getTriangleCount() > 0) {
 			mModelInstData.miPendingDeleteAssimpModels.insert(model);
 		}
 	}
@@ -926,8 +993,9 @@ void Renderer::renderImgui()
 		}
 		ImGui::SameLine();
 		ImGui::PushItemWidth(30);
+		int selInstMax = numberOfInstances > 0 ? static_cast<int>(numberOfInstances) - 1 : 0;
 		ImGui::DragInt("##SelInst", &mModelInstData.miSelectedInstance, 1, 0,
-			mModelInstData.miAssimpInstances.size() - 1, "%3d");
+			selInstMax, "%3d");
 		ImGui::PopItemWidth();
 		ImGui::SameLine();
 		if (ImGui::ArrowButton("##Right", ImGuiDir_Right) &&
@@ -974,19 +1042,21 @@ void Renderer::renderImgui()
 			if (mModelInstData.miSelectedInstance > 0) {
 				mModelInstData.miSelectedInstance -= 1;
 			}
-			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
+			if (!mModelInstData.miAssimpInstances.empty()) {
+				settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
+			}
 		}
 
 		if (numberOfInstancesPerModel < 2) {
 			ImGui::EndDisabled();
 		}
 
+		/* re-read size in case an instance was just deleted */
+		numberOfInstances = mModelInstData.miAssimpInstances.size();
+
 		if (numberOfInstances == 0) {
 			ImGui::EndDisabled();
 		}
-
-		/* get the new size, in case of a deletion */
-		numberOfInstances = mModelInstData.miAssimpInstances.size();
 
 		std::string baseModelName = "None";
 		if (numberOfInstances > 0) {
@@ -1189,6 +1259,49 @@ void Renderer::renderEnttEditor()
 				transform->SetRotation(glm::quat(rotation));
 			if (ImGui::DragFloat3("Scale", &scale.x, 0.1f, 0.01f, 100.0f))
 				transform->SetScale(scale);
+		}
+
+		// Assimp instance controls (add/remove instance for this entity)
+		if (!registry.any_of<AssimpInstanceComponent>(mEnttSelectedEntity)) {
+			ImGui::Separator();
+			ImGui::Text("Assimp Instance:");
+			if (mModelInstData.miModelList.empty()) {
+				ImGui::Text("No models loaded. Import a model first.");
+			} else {
+				static int selModelIdx = 0;
+				std::vector<const char*> modelNames;
+				modelNames.reserve(mModelInstData.miModelList.size());
+				for (auto &m : mModelInstData.miModelList) modelNames.push_back(m->getModelFileName().c_str());
+				ImGui::PushItemWidth(200);
+				if (ImGui::Combo("Model to Add", &selModelIdx, modelNames.data(), static_cast<int>(modelNames.size()))) {}
+				ImGui::PopItemWidth();
+				ImGui::SameLine();
+				if (ImGui::Button("Add Instance")) {
+					auto model = mModelInstData.miModelList.at(selModelIdx);
+					createAssimpInstanceForEntity(model, mEnttSelectedEntity);
+				}
+			}
+		} else {
+			ImGui::Separator();
+			ImGui::Text("Assimp Instance Attached");
+			auto& comp = registry.get<AssimpInstanceComponent>(mEnttSelectedEntity);
+			if (comp.instance) {
+				InstanceSettings instSet = comp.instance->getInstanceSettings();
+				if (ImGui::DragFloat3("Instance Pos", glm::value_ptr(instSet.isWorldPosition), 0.1f)) {
+					comp.instance->setTranslation(instSet.isWorldPosition);
+				}
+				glm::vec3 rot = instSet.isWorldRotation;
+				if (ImGui::DragFloat3("Instance Rot", glm::value_ptr(rot), 1.0f)) {
+					comp.instance->setRotation(rot);
+				}
+				if (ImGui::DragFloat("Instance Scale", &instSet.isScale, 0.01f, 0.001f, 100.0f)) {
+					comp.instance->setScale(instSet.isScale);
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Remove Instance")) {
+					removeInstanceFromEntity(mEnttSelectedEntity);
+				}
+			}
 		}
 
 		if (ImGui::Button("Delete Entity"))
@@ -1635,7 +1748,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 
 void Renderer::recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex)
 {
-	if (mAssimpGPUData.empty() || *shadowSkinningPipeline == VK_NULL_HANDLE)
+	if (mAssimpGPUData.empty() || mModelInstData.miAssimpInstances.empty() || *shadowSkinningPipeline == VK_NULL_HANDLE)
 		return;
 
 	const UniformBufferObject* shadowTemplateUbo = nullptr;
@@ -2889,7 +3002,10 @@ void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
 
 void Renderer::updateAssimpAnimations(float deltaTime)
 {
-    auto& registry = mEnttScene.getRegistry();
+	if (mModelInstData.miAssimpInstances.empty())
+		return;
+
+	auto& registry = mEnttScene.getRegistry();
 	auto syncTransformFromEnttToAssimp = [&](const std::shared_ptr<AssimpInstance>& assimpInstance) {
 		if (!assimpInstance)
 			return;
@@ -3138,7 +3254,7 @@ void Renderer::runComputeShaders(const std::shared_ptr<AssimpModel>& model, size
 
 void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 {
-	if (mAssimpGPUData.empty() || *skinningPipeline == VK_NULL_HANDLE)
+	if (mAssimpGPUData.empty() || mModelInstData.miAssimpInstances.empty() || *skinningPipeline == VK_NULL_HANDLE)
 		return;
 
 	const UniformBufferObject* shadowTemplateUbo = nullptr;

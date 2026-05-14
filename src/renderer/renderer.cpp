@@ -269,6 +269,17 @@ void Renderer::initVulkan()
 	{
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
 	}
+
+	{
+		auto& registry = mEnttScene.getRegistry();
+		auto pointLightEntity = mEnttScene.createEntity("Point Light");
+		auto& lightTransform = registry.emplace_or_replace<TransformComponent>(pointLightEntity);
+		lightTransform.SetPosition(glm::vec3(0.0f, -45.0f, 0.0f));
+		auto& light = registry.emplace_or_replace<PointLightComponent>(pointLightEntity);
+		light.color = glm::vec3(1.0f);
+		light.intensity = 1000.0f;
+		light.range = 120.0f;
+	}
 	ShadowPass::createPipeline(device, physicalDevice, shadowPipelineLayout, shadowPipeline, shadowDescriptorSetLayout);
 
 	auto pipelineBundle = Pipeline::createFxaaPipeline(device, swapChainSurfaceFormat.format, fxaaDescriptorSetLayout);
@@ -1295,6 +1306,23 @@ void Renderer::renderEnttEditor()
 			}
 		}
 
+		if (!registry.any_of<PointLightComponent>(mEnttSelectedEntity)) {
+			if (ImGui::Button("Add PointLightComponent")) {
+				pushUndoSnapshot();
+				auto& light = registry.emplace_or_replace<PointLightComponent>(mEnttSelectedEntity);
+				light.color = glm::vec3(1.0f);
+				light.intensity = 800.0f;
+				light.range = 100.0f;
+				light.enabled = true;
+			}
+		}
+		else {
+			if (ImGui::Button("Remove PointLightComponent")) {
+				pushUndoSnapshot();
+				registry.remove<PointLightComponent>(mEnttSelectedEntity);
+			}
+		}
+
 		if (registry.any_of<HierarchyComponent>(mEnttSelectedEntity)) {
 			auto& hc = registry.get<HierarchyComponent>(mEnttSelectedEntity);
 			std::vector<entt::entity> candidates{};
@@ -1335,6 +1363,15 @@ void Renderer::renderEnttEditor()
 					ImGui::BulletText("%s", childTag->name.c_str());
 				}
 			}
+		}
+
+		if (auto* pointLight = registry.try_get<PointLightComponent>(mEnttSelectedEntity)) {
+			ImGui::Separator();
+			ImGui::TextUnformatted("Point Light");
+			ImGui::Checkbox("Enabled", &pointLight->enabled);
+			ImGui::ColorEdit3("Light Color", &pointLight->color.x);
+			ImGui::DragFloat("Intensity", &pointLight->intensity, 1.0f, 0.0f, 50000.0f, "%.1f");
+			ImGui::DragFloat("Range", &pointLight->range, 0.5f, 0.0f, 1000.0f, "%.1f");
 		}
 
 		// Assimp instance controls (add/remove instance for this entity)
@@ -1521,6 +1558,15 @@ std::string Renderer::serializeEnttScene() const
 			};
 		}
 
+		if (const auto* pointLight = registry.try_get<PointLightComponent>(entity)) {
+			node["pointLight"] = {
+				{ "color", { pointLight->color.x, pointLight->color.y, pointLight->color.z } },
+				{ "intensity", pointLight->intensity },
+				{ "range", pointLight->range },
+				{ "enabled", pointLight->enabled }
+			};
+		}
+
 		root["entities"].push_back(node);
 	}
 
@@ -1637,6 +1683,17 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			const int64_t parentId = node["hierarchy"].value("parent", -1ll);
 			registry.emplace_or_replace<HierarchyComponent>(entity);
 			pendingHierarchy.push_back({ entity, parentId });
+		}
+
+		if (node.contains("pointLight") && node["pointLight"].is_object()) {
+			auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
+			const auto& pl = node["pointLight"];
+			if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3) {
+				light.color = glm::vec3(pl["color"][0].get<float>(), pl["color"][1].get<float>(), pl["color"][2].get<float>());
+			}
+			light.intensity = pl.value("intensity", light.intensity);
+			light.range = pl.value("range", light.range);
+			light.enabled = pl.value("enabled", light.enabled);
 		}
 	}
 
@@ -2115,11 +2172,40 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
 
 	auto& registry = mEnttScene.getRegistry();
+    std::array<glm::vec4, 4> pointLightPositions = {
+		glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
+		glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
+		glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
+		glm::vec4(20.0f, 40.0f, -10.0f, 1.0f)
+	};
+	std::array<glm::vec4, 4> pointLightColors = {
+		glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f),
+		glm::vec4(800.0f, 200.0f, 200.0f, 1.0f),
+		glm::vec4(200.0f, 200.0f, 800.0f, 1.0f),
+		glm::vec4(200.0f, 800.0f, 200.0f, 1.0f)
+	};
+	int lightIndex = 0;
+	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
+	{
+		(void)lightEntity;
+		if (lightIndex >= 4)
+			break;
+		if (!light.enabled)
+			continue;
+
+		pointLightPositions[lightIndex] = glm::vec4(lightTransform.GetPosition(), 1.0f);
+		pointLightColors[lightIndex] = glm::vec4(light.color * light.intensity, 1.0f);
+		++lightIndex;
+	}
+	for (; lightIndex < 4; ++lightIndex) {
+		pointLightColors[lightIndex] = glm::vec4(0.0f);
+	}
+
 	for (auto [entity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
 	{
 		(void)entity;
 
-		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings);
+      UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
 		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -2617,11 +2703,42 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
 	auto& registry = mEnttScene.getRegistry();
+ std::array<glm::vec4, 4> pointLightPositions = {
+		glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
+		glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
+		glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
+		glm::vec4(20.0f, 40.0f, -10.0f, 1.0f)
+	};
+	std::array<glm::vec4, 4> pointLightColors = {
+		glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f),
+		glm::vec4(800.0f, 200.0f, 200.0f, 1.0f),
+		glm::vec4(200.0f, 200.0f, 800.0f, 1.0f),
+		glm::vec4(200.0f, 800.0f, 200.0f, 1.0f)
+	};
+
+	int lightIndex = 0;
+	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
+	{
+		(void)lightEntity;
+		if (lightIndex >= 4)
+			break;
+		if (!light.enabled)
+			continue;
+
+		pointLightPositions[lightIndex] = glm::vec4(lightTransform.GetPosition(), 1.0f);
+		pointLightColors[lightIndex] = glm::vec4(light.color * light.intensity, 1.0f);
+		++lightIndex;
+	}
+
+	for (; lightIndex < 4; ++lightIndex) {
+		pointLightColors[lightIndex] = glm::vec4(0.0f);
+	}
+
 	for (auto [ecsEntity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
 	{
 		(void)ecsEntity;
 
-		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings);
+      UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
 		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
 		vk::DeviceSize offsets[] = { 0 };
 		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);

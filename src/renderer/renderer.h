@@ -32,6 +32,7 @@ import vulkan_hpp;
 #include "ECS/components/camera_component.h"
 #include "ECS/components/animation_component.h"
 #include "ECS/components/hierarchy_component.h"
+#include "ECS/components/light_component.h"
 #include "ECS/components/transform_component.h"
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"

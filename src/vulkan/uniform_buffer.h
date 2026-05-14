@@ -57,5 +57,7 @@ public:
   static void createUniformBuffers(entt::registry& registry, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight);
 
 	static void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
-        TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings);
+        TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings,
+		const std::array<glm::vec4, 4>& pointLightPositions,
+		const std::array<glm::vec4, 4>& pointLightColors);
 };

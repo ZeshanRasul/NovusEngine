@@ -62,15 +62,13 @@ void toggleInputMode() {
 
 // GLFW callback functions
 static void glfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+    ImGuiIO& io = ImGui::GetIO();
+	if (button >= 0 && button < ImGuiMouseButton_COUNT)
+		io.AddMouseButtonEvent(button, action == GLFW_PRESS);
+
 	if (button >= 0 && button < 3) {
 		InputState& state = InputSystem::GetInputState();
 		state.mouseButtons[button] = action == GLFW_PRESS;
-	}
-
-	if (!mouseCaptureMode) {
-		ImGuiIO& io = ImGui::GetIO();
-		if (button >= 0 && button < ImGuiMouseButton_COUNT)
-			io.AddMouseButtonEvent(button, action == GLFW_PRESS);
 	}
 }
 
@@ -81,24 +79,22 @@ static void glfwCursorPosCallback(GLFWwindow* window, double xpos, double ypos) 
 	glm::vec2 newPos(static_cast<float>(xpos), static_cast<float>(ypos));
 	state.cursorDelta = newPos - state.cursorPosition;
 	state.cursorPosition = newPos;
+	ImGuiIO& io = ImGui::GetIO();
+	io.AddMousePosEvent(static_cast<float>(xpos), static_cast<float>(ypos));
 
-	if (mouseCaptureMode) {
+ if (mouseCaptureMode && !io.WantCaptureMouse) {
 		Camera::mouseCallback(window, xpos, ypos);
-	} else {
-		ImGuiIO& io = ImGui::GetIO();
-		io.AddMousePosEvent(static_cast<float>(xpos), static_cast<float>(ypos));
 	}
 }
 
 static void glfwScrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
 	InputState& state = InputSystem::GetInputState();
 	state.scrollDelta = static_cast<float>(yoffset);
+	ImGuiIO& io = ImGui::GetIO();
+	io.AddMouseWheelEvent(static_cast<float>(xoffset), static_cast<float>(yoffset));
 
-	if (mouseCaptureMode) {
+ if (mouseCaptureMode && !io.WantCaptureMouse) {
 		Camera::scrollCallback(window, xoffset, yoffset);
-	} else {
-		ImGuiIO& io = ImGui::GetIO();
-		io.AddMouseWheelEvent(static_cast<float>(xoffset), static_cast<float>(yoffset));
 	}
 }
 
@@ -144,6 +140,11 @@ void InputSystem::Update(float deltaTime) {
 	glfwPollEvents();
 
 	dt = deltaTime;
+
+	if (ImGui::GetIO().WantCaptureKeyboard) {
+		inputState.resetDeltas();
+		return;
+	}
 
 	// Update key states for continuous actions (like movement)
 	if (glfwGetKey(gWindow, GLFW_KEY_W) == GLFW_PRESS) {

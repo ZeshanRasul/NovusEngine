@@ -284,6 +284,7 @@ void ImGuiVulkanUtil::initResources() {
 	writeSet.dstBinding = 0;                                                   // Binding point in shader
 
 	device->updateDescriptorSets(writeSet, {});                   // Execute the binding update
+    io.Fonts->SetTexID(reinterpret_cast<ImTextureID>(static_cast<VkDescriptorSet>(*descriptorSet)));
 	// Create pipeline cache
 	vk::PipelineCacheCreateInfo pipelineCacheInfo{};
 	pipelineCache = device->createPipelineCache(pipelineCacheInfo);

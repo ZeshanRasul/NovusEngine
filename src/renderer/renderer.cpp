@@ -135,7 +135,7 @@ void Renderer::createSkinningPipeline()
 	config.vertexBindings = { bindingDesc };
 	config.vertexAttributes = { attribDescs.begin(), attribDescs.end() };
 	config.descriptorSetLayouts = { *skinningDescriptorSetLayout };
-	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+	config.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat };
 	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 	config.cullMode = vk::CullModeFlagBits::eNone;
 
@@ -319,15 +319,6 @@ void Renderer::initVulkan()
 		fxaaImage, fxaaImageMemory);
 	fxaaImageView = ImageView::createImageView(device, fxaaImage, vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor);
 
-	Image::createImage(device, physicalDevice,
-		swapChainExtent.width, swapChainExtent.height,
-		swapChainSurfaceFormat.format,
-		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
-		vk::MemoryPropertyFlagBits::eDeviceLocal,
-		viewportPreviewImage, viewportPreviewImageMemory);
-	viewportPreviewImageView = ImageView::createImageView(device, viewportPreviewImage, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
-	viewportPreviewImageLayout = vk::ImageLayout::eUndefined;
 	Image::createImage(device, physicalDevice,
 		swapChainExtent.width, swapChainExtent.height,
 		swapChainSurfaceFormat.format,
@@ -2296,6 +2287,15 @@ void Renderer::recreateSwapChain()
 
 	createBloomResources();
 	createBloomDescriptorSets();
+	Image::createImage(device, physicalDevice,
+		swapChainExtent.width, swapChainExtent.height,
+		swapChainSurfaceFormat.format,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		viewportPreviewImage, viewportPreviewImageMemory);
+	viewportPreviewImageView = ImageView::createImageView(device, viewportPreviewImage, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
+	viewportPreviewImageLayout = vk::ImageLayout::eUndefined;
 
 	fxaaDescriptorSets.clear();
 	fxaaDescriptorPool = nullptr;
@@ -2327,7 +2327,7 @@ void Renderer::createGraphicsPipeline()
 	};
 
 	config.descriptorSetLayouts = { *descriptorSetLayout };
-	config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
+    config.colorAttachmentFormats = { swapChainSurfaceFormat.format };
 	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
 
 	auto pipelineBundle = Pipeline::createPipeline(device, config);

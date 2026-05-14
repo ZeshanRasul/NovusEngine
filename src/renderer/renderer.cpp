@@ -76,6 +76,11 @@ void Renderer::createAssimpInstanceForEntity(std::shared_ptr<AssimpModel> model,
 	// Create an AssimpInstance and attach it to the entity
 	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
 	auto& registry = mEnttScene.getRegistry();
+   auto& animation = registry.emplace_or_replace<AnimationComponent>(entity);
+	InstanceSettings newSettings = newInstance->getInstanceSettings();
+	newSettings.isAnimClipNr = animation.clipIndex;
+	newSettings.isAnimSpeedFactor = animation.speed;
+	newInstance->setInstanceSettings(newSettings);
    AssimpSystems::RegisterInstance(mModelInstData, registry, entity, newInstance,
 		[this](const std::shared_ptr<AssimpInstance>& instance) {
 			if (*skinningPipeline != VK_NULL_HANDLE)
@@ -552,6 +557,9 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 			transform->SetPosition(settings.isWorldPosition);
 			transform->SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
 			transform->SetScale(glm::vec3(settings.isScale));
+           auto& animation = registry.emplace_or_replace<AnimationComponent>(existingEntity);
+			animation.clipIndex = settings.isAnimClipNr;
+			animation.speed = settings.isAnimSpeedFactor;
 		}
       return existingEntity;
 	}
@@ -567,6 +575,9 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 	transform.SetPosition(settings.isWorldPosition);
 	transform.SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
 	transform.SetScale(glm::vec3(settings.isScale));
+	auto& animation = registry.emplace_or_replace<AnimationComponent>(entity);
+	animation.clipIndex = settings.isAnimClipNr;
+	animation.speed = settings.isAnimSpeedFactor;
 
     AssimpSystems::RegisterInstance(mModelInstData, registry, entity, instance,
 		[this](const std::shared_ptr<AssimpInstance>& registeredInstance) {
@@ -941,194 +952,8 @@ void Renderer::renderImgui()
 		}
 	}
 
-	if (ImGui::CollapsingHeader("Instances")) {
-		size_t numberOfInstances = mModelInstData.miAssimpInstances.size();
-
-		ImGui::Text("Number of Instances: %ld", numberOfInstances);
-
-		if (numberOfInstances == 0) {
-			ImGui::BeginDisabled();
-		}
-
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Selected Instance  :");
-		ImGui::SameLine();
-		ImGui::PushButtonRepeat(true);
-		if (ImGui::ArrowButton("##Left", ImGuiDir_Left) &&
-			mModelInstData.miSelectedInstance > 0) {
-			mModelInstData.miSelectedInstance--;
-		}
-		ImGui::SameLine();
-		ImGui::PushItemWidth(30);
-		int selInstMax = numberOfInstances > 0 ? static_cast<int>(numberOfInstances) - 1 : 0;
-		ImGui::DragInt("##SelInst", &mModelInstData.miSelectedInstance, 1, 0,
-			selInstMax, "%3d");
-		ImGui::PopItemWidth();
-		ImGui::SameLine();
-		if (ImGui::ArrowButton("##Right", ImGuiDir_Right) &&
-			mModelInstData.miSelectedInstance < (mModelInstData.miAssimpInstances.size() - 1)) {
-			mModelInstData.miSelectedInstance++;
-		}
-		ImGui::PopButtonRepeat();
-
-		InstanceSettings settings;
-		if (numberOfInstances > 0) {
-			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Clone Instance")) {
-			std::shared_ptr<AssimpInstance> currentInstance = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance);
-			mModelInstData.miInstanceCloneCallbackFunction(currentInstance);
-
-			/* reset to last position for now */
-			mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-
-			/* read back settings for UI */
-			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
-		}
-
-		/* we MUST retain the last model */
-		unsigned int numberOfInstancesPerModel = 0;
-		if (!mModelInstData.miAssimpInstances.empty()) {
-			std::shared_ptr<AssimpInstance> currentInstance = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance);
-			std::string currentModelName = currentInstance->getModel()->getModelFileName();
-			numberOfInstancesPerModel = mModelInstData.miAssimpInstancesPerModel[currentModelName].size();
-		}
-
-		if (numberOfInstancesPerModel < 2) {
-			ImGui::BeginDisabled();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Delete Instance")) {
-			std::shared_ptr<AssimpInstance> currentInstance = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance);
-			mModelInstData.miInstanceDeleteCallbackFunction(currentInstance);
-
-			/* hard reset for now */
-			if (mModelInstData.miSelectedInstance > 0) {
-				mModelInstData.miSelectedInstance -= 1;
-			}
-			if (!mModelInstData.miAssimpInstances.empty()) {
-				settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
-			}
-		}
-
-		if (numberOfInstancesPerModel < 2) {
-			ImGui::EndDisabled();
-		}
-
-		/* re-read size in case an instance was just deleted */
-		numberOfInstances = mModelInstData.miAssimpInstances.size();
-
-		if (numberOfInstances == 0) {
-			ImGui::EndDisabled();
-		}
-
-		std::string baseModelName = "None";
-		if (numberOfInstances > 0) {
-			baseModelName = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getModel()->getModelFileName();
-		}
-		ImGui::Text("Base Model: %s", baseModelName.c_str());
-
-		if (numberOfInstances == 0) {
-			ImGui::BeginDisabled();
-		}
-
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Swap Y and Z axes:     ");
-		ImGui::SameLine();
-		ImGui::Checkbox("##ModelAxisSwap", &settings.isSwapYZAxis);
-
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Model Pos (X/Y/Z):     ");
-		ImGui::SameLine();
-		ImGui::SliderFloat3("##ModelPos", glm::value_ptr(settings.isWorldPosition),
-			-25.0f, 25.0f, "%.3f");
-
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Model Rotation (X/Y/Z):");
-		ImGui::SameLine();
-		ImGui::SliderFloat3("##ModelRot", glm::value_ptr(settings.isWorldRotation),
-			-180.0f, 180.0f, "%.3f");
-
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Model Scale:           ");
-		ImGui::SameLine();
-		ImGui::SliderFloat("##ModelScale", &settings.isScale,
-			0.001f, 10.0f, "%.4f");
-
-		if (ImGui::Button("Reset Instance Values")) {
-			InstanceSettings defaultSettings{};
-			settings = defaultSettings;
-		}
-
-		if (numberOfInstances == 0) {
-			ImGui::EndDisabled();
-		}
-
-		if (numberOfInstances > 0) {
-			mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->setInstanceSettings(settings);
-		}
-	}
-
-	if (ImGui::CollapsingHeader("Animations")) {
-		size_t numberOfInstances = mModelInstData.miAssimpInstances.size();
-
-		InstanceSettings settings;
-		size_t numberOfClips = 0;
-		if (numberOfInstances > 0) {
-			settings = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getInstanceSettings();
-			numberOfClips = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getModel()->getAnimClips().size();
-		}
-
-		if (numberOfInstances > 0 && numberOfClips > 0) {
-			std::vector<std::shared_ptr<AssimpAnimClip>> animClips = mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->getModel()->getAnimClips();
-
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Animation Clip:");
-			ImGui::SameLine();
-			if (ImGui::BeginCombo("##ClipCombo",
-				animClips.at(settings.isAnimClipNr)->getClipName().c_str())) {
-				for (int i = 0; i < animClips.size(); ++i) {
-					const bool isSelected = (settings.isAnimClipNr == i);
-					if (ImGui::Selectable(animClips.at(i)->getClipName().c_str(), isSelected)) {
-						settings.isAnimClipNr = i;
-					}
-
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
-				}
-				ImGui::EndCombo();
-			}
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Replay Speed:  ");
-			ImGui::SameLine();
-			ImGui::SliderFloat("##ClipSpeed", &settings.isAnimSpeedFactor, 0.0f, 2.0f, "%.3f");
-		}
-		else {
-			/* TODO: better solution if no instances or no clips are found */
-			ImGui::BeginDisabled();
-
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Animation Clip:");
-			ImGui::SameLine();
-			ImGui::BeginCombo("##ClipComboDisabled", "None");
-
-			float playSpeed = 1.0f;
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Replay Speed:  ");
-			ImGui::SameLine();
-			ImGui::SliderFloat("##ClipSpeedDisabled", &playSpeed, 0.0f, 2.0f, "%.3f");
-
-			ImGui::EndDisabled();
-		}
-
-		if (numberOfInstances > 0) {
-			mModelInstData.miAssimpInstances.at(mModelInstData.miSelectedInstance)->setInstanceSettings(settings);
-		}
-	}
+ ImGui::Separator();
+	ImGui::TextUnformatted("Instance and animation editing moved to ECS Inspector.");
 
 	ImGui::End();
 
@@ -1194,9 +1019,27 @@ void Renderer::renderEnttEditor()
 
 	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent& tag)
 		{
+            ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
 			const bool isSelected = (mEnttSelectedEntity == entity);
-			if (ImGui::Selectable(tag.name.c_str(), isSelected))
+            if (ImGui::Selectable(tag.name.c_str(), isSelected)) {
 				mEnttSelectedEntity = entity;
+
+				if (auto* assimp = registry.try_get<AssimpInstanceComponent>(entity); assimp && assimp->instance) {
+					auto instanceIt = std::find(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(), assimp->instance);
+					if (instanceIt != mModelInstData.miAssimpInstances.end()) {
+						mModelInstData.miSelectedInstance = static_cast<int>(std::distance(mModelInstData.miAssimpInstances.begin(), instanceIt));
+					}
+
+					auto model = assimp->instance->getModel();
+					if (model) {
+						auto modelIt = std::find(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(), model);
+						if (modelIt != mModelInstData.miModelList.end()) {
+							mModelInstData.miSelectedModel = static_cast<int>(std::distance(mModelInstData.miModelList.begin(), modelIt));
+						}
+					}
+				}
+			}
+         ImGui::PopID();
 		});
 	ImGui::End();
 
@@ -1205,6 +1048,7 @@ void Renderer::renderEnttEditor()
 	{
 		auto* tag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
 		auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity);
+		auto* animation = registry.try_get<AnimationComponent>(mEnttSelectedEntity);
 
 		if (tag)
 		{
@@ -1263,6 +1107,44 @@ void Renderer::renderEnttEditor()
 				}
 				if (ImGui::DragFloat("Instance Scale", &instSet.isScale, 0.01f, 0.001f, 100.0f)) {
 					comp.instance->setScale(instSet.isScale);
+				}
+
+				auto model = comp.instance->getModel();
+				if (animation && model) {
+					auto animClips = model->getAnimClips();
+					if (!animClips.empty()) {
+						if (animation->clipIndex >= animClips.size()) {
+							animation->clipIndex = static_cast<unsigned int>(animClips.size() - 1);
+						}
+
+                     std::vector<std::string> clipNameStorage;
+						clipNameStorage.reserve(animClips.size());
+						for (const auto& clip : animClips) {
+                           clipNameStorage.push_back(clip->getClipName());
+						}
+
+						std::vector<const char*> clipNames;
+						clipNames.reserve(clipNameStorage.size());
+						for (const auto& clipName : clipNameStorage) {
+							clipNames.push_back(clipName.c_str());
+						}
+
+						int clipIndex = static_cast<int>(animation->clipIndex);
+						if (ImGui::Combo("Animation Clip", &clipIndex, clipNames.data(), static_cast<int>(clipNames.size()))) {
+							animation->clipIndex = static_cast<unsigned int>(clipIndex);
+							InstanceSettings updatedSettings = comp.instance->getInstanceSettings();
+							updatedSettings.isAnimClipNr = animation->clipIndex;
+							comp.instance->setInstanceSettings(updatedSettings);
+						}
+
+						float speed = animation->speed;
+						if (ImGui::SliderFloat("Animation Speed", &speed, 0.0f, 2.0f, "%.3f")) {
+							animation->speed = speed;
+							InstanceSettings updatedSettings = comp.instance->getInstanceSettings();
+							updatedSettings.isAnimSpeedFactor = animation->speed;
+							comp.instance->setInstanceSettings(updatedSettings);
+						}
+					}
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("Remove Instance")) {
@@ -2988,6 +2870,12 @@ void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
 	}
 	else if (mModelInstData.miSelectedModel >= static_cast<int>(mModelInstData.miModelList.size())) {
 		mModelInstData.miSelectedModel = static_cast<int>(mModelInstData.miModelList.size()) - 1;
+	}
+
+	auto& registry = mEnttScene.getRegistry();
+	entt::entity entity = AssimpSystems::FindEntityForInstance(registry, rawPtr);
+	if (entity != entt::null && registry.valid(entity) && registry.any_of<AnimationComponent>(entity)) {
+		registry.remove<AnimationComponent>(entity);
 	}
 
 	updateTriangleCount();

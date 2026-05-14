@@ -499,16 +499,18 @@ void Renderer::deleteInstance(std::shared_ptr<AssimpInstance> instance) {
      ),
 		mModelInstData.miAssimpInstances.end());
 
-
-	mModelInstData.miAssimpInstancesPerModel[currentModelName].erase(
+	auto& perModelVec = mModelInstData.miAssimpInstancesPerModel[currentModelName];
+	perModelVec.erase(
 		std::remove_if(
-			mModelInstData.miAssimpInstancesPerModel[currentModelName].begin(),
-			mModelInstData.miAssimpInstancesPerModel[currentModelName].end(),
+			perModelVec.begin(),
+			perModelVec.end(),
 			[instance](std::shared_ptr<AssimpInstance> inst) {
 				return inst == instance;
 			}
-     ),
-		mModelInstData.miAssimpInstancesPerModel[currentModelName].end());
+		),
+		perModelVec.end());
+	if (perModelVec.empty())
+		mModelInstData.miAssimpInstancesPerModel.erase(currentModelName);
 
 	updateTriangleCount();
 }
@@ -2997,12 +2999,17 @@ void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
 	// Remove from the flat instance list
 	mModelInstData.miAssimpInstances.erase(it);
 
-	// Remove from the per-model instance list
+	// Remove from the per-model instance list; erase the map entry if now empty
 	std::string modelName = instance->getModel()->getModelFileName();
-	auto& perModel = mModelInstData.miAssimpInstancesPerModel[modelName];
-	perModel.erase(std::remove_if(perModel.begin(), perModel.end(),
-		[&](const std::shared_ptr<AssimpInstance>& sp) { return sp == instance; }),
-		perModel.end());
+	auto perModelIt = mModelInstData.miAssimpInstancesPerModel.find(modelName);
+	if (perModelIt != mModelInstData.miAssimpInstancesPerModel.end()) {
+		auto& perModel = perModelIt->second;
+		perModel.erase(std::remove_if(perModel.begin(), perModel.end(),
+			[&](const std::shared_ptr<AssimpInstance>& sp) { return sp == instance; }),
+			perModel.end());
+		if (perModel.empty())
+			mModelInstData.miAssimpInstancesPerModel.erase(perModelIt);
+	}
 
 	// Remove entity map entry
 	mAssimpEntityMap.erase(rawPtr);

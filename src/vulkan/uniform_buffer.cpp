@@ -79,7 +79,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	}
 	lightDir = glm::normalize(lightDir);
 	ubo.directionalLightDirection = glm::vec4(lightDir, 0.0f);
-	ubo.directionalLightColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	ubo.directionalLightColor = glm::vec4(8.0f, 8.0f, 8.0f, 8.0f);
 
 	const float aspectRatio = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
 	const float tanHalfFov = std::tan(glm::radians(cam ? cam->getZoom() : 45.0f) * 0.5f);
@@ -173,7 +173,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.exposure = 2.0f;
 	ubo.gamma = 2.2f;
 	ubo.prefilteredCubeMipLevels = 1.0f;
-	ubo.scaleIBLAmbient = 0.002f;
+	ubo.scaleIBLAmbient = 0.02f;
 	ubo.shadowTuning = glm::vec4(shadowSettings.biasScale, shadowSettings.biasMin, shadowSettings.cascadeBlendFactor, 0.0f);
 	ubo.shadowDebug = glm::vec4(shadowSettings.cascadeDebugView, 0.0f, 0.0f, 0.0f);
 

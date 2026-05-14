@@ -26,8 +26,8 @@ struct ShadowSettings
 	float shadowPadding = 15.0f;
 	float coveragePaddingFactor = 0.08f;
 	float depthPaddingFactor = 0.2f;
-  float casterPadding = 60.0f;
-  float farCascadeExpansion = 2.0f;
+	float casterPadding = 60.0f;
+	float farCascadeExpansion = 2.0f;
 };
 
 struct UniformBufferObject
@@ -47,17 +47,17 @@ struct UniformBufferObject
 	float     gamma;
 	float     prefilteredCubeMipLevels;
 	float     scaleIBLAmbient;
-  glm::vec4 shadowTuning;
+	glm::vec4 shadowTuning;
 	glm::vec4 shadowDebug;
 };
 
 class UniformBuffer
 {
 public:
-  static void createUniformBuffers(entt::registry& registry, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight);
+	static void createUniformBuffers(entt::registry& registry, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight);
 
 	static void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
-        TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings,
+		TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings,
 		const std::array<glm::vec4, 4>& pointLightPositions,
 		const std::array<glm::vec4, 4>& pointLightColors);
 };

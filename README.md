@@ -5,13 +5,17 @@ Novus Engine is a game engine built on top of the Vulkan graphics API. It is des
 ## Features
 
 - Physically Based Rendering (PBR)
+- FXAA (Fast Approximate Anti-Aliasing)
+- Bloom
+- ACES Tone Mapping
 - Cascaded Shadow Maps
 - Animation System
-- GLTF 2.0 Support
+- Model Loading (Assimp)
+- GLTF2 Support
 - Entity Component System (ECS)
 
 ## Demo Examples
 
-![Demo Screenshot 1](./docs/gifs/animations.gif)
+![Demo Screenshot 1](./docs/gifs/demo_gif_14_05_2026.gif)
 
-![Demo Screenshot 2](./docs/images/demo.png)
+![Demo Screenshot 2](./docs/images/demo_14_05_2026.png)

@@ -9,7 +9,7 @@
         "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
         "settings": {
           "clipIndex": 0,
-          "playTime": 534.6224975585938,
+          "playTime": 606.733642578125,
           "position": [
             0.0,
             0.0,
@@ -81,13 +81,13 @@
           0.25
         ],
         "enabled": true,
-        "intensity": 800.0,
-        "range": 120.0
+        "intensity": 1656.0,
+        "range": 254.5
       },
       "transform": {
         "position": [
           20.0,
-          40.0,
+          -91.19999694824219,
           -10.0
         ],
         "rotation": [
@@ -177,13 +177,13 @@
           1.0
         ],
         "enabled": true,
-        "intensity": 1000.0,
-        "range": 120.0
+        "intensity": 1990.0,
+        "range": 655.0
       },
       "transform": {
         "position": [
           0.0,
-          -45.0,
+          -132.5,
           0.0
         ],
         "rotation": [

@@ -3,6 +3,7 @@
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <vector>
+#include "ECS/entt/scene.h"
 
 class Entity;
 class TransformComponent;
@@ -20,8 +21,8 @@ public:
     void setGravity(glm::vec3 const& gravity);
     glm::vec3 const& getGravity() const;
 
-    void registerEntity(Entity* entity);
-    void unregisterEntity(Entity* entity);
+    void registerEntity(entt::entity& entity, entt::registry& registry);
+    void unregisterEntity(entt::entity& entity, entt::registry& registry);
     void clear();
 
     // Resets all dynamic bodies to their original spawn pose and zero velocity.
@@ -38,7 +39,7 @@ private:
 
     struct BodyState
     {
-        Entity* entity = nullptr;
+        entt::entity entity = entt::null;
         TransformComponent* transform = nullptr;
         PhysicsComponent* physics = nullptr;
         glm::vec3 velocity = glm::vec3(0.0f);

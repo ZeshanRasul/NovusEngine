@@ -4,6 +4,7 @@
 #include "ECS/components/physics_component.h"
 #include "ECS/components/transform_component.h"
 #include <algorithm>
+#include <cmath>
 #include <glm/gtx/norm.hpp>
 
 void PhysicsSystem::initialize()
@@ -36,13 +37,12 @@ glm::vec3 const& PhysicsSystem::getGravity() const
     return gravity;
 }
 
-void PhysicsSystem::registerEntity(Entity* entity)
+void PhysicsSystem::registerEntity(entt::entity& entity, entt::registry& registry)
 {
-    if (!entity)
+    if (entity == entt::null)
         return;
 
-    auto* transform = entity->GetComponent<TransformComponent>();
-    auto* physics = entity->GetComponent<PhysicsComponent>();
+	auto [transform, physics] = registry.try_get<TransformComponent, PhysicsComponent>(entity);
     if (!transform || !physics)
         return;
 
@@ -62,12 +62,12 @@ void PhysicsSystem::registerEntity(Entity* entity)
     bodies[physics->bodyId] = state;
 }
 
-void PhysicsSystem::unregisterEntity(Entity* entity)
+void PhysicsSystem::unregisterEntity(entt::entity& entity, entt::registry& registry)
 {
-    if (!entity)
+    if (entity == entt::null)
         return;
 
-    auto* physics = entity->GetComponent<PhysicsComponent>();
+    auto* physics = registry.try_get<PhysicsComponent>(entity);
     if (!physics || !physics->registeredInWorld)
         return;
 
@@ -148,98 +148,86 @@ void PhysicsSystem::stepDynamicBody(BodyState& state, float dt)
     glm::vec3 pos = transform.GetPosition();
     pos += state.velocity * dt;
 
-    // --- Floor collision ---
-    const float floorY = 0.0f;
-    const float shapeRadius = physics.shapeType == PhysicsShapeType::Sphere
-        ? physics.radius
-        : physics.halfExtents.y;
-    const float effectiveRadius = std::max(0.05f, shapeRadius);
-
-    if (pos.y - effectiveRadius < floorY)
-    {
-        pos.y = floorY + effectiveRadius;
-        if (state.velocity.y < 0.0f)
-        {
-            state.velocity.y = -state.velocity.y * glm::clamp(physics.restitution, 0.0f, 1.0f);
-
-            // Kill tiny bounces so objects come fully to rest
-            if (std::abs(state.velocity.y) < 0.5f)
-                state.velocity.y = 0.0f;
-        }
-        const float frictionFactor = glm::clamp(1.0f - physics.friction * dt * 6.0f, 0.0f, 1.0f);
-        state.velocity.x *= frictionFactor;
-        state.velocity.z *= frictionFactor;
-    }
-
     transform.SetPosition(pos);
     physics.setLinearVelocity(state.velocity);
 }
 
 void PhysicsSystem::resolveBodyCollisions()
 {
-    // Collect all dynamic bodies into a list for O(n^2) broad + narrow phase.
-    // For a demo with <=128 objects this is fast enough.
     std::vector<BodyState*> dynamics;
+    std::vector<BodyState*> statics;
     dynamics.reserve(bodies.size());
+    statics.reserve(bodies.size());
+
     for (auto& [id, body] : bodies)
     {
-        if (body.physics && body.transform &&
-            body.physics->bodyType == PhysicsBodyType::Dynamic)
+        if (!body.physics || !body.transform)
+            continue;
+
+        if (body.physics->bodyType == PhysicsBodyType::Dynamic)
             dynamics.push_back(&body);
+        else if (body.physics->bodyType == PhysicsBodyType::Static)
+            statics.push_back(&body);
     }
 
-    for (size_t i = 0; i < dynamics.size(); ++i)
+    auto scaledHalfExtents = [](BodyState const& b) {
+        const glm::vec3 s = glm::abs(b.transform->GetScale());
+        return b.physics->halfExtents * s;
+    };
+
+    // Dynamic vs Static (AABB, axis-aligned, no rotation)
+    for (BodyState* d : dynamics)
     {
-        for (size_t j = i + 1; j < dynamics.size(); ++j)
+        if (d->physics->shapeType != PhysicsShapeType::Box)
+            continue;
+
+        glm::vec3 dPos = d->transform->GetPosition();
+        const glm::vec3 dHalf = scaledHalfExtents(*d);
+
+        for (BodyState* s : statics)
         {
-            BodyState& a = *dynamics[i];
-            BodyState& b = *dynamics[j];
-
-            glm::vec3 posA = a.transform->GetPosition();
-            glm::vec3 posB = b.transform->GetPosition();
-            glm::vec3 delta = posB - posA;
-
-            // Use the average of the two radii as a unified contact radius so
-            // sphere vs. box pairs get a reasonable approximation.
-            auto effectiveRadius = [](const PhysicsComponent& p) {
-                return p.shapeType == PhysicsShapeType::Sphere
-                    ? p.radius
-                    : glm::length(p.halfExtents) * 0.57735f; // inscribed sphere of cube
-            };
-
-            const float rA = effectiveRadius(*a.physics);
-            const float rB = effectiveRadius(*b.physics);
-            const float minDist = rA + rB;
-
-            const float dist2 = glm::length2(delta);
-            if (dist2 >= minDist * minDist || dist2 < 1e-8f)
+            if (s->physics->shapeType != PhysicsShapeType::Box)
                 continue;
 
-            const float dist = std::sqrt(dist2);
-            const glm::vec3 normal = delta / dist;           // from A toward B
-            const float penetration = minDist - dist;
+            const glm::vec3 sPos = s->transform->GetPosition();
+            const glm::vec3 sHalf = scaledHalfExtents(*s);
 
-            // Positional correction — push bodies apart equally
-            const float correction = penetration * 0.5f;
-            posA -= normal * correction;
-            posB += normal * correction;
-            a.transform->SetPosition(posA);
-            b.transform->SetPosition(posB);
+            const glm::vec3 delta = dPos - sPos;
+            const glm::vec3 overlap = (dHalf + sHalf) - glm::abs(delta);
+            if (overlap.x <= 0.0f || overlap.y <= 0.0f || overlap.z <= 0.0f)
+                continue;
 
-            // Velocity response along the collision normal (1D impulse)
-            const float restitution = std::min(a.physics->restitution, b.physics->restitution);
-            const float vRel = glm::dot(b.velocity - a.velocity, normal);
+            // Resolve along minimum penetration axis
+            glm::vec3 normal(0.0f);
+            float minPen = overlap.x;
+            normal.x = (delta.x >= 0.0f) ? 1.0f : -1.0f;
 
-            // Only resolve if bodies are approaching
-            if (vRel < 0.0f)
-            {
-                // Equal-mass impulse (both mass=1 assumed for demo simplicity)
-                const float impulse = -(1.0f + restitution) * vRel * 0.5f;
-                a.velocity -= normal * impulse;
-                b.velocity += normal * impulse;
-                a.physics->setLinearVelocity(a.velocity);
-                b.physics->setLinearVelocity(b.velocity);
+            if (overlap.y < minPen) {
+                minPen = overlap.y;
+                normal = glm::vec3(0.0f, (delta.y >= 0.0f) ? 1.0f : -1.0f, 0.0f);
+            }
+            if (overlap.z < minPen) {
+                minPen = overlap.z;
+                normal = glm::vec3(0.0f, 0.0f, (delta.z >= 0.0f) ? 1.0f : -1.0f);
+            }
+
+            dPos += normal * minPen;
+
+            const float vRelN = glm::dot(d->velocity, normal);
+            if (vRelN < 0.0f) {
+                const float e = glm::clamp(d->physics->restitution, 0.0f, 1.0f);
+                d->velocity -= (1.0f + e) * vRelN * normal;
+            }
+
+            // Basic ground friction when resting on top surface
+            if (normal.y > 0.5f) {
+                const float fr = glm::clamp(1.0f - d->physics->friction * 0.1f, 0.0f, 1.0f);
+                d->velocity.x *= fr;
+                d->velocity.z *= fr;
             }
         }
+
+        d->transform->SetPosition(dPos);
+        d->physics->setLinearVelocity(d->velocity);
     }
 }

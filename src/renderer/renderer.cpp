@@ -152,7 +152,7 @@ void Renderer::setupGameObjects()
 	auto& registry = mEnttScene.getRegistry();
 	auto makeEntity = [&](const std::string& name,
 		glm::vec3 position, glm::vec3 rotation, glm::vec3 scale,
-		const std::string& modelPath) -> entt::entity {
+		const std::string& modelPath, bool isPhysicsEntity) -> entt::entity {
 			auto ecsEntity = mEnttScene.createEntity(name);
 			auto& transform = registry.emplace_or_replace<TransformComponent>(ecsEntity);
 			transform.SetPosition(position);
@@ -168,12 +168,42 @@ void Renderer::setupGameObjects()
 					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
 			}
 
+			if (isPhysicsEntity)
+			{
+				auto& physics = registry.emplace_or_replace<PhysicsComponent>(ecsEntity);
+				physics.bodyType = PhysicsBodyType::Dynamic;
+				physics.shapeType = PhysicsShapeType::Box;
+				physics.bodyId = static_cast<int>(ecsEntity); // Use the entity ID as the physics body ID for simplicity
+				physics.halfExtents = { 1.0f, 1.0f, 1.0f };
+			
+				if (name == "Static Floor")
+				{
+					physics.bodyType = PhysicsBodyType::Static;
+					physics.shapeType = PhysicsShapeType::Box;
+					physics.halfExtents = { 1500.0f, 5.0f, 1500.0f }; // collider half-size in world units
+				}
+
+				physicsSystem.registerEntity(ecsEntity, registry);
+			}
+
 			return ecsEntity;
 		};
 
 	makeEntity("Sponza",
 		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
-		"models/Sponza.gltf");
+		"models/Sponza.gltf", false);
+
+	makeEntity("Damaged Helmet",
+		{ -100.0f, -1020.0f, 0.0f }, { 0.0f, glm::radians(0.0f), 0.0f }, { 35.0f, 35.0f, 35.0f },
+		"models/DamagedHelmet.gltf", true);
+
+	makeEntity("Flight Helmet",
+		{ 100.0f, -1020.0f, 0.0f }, { 0.0f, glm::radians(90.0f), 0.0f }, { 200.0f, 200.0f, 200.0f },
+		"models/FlightHelmet.gltf", true);
+
+	makeEntity("Static Floor",
+		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3000.0f, 1.0f, 3000.0f },
+		"", true);
 }
 
 void Renderer::rebuildRenderableRuntimeResources()

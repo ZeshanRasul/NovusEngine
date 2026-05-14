@@ -42,6 +42,29 @@ namespace {
 		return buffer;
 	}
 
+	std::string makeUniqueEntityName(entt::registry& registry, const std::string& baseName)
+	{
+		auto nameExists = [&](const std::string& candidate) {
+			for (auto [entity, tag] : registry.view<EnttTagComponent>().each())
+			{
+				(void)entity;
+				if (tag.name == candidate)
+					return true;
+			}
+			return false;
+		};
+
+		if (!nameExists(baseName))
+			return baseName;
+
+		for (int suffix = 2; ; ++suffix)
+		{
+			std::string candidate = baseName + " (" + std::to_string(suffix) + ")";
+			if (!nameExists(candidate))
+				return candidate;
+		}
+	}
+
 }
 
 
@@ -53,13 +76,13 @@ void Renderer::createAssimpInstanceForEntity(std::shared_ptr<AssimpModel> model,
 	// Create an AssimpInstance and attach it to the entity
 	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
 	auto& registry = mEnttScene.getRegistry();
-  AssimpSystems::RegisterInstance(mModelInstData, registry, mAssimpEntityMap, entity, newInstance);
-
-	// Ensure GPU data if skinning pipeline exists
-	if (*skinningPipeline != VK_NULL_HANDLE)
-	{
-		createAssimpInstanceGPUData(newInstance);
-	}
+   AssimpSystems::RegisterInstance(mModelInstData, registry, entity, newInstance,
+		[this](const std::shared_ptr<AssimpInstance>& instance) {
+			if (*skinningPipeline != VK_NULL_HANDLE)
+			{
+				createAssimpInstanceGPUData(instance);
+			}
+		});
 }
 
 void Renderer::removeInstanceFromEntity(entt::entity entity)
@@ -374,10 +397,10 @@ bool Renderer::addModel(std::string modelFileName) {
 
 	// Select the entity that createAssimpEnttEntity already created for this instance and
 	// sync its ECS transform to match the applied presets.
-	auto entityIt = mAssimpEntityMap.find(newInstance.get());
-	if (entityIt != mAssimpEntityMap.end()) {
-		mEnttSelectedEntity = entityIt->second;
-		auto& registry = mEnttScene.getRegistry();
+   auto& registry = mEnttScene.getRegistry();
+	entt::entity instanceEntity = AssimpSystems::FindEntityForInstance(registry, newInstance.get());
+	if (instanceEntity != entt::null) {
+		mEnttSelectedEntity = instanceEntity;
 		if (auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity)) {
 			transform->SetPosition(settings.isWorldPosition);
 			transform->SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
@@ -447,10 +470,6 @@ std::shared_ptr<AssimpInstance> Renderer::addInstance(std::shared_ptr<AssimpMode
 	std::shared_ptr<AssimpInstance> newInstance = std::make_shared<AssimpInstance>(model);
 	createAssimpEnttEntity(newInstance);
 
-	if (*skinningPipeline != VK_NULL_HANDLE) {
-		createAssimpInstanceGPUData(newInstance);
-	}
-
 	updateTriangleCount();
 
 	return newInstance;
@@ -472,10 +491,6 @@ void Renderer::addInstances(std::shared_ptr<AssimpModel> model, int numInstances
 		}
 
 		createAssimpEnttEntity(newInstance);
-
-		if (*skinningPipeline != VK_NULL_HANDLE) {
-			createAssimpInstanceGPUData(newInstance);
-		}
 	}
 	updateTriangleCount();
 }
@@ -501,10 +516,6 @@ void Renderer::cloneInstance(std::shared_ptr<AssimpInstance> instance) {
 
 	createAssimpEnttEntity(newInstance);
 
-	if (*skinningPipeline != VK_NULL_HANDLE) {
-		createAssimpInstanceGPUData(newInstance);
-	}
-
 	updateTriangleCount();
 }
 
@@ -524,11 +535,17 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 	auto* key = instance.get();
 	auto& registry = mEnttScene.getRegistry();
 
-	auto it = mAssimpEntityMap.find(key);
-	if (it != mAssimpEntityMap.end() && registry.valid(it->second))
+   entt::entity existingEntity = AssimpSystems::FindEntityForInstance(registry, key);
+	if (existingEntity != entt::null && registry.valid(existingEntity))
 	{
-     AssimpSystems::RegisterInstance(mModelInstData, registry, mAssimpEntityMap, it->second, instance);
-		auto* transform = registry.try_get<TransformComponent>(it->second);
+      AssimpSystems::RegisterInstance(mModelInstData, registry, existingEntity, instance,
+			[this](const std::shared_ptr<AssimpInstance>& registeredInstance) {
+				if (*skinningPipeline != VK_NULL_HANDLE)
+				{
+					createAssimpInstanceGPUData(registeredInstance);
+				}
+			});
+     auto* transform = registry.try_get<TransformComponent>(existingEntity);
 		if (transform)
 		{
 			InstanceSettings settings = instance->getInstanceSettings();
@@ -536,21 +553,28 @@ entt::entity Renderer::createAssimpEnttEntity(const std::shared_ptr<AssimpInstan
 			transform->SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
 			transform->SetScale(glm::vec3(settings.isScale));
 		}
-		return it->second;
+      return existingEntity;
 	}
 
 	std::string modelName = "Instance";
 	if (instance->getModel())
 		modelName = instance->getModel()->getModelFileName();
 
-	entt::entity entity = mEnttScene.createEntity(namePrefix + modelName);
+  std::string entityName = makeUniqueEntityName(registry, namePrefix + modelName);
+	entt::entity entity = mEnttScene.createEntity(entityName);
 	auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
 	InstanceSettings settings = instance->getInstanceSettings();
 	transform.SetPosition(settings.isWorldPosition);
 	transform.SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
 	transform.SetScale(glm::vec3(settings.isScale));
 
-   AssimpSystems::RegisterInstance(mModelInstData, registry, mAssimpEntityMap, entity, instance);
+    AssimpSystems::RegisterInstance(mModelInstData, registry, entity, instance,
+		[this](const std::shared_ptr<AssimpInstance>& registeredInstance) {
+			if (*skinningPipeline != VK_NULL_HANDLE)
+			{
+				createAssimpInstanceGPUData(registeredInstance);
+			}
+		});
 	return entity;
 }
 
@@ -559,11 +583,11 @@ void Renderer::destroyAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& in
 	if (!instance)
 		return;
 
-	auto it = mAssimpEntityMap.find(instance.get());
-	if (it == mAssimpEntityMap.end())
+    auto& registry = mEnttScene.getRegistry();
+	entt::entity entity = AssimpSystems::FindEntityForInstance(registry, instance.get());
+	if (entity == entt::null)
 		return;
 
-	entt::entity entity = it->second;
   if (mEnttScene.isValid(entity))
 		mEnttScene.destroyEntity(entity);
 
@@ -2803,6 +2827,14 @@ void Renderer::ensureComputeModelResources(const std::shared_ptr<AssimpModel>& m
 
 void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> instance)
 {
+  if (!instance)
+		return;
+
+	auto existingIt = std::find_if(mAssimpGPUData.begin(), mAssimpGPUData.end(),
+		[&instance](const AssimpInstanceGPUData& d) { return d.instance == instance; });
+	if (existingIt != mAssimpGPUData.end())
+		return;
+
 	AssimpInstanceGPUData gpuData;
 	gpuData.instance = instance;
 
@@ -2939,10 +2971,24 @@ void Renderer::onAssimpInstanceDestroyed(AssimpInstance* rawPtr)
 	if (!instance)
 		return;
 
-	// Free GPU resources
-	deleteAssimpInstanceGPUData(instance);
+    AssimpSystems::UnregisterInstance(mModelInstData, instance,
+		[this](const std::shared_ptr<AssimpInstance>& unregisteringInstance) {
+			deleteAssimpInstanceGPUData(unregisteringInstance);
+		});
 
-   AssimpSystems::UnregisterInstance(mModelInstData, mAssimpEntityMap, instance);
+	if (mModelInstData.miAssimpInstances.empty()) {
+		mModelInstData.miSelectedInstance = 0;
+	}
+	else if (mModelInstData.miSelectedInstance >= static_cast<int>(mModelInstData.miAssimpInstances.size())) {
+		mModelInstData.miSelectedInstance = static_cast<int>(mModelInstData.miAssimpInstances.size()) - 1;
+	}
+
+	if (mModelInstData.miModelList.empty()) {
+		mModelInstData.miSelectedModel = 0;
+	}
+	else if (mModelInstData.miSelectedModel >= static_cast<int>(mModelInstData.miModelList.size())) {
+		mModelInstData.miSelectedModel = static_cast<int>(mModelInstData.miModelList.size()) - 1;
+	}
 
 	updateTriangleCount();
 }
@@ -2953,7 +2999,7 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 		return;
 
 	auto& registry = mEnttScene.getRegistry();
-   AssimpSystems::SyncTransformsFromEntt(registry, mAssimpEntityMap);
+   AssimpSystems::SyncTransformsFromEntt(registry);
 	auto modelBatches = AssimpSystems::CollectValidModelInstanceBatches(mModelInstData.miAssimpInstancesPerModel);
 
 	/* calculate the size of the node matrix buffer over all animated instances */

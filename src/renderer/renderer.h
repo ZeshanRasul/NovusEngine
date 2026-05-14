@@ -302,7 +302,6 @@ private:
 	bool mComputeSkinningEnabled = false;
 	std::unordered_map<std::string, ComputeModelResources> mComputeModelResources{};
 	std::unordered_map<AssimpInstance*, uint32_t> mInstanceBoneOffsets{};
-	std::unordered_map<AssimpInstance*, entt::entity> mAssimpEntityMap{};
 
 
 	// FXAA Pass

@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 #include <entt/entt.hpp>
@@ -30,9 +29,9 @@ namespace AssimpSystems
     inline void RegisterInstance(
         ModelAndInstanceData& modelData,
         entt::registry& registry,
-        std::unordered_map<AssimpInstance*, entt::entity>& entityMap,
         entt::entity entity,
-        const std::shared_ptr<AssimpInstance>& instance)
+        const std::shared_ptr<AssimpInstance>& instance,
+        const std::function<void(const std::shared_ptr<AssimpInstance>&)>& onRegistered = {})
     {
         if (!instance || !registry.valid(entity))
             return;
@@ -54,7 +53,26 @@ namespace AssimpSystems
             }
         }
 
-        entityMap[instance.get()] = entity;
+        if (onRegistered)
+        {
+            onRegistered(instance);
+        }
+    }
+
+    inline entt::entity FindEntityForInstance(
+        entt::registry& registry,
+        AssimpInstance* rawInstance)
+    {
+        if (!rawInstance)
+            return entt::null;
+
+        for (auto [entity, component] : registry.view<AssimpInstanceComponent>().each())
+        {
+            if (component.instance && component.instance.get() == rawInstance)
+                return entity;
+        }
+
+        return entt::null;
     }
 
     inline std::shared_ptr<AssimpInstance> FindInstance(
@@ -74,11 +92,16 @@ namespace AssimpSystems
 
     inline void UnregisterInstance(
         ModelAndInstanceData& modelData,
-        std::unordered_map<AssimpInstance*, entt::entity>& entityMap,
-        const std::shared_ptr<AssimpInstance>& instance)
+        const std::shared_ptr<AssimpInstance>& instance,
+        const std::function<void(const std::shared_ptr<AssimpInstance>&)>& onUnregistering = {})
     {
         if (!instance)
             return;
+
+        if (onUnregistering)
+        {
+            onUnregistering(instance);
+        }
 
         modelData.miAssimpInstances.erase(
             std::remove(modelData.miAssimpInstances.begin(), modelData.miAssimpInstances.end(), instance),
@@ -99,21 +122,15 @@ namespace AssimpSystems
             }
         }
 
-        entityMap.erase(instance.get());
     }
 
     inline void SyncTransformsFromEntt(
-        entt::registry& registry,
-        const std::unordered_map<AssimpInstance*, entt::entity>& entityMap)
+       entt::registry& registry)
     {
         for (auto [entity, component, transform] : registry.view<AssimpInstanceComponent, TransformComponent>().each())
         {
             (void)entity;
             if (!component.instance)
-                continue;
-
-            auto mapIt = entityMap.find(component.instance.get());
-            if (mapIt == entityMap.end() || mapIt->second != entity)
                 continue;
 
             InstanceSettings settings = component.instance->getInstanceSettings();

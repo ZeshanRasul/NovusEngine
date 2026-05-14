@@ -143,6 +143,8 @@ private:
 
 	// ImGUI
 	void renderImgui();
+   void buildEditorDockspace();
+	void renderViewportPanel();
 	void initEnttDemoScene();
 	void renderEnttEditor();
 	std::string serializeEnttScene() const;
@@ -239,6 +241,10 @@ private:
 	float  lastFrameTime = 0.0f;
 
 	ImGuiVulkanUtil* imGui;
+   ImTextureID mViewportTextureId = 0;
+	bool mEditorDockLayoutInitialized = false;
+	bool mViewportFocused = false;
+	bool mViewportHovered = false;
 
 	VkRenderData mRenderData{};
 	ModelAndInstanceData mModelInstData{};
@@ -323,6 +329,10 @@ private:
 	vk::raii::Image 	fxaaImage = nullptr;
 	vk::raii::DeviceMemory fxaaImageMemory = nullptr;
 	vk::raii::ImageView fxaaImageView = nullptr;
+    vk::raii::Image viewportPreviewImage = nullptr;
+	vk::raii::DeviceMemory viewportPreviewImageMemory = nullptr;
+	vk::raii::ImageView viewportPreviewImageView = nullptr;
+	vk::ImageLayout viewportPreviewImageLayout = vk::ImageLayout::eUndefined;
 	vk::raii::DescriptorSetLayout fxaaDescriptorSetLayout = nullptr;
 	std::vector<vk::raii::DescriptorSet> fxaaDescriptorSets;
 	vk::raii::DescriptorPool fxaaDescriptorPool = nullptr;

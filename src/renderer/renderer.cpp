@@ -25,6 +25,7 @@
 #include "../model/AssimpInstance.h"
 #include "../model/InstanceSettings.h"
 #include "../../lib/ImGuiFileDialog.h"
+#include "../../include/imgui_internal.h"
 
 namespace {
 	using json = nlohmann::json;
@@ -175,7 +176,7 @@ void Renderer::setupGameObjects()
 				physics.shapeType = PhysicsShapeType::Box;
 				physics.bodyId = static_cast<int>(ecsEntity); // Use the entity ID as the physics body ID for simplicity
 				physics.halfExtents = { 1.0f, 1.0f, 1.0f };
-			
+
 				if (name == "Static Floor")
 				{
 					physics.bodyType = PhysicsBodyType::Static;
@@ -313,10 +314,29 @@ void Renderer::initVulkan()
 		swapChainExtent.width, swapChainExtent.height,
 		vk::Format::eR16G16B16A16Sfloat,
 		vk::ImageTiling::eOptimal,
-		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		fxaaImage, fxaaImageMemory);
 	fxaaImageView = ImageView::createImageView(device, fxaaImage, vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor);
+
+	Image::createImage(device, physicalDevice,
+		swapChainExtent.width, swapChainExtent.height,
+		swapChainSurfaceFormat.format,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		viewportPreviewImage, viewportPreviewImageMemory);
+	viewportPreviewImageView = ImageView::createImageView(device, viewportPreviewImage, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
+	viewportPreviewImageLayout = vk::ImageLayout::eUndefined;
+	Image::createImage(device, physicalDevice,
+		swapChainExtent.width, swapChainExtent.height,
+		swapChainSurfaceFormat.format,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		viewportPreviewImage, viewportPreviewImageMemory);
+	viewportPreviewImageView = ImageView::createImageView(device, viewportPreviewImage, swapChainSurfaceFormat.format, vk::ImageAspectFlagBits::eColor);
+	viewportPreviewImageLayout = vk::ImageLayout::eUndefined;
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, descriptorSetLayout, 7);
 	DescriptorSetLayout::createEntityDescriptorSetLayout(device, shadowDescriptorSetLayout, 7);
 	DescriptorSetLayout::createFxaaDescriptorSetLayout(device, fxaaDescriptorSetLayout);
@@ -396,6 +416,7 @@ void Renderer::initVulkan()
 
 	imGui->init(swapChainExtent.width, swapChainExtent.height);
 	imGui->initResources(); // No renderPass needed with dynamic rendering
+	mViewportTextureId = imGui->registerTexture(*viewportPreviewImageView, *fxaaSampler, vk::ImageLayout::eShaderReadOnlyOptimal);
 
 	mModelInstData.miModelCheckCallbackFunction = [this](std::string fileName) { return hasModel(fileName); };
 	mModelInstData.miModelAddCallbackFunction = [this](std::string fileName) { return addModel(fileName); };
@@ -852,10 +873,92 @@ Renderer::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT  severity,
 	return vk::False;
 }
 
+void Renderer::buildEditorDockspace()
+{
+	const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+	ImGui::SetNextWindowPos(mainViewport->Pos);
+	ImGui::SetNextWindowSize(mainViewport->Size);
+	ImGui::SetNextWindowViewport(mainViewport->ID);
+
+	ImGuiWindowFlags rootWindowFlags =
+		ImGuiWindowFlags_NoTitleBar |
+		ImGuiWindowFlags_NoCollapse |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoBringToFrontOnFocus |
+		ImGuiWindowFlags_NoNavFocus |
+		ImGuiWindowFlags_NoBackground |
+		ImGuiWindowFlags_MenuBar;
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+	ImGui::Begin("##EditorRoot", nullptr, rootWindowFlags);
+	ImGui::PopStyleVar(3);
+
+	ImGuiID dockspaceId = ImGui::GetID("EditorDockspace");
+	ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+
+	if (ImGui::BeginMenuBar())
+	{
+		ImGui::TextUnformatted("NovusEngine Editor");
+		ImGui::EndMenuBar();
+	}
+
+	if (!mEditorDockLayoutInitialized)
+	{
+		mEditorDockLayoutInitialized = true;
+
+		ImGui::DockBuilderRemoveNode(dockspaceId);
+		ImGui::DockBuilderAddNode(dockspaceId, ImGuiDockNodeFlags_DockSpace);
+		ImGui::DockBuilderSetNodeSize(dockspaceId, mainViewport->Size);
+
+		ImGuiID dockMain = dockspaceId;
+		ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.20f, nullptr, &dockMain);
+		ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.28f, nullptr, &dockMain);
+		ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.30f, nullptr, &dockMain);
+		ImGuiID dockLeftBottom = ImGui::DockBuilderSplitNode(dockLeft, ImGuiDir_Down, 0.45f, nullptr, &dockLeft);
+
+		ImGui::DockBuilderDockWindow("Viewport", dockMain);
+		ImGui::DockBuilderDockWindow("ECS Scene", dockLeft);
+		ImGui::DockBuilderDockWindow("ECS Lights", dockLeftBottom);
+		ImGui::DockBuilderDockWindow("ECS Inspector", dockRight);
+		ImGui::DockBuilderDockWindow("Camera Controls", dockRight);
+		ImGui::DockBuilderDockWindow("Shadow Tuning", dockBottom);
+		ImGui::DockBuilderDockWindow("Animation Controls", dockBottom);
+		ImGui::DockBuilderDockWindow("Post Processing", dockBottom);
+		ImGui::DockBuilderDockWindow("Physics Demo", dockBottom);
+
+		ImGui::DockBuilderFinish(dockspaceId);
+	}
+
+	ImGui::End();
+}
+
+void Renderer::renderViewportPanel()
+{
+	ImGui::Begin("Viewport");
+	mViewportFocused = ImGui::IsWindowFocused();
+	mViewportHovered = ImGui::IsWindowHovered();
+
+	const ImVec2 available = ImGui::GetContentRegionAvail();
+	if (mViewportTextureId && available.x > 1.0f && available.y > 1.0f)
+	{
+		ImGui::Image(mViewportTextureId, available, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+	}
+	else
+	{
+		ImGui::TextUnformatted("Scene output unavailable");
+	}
+
+	ImGui::End();
+}
+
 void Renderer::renderImgui()
 {
-	if (imGui->newFrame()) {
-	}
+	imGui->newFrame();
+	buildEditorDockspace();
+	renderViewportPanel();
 
 	// Create a window for camera controls
 	ImGui::Begin("Camera Controls");
@@ -2181,6 +2284,29 @@ void Renderer::recreateSwapChain()
 	SwapChain::createSwapChain(physicalDevice, device, surface, window, swapChain, swapChainImages, swapChainExtent, swapChainSurfaceFormat);
 	SwapChain::createImageViews(device, swapChainImages, swapChainSurfaceFormat.format, swapChainImageViews);
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
+
+	Image::createImage(device, physicalDevice,
+		swapChainExtent.width, swapChainExtent.height,
+		vk::Format::eR16G16B16A16Sfloat,
+		vk::ImageTiling::eOptimal,
+		vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
+		vk::MemoryPropertyFlagBits::eDeviceLocal,
+		fxaaImage, fxaaImageMemory);
+	fxaaImageView = ImageView::createImageView(device, fxaaImage, vk::Format::eR16G16B16A16Sfloat, vk::ImageAspectFlagBits::eColor);
+
+	createBloomResources();
+	createBloomDescriptorSets();
+
+	fxaaDescriptorSets.clear();
+	fxaaDescriptorPool = nullptr;
+	DescriptorPool::createFxaaDescriptorPool(device, fxaaDescriptorPool, MAX_FRAMES_IN_FLIGHT);
+	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
+
+	ImGuiIO& io = ImGui::GetIO();
+	io.DisplaySize = ImVec2(static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height));
+
+	imGui->clearRegisteredTextures();
+	mViewportTextureId = imGui->registerTexture(*viewportPreviewImageView, *fxaaSampler, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
 void Renderer::createGraphicsPipeline()
@@ -2912,6 +3038,55 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 	// 3 vertices, no vertex buffer — the VS generates the fullscreen triangle
 	commandBuffer.draw(3, 1, 0, 0);
 	commandBuffer.endRendering();
+
+	transition_image_layout(*viewportPreviewImage,
+		viewportPreviewImageLayout,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::AccessFlags2{},
+		vk::AccessFlagBits2::eTransferWrite,
+		vk::PipelineStageFlagBits2::eTopOfPipe,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::ImageAspectFlagBits::eColor);
+	viewportPreviewImageLayout = vk::ImageLayout::eTransferDstOptimal;
+
+	transition_image_layout(swapChainImages[imageIndex],
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eTransferSrcOptimal,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::AccessFlagBits2::eTransferRead,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::ImageAspectFlagBits::eColor);
+
+	vk::ImageCopy copyRegion{
+		.srcSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
+		.srcOffset = { 0, 0, 0 },
+		.dstSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
+		.dstOffset = { 0, 0, 0 },
+		.extent = { swapChainExtent.width, swapChainExtent.height, 1 }
+	};
+	commandBuffer.copyImage(swapChainImages[imageIndex], vk::ImageLayout::eTransferSrcOptimal,
+		*viewportPreviewImage, vk::ImageLayout::eTransferDstOptimal,
+		copyRegion);
+
+	transition_image_layout(*viewportPreviewImage,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::AccessFlagBits2::eTransferWrite,
+		vk::AccessFlagBits2::eShaderSampledRead,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::PipelineStageFlagBits2::eFragmentShader,
+		vk::ImageAspectFlagBits::eColor);
+	viewportPreviewImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+	transition_image_layout(swapChainImages[imageIndex],
+		vk::ImageLayout::eTransferSrcOptimal,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::AccessFlagBits2::eTransferRead,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::ImageAspectFlagBits::eColor);
 
 }
 

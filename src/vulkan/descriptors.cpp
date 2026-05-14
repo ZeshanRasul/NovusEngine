@@ -116,6 +116,8 @@ void DescriptorSet::createDescriptorSets(vk::raii::Device& device, entt::registr
 void DescriptorSet::createFxaaDescriptorSets(vk::raii::Device& device, vk::raii::DescriptorPool& descriptorPool, vk::raii::DescriptorSetLayout& descriptorSetLayout, vk::raii::ImageView& inputImageView,
 	vk::raii::ImageView& bloomImageView, vk::raii::Sampler& textureSampler, uint32_t framesInFlight, std::vector<vk::raii::DescriptorSet>& fxaaDescriptorSets)
 {
+ fxaaDescriptorSets.clear();
+
 	std::vector<vk::DescriptorSetLayout> layouts(framesInFlight, *descriptorSetLayout);
 	vk::DescriptorSetAllocateInfo allocInfo{
 		.descriptorPool = *descriptorPool,

@@ -71,13 +71,48 @@ void ImGuiVulkanUtil::init(float width, float height) {
 	io.DisplaySize = ImVec2(width, height);
 	io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
 
-	// Set up style
+ // Set up style
 	vulkanStyle = ImGui::GetStyle();
-	vulkanStyle.Colors[ImGuiCol_TitleBg] = ImVec4(1.0f, 0.0f, 0.0f, 0.6f);
-	vulkanStyle.Colors[ImGuiCol_TitleBgActive] = ImVec4(1.0f, 0.0f, 0.0f, 0.8f);
-	vulkanStyle.Colors[ImGuiCol_MenuBarBg] = ImVec4(1.0f, 0.0f, 0.0f, 0.4f);
-	vulkanStyle.Colors[ImGuiCol_Header] = ImVec4(1.0f, 0.0f, 0.0f, 0.4f);
-	vulkanStyle.Colors[ImGuiCol_CheckMark] = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+	vulkanStyle.WindowRounding = 5.0f;
+	vulkanStyle.ChildRounding = 4.0f;
+	vulkanStyle.FrameRounding = 4.0f;
+	vulkanStyle.PopupRounding = 4.0f;
+	vulkanStyle.GrabRounding = 4.0f;
+	vulkanStyle.ScrollbarRounding = 6.0f;
+	vulkanStyle.TabRounding = 4.0f;
+	vulkanStyle.WindowBorderSize = 1.0f;
+	vulkanStyle.FrameBorderSize = 0.0f;
+	vulkanStyle.Colors[ImGuiCol_Text] = ImVec4(0.95f, 0.96f, 0.98f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.54f, 0.60f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.11f, 0.13f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_ChildBg] = ImVec4(0.11f, 0.12f, 0.15f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_PopupBg] = ImVec4(0.12f, 0.13f, 0.16f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_Border] = ImVec4(0.26f, 0.29f, 0.35f, 0.70f);
+	vulkanStyle.Colors[ImGuiCol_FrameBg] = ImVec4(0.16f, 0.18f, 0.22f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.21f, 0.24f, 0.30f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.25f, 0.29f, 0.36f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_TitleBg] = ImVec4(0.08f, 0.09f, 0.11f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.12f, 0.14f, 0.18f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.12f, 0.14f, 0.18f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.08f, 0.09f, 0.11f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.28f, 0.31f, 0.37f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.34f, 0.38f, 0.45f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.40f, 0.45f, 0.53f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_CheckMark] = ImVec4(0.41f, 0.65f, 0.95f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_SliderGrab] = ImVec4(0.35f, 0.57f, 0.90f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.45f, 0.69f, 0.98f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_Button] = ImVec4(0.19f, 0.22f, 0.28f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.24f, 0.29f, 0.37f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_ButtonActive] = ImVec4(0.30f, 0.35f, 0.44f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_Header] = ImVec4(0.18f, 0.22f, 0.30f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.25f, 0.31f, 0.40f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_HeaderActive] = ImVec4(0.31f, 0.37f, 0.47f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_Separator] = ImVec4(0.23f, 0.26f, 0.32f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_Tab] = ImVec4(0.15f, 0.17f, 0.22f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_TabHovered] = ImVec4(0.24f, 0.29f, 0.37f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_TabSelected] = ImVec4(0.20f, 0.25f, 0.33f, 1.00f);
+	vulkanStyle.Colors[ImGuiCol_DockingPreview] = ImVec4(0.30f, 0.50f, 0.86f, 0.55f);
+	vulkanStyle.Colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.08f, 0.09f, 0.11f, 1.00f);
 
 	// Apply default style
 	setStyle(0);
@@ -200,11 +235,11 @@ void ImGuiVulkanUtil::initResources() {
 
 	// Create descriptor pool for shader resource binding
 	// Descriptors provide the interface between shaders and GPU resources
-	vk::DescriptorPoolSize poolSize{ vk::DescriptorType::eCombinedImageSampler, 1 };
+    vk::DescriptorPoolSize poolSize{ vk::DescriptorType::eCombinedImageSampler, 64 };
 
 	vk::DescriptorPoolCreateInfo poolInfo{};
 	poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;     // Allow individual descriptor set freeing
-	poolInfo.maxSets = 2;                                                      // Maximum number of descriptor sets
+ poolInfo.maxSets = 64;                                                     // Maximum number of descriptor sets
 	poolInfo.poolSizeCount = 1;                                                // Number of pool size specifications
 	poolInfo.pPoolSizes = &poolSize;                                           // Pool size configuration
 
@@ -379,26 +414,41 @@ void ImGuiVulkanUtil::initResources() {
 bool ImGuiVulkanUtil::newFrame() {
 	// Start a new ImGui frame
 	ImGui::NewFrame();
-	//     e.g. ImGui::NewFrame(); ImGui::DockSpaceOverViewport();                                                   // Create a dockspace in main viewport.
-//      or: ImGui::NewFrame(); 
-	ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode); // Create a dockspace in main viewport, central node is transparent.
-
-	//// End the frame
-	//ImGui::EndFrame();
-
-	//// Render to generate draw data
-	//ImGui::Render();
-
-	//// Check if buffers need updating
-	//ImDrawData* drawData = ImGui::GetDrawData();
-	//if (drawData && drawData->CmdListsCount > 0) {
-	//	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
-	//		needsUpdateBuffers = true;
-	//		return true;
-	//	}
-	//}
 
 	return true;
+}
+
+ImTextureID ImGuiVulkanUtil::registerTexture(vk::ImageView imageView, vk::Sampler textureSampler, vk::ImageLayout imageLayout)
+{
+	vk::DescriptorSetAllocateInfo allocInfo{};
+	allocInfo.descriptorPool = *descriptorPool;
+	allocInfo.descriptorSetCount = 1;
+	vk::DescriptorSetLayout layout = *descriptorSetLayout;
+	allocInfo.pSetLayouts = &layout;
+
+	auto allocatedSets = device->allocateDescriptorSets(allocInfo);
+	userTextureDescriptorSets.push_back(std::move(allocatedSets.front()));
+	vk::raii::DescriptorSet& userSet = userTextureDescriptorSets.back();
+
+	vk::DescriptorImageInfo imageInfo{};
+	imageInfo.sampler = textureSampler;
+	imageInfo.imageView = imageView;
+	imageInfo.imageLayout = imageLayout;
+
+	vk::WriteDescriptorSet writeSet{};
+	writeSet.dstSet = *userSet;
+	writeSet.dstBinding = 0;
+	writeSet.descriptorCount = 1;
+	writeSet.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+	writeSet.pImageInfo = &imageInfo;
+
+	device->updateDescriptorSets(writeSet, {});
+	return reinterpret_cast<ImTextureID>(static_cast<VkDescriptorSet>(*userSet));
+}
+
+void ImGuiVulkanUtil::clearRegisteredTextures()
+{
+	userTextureDescriptorSets.clear();
 }
 
 void ImGuiVulkanUtil::updateBuffers() {
@@ -501,6 +551,10 @@ void ImGuiVulkanUtil::drawFrame(vk::raii::CommandBuffer& commandBuffer, vk::Imag
 
 		for (int j = 0; j < cmdList->CmdBuffer.Size; j++) {
 			const ImDrawCmd* pcmd = &cmdList->CmdBuffer[j];
+			if (pcmd->UserCallback) {
+				pcmd->UserCallback(cmdList, pcmd);
+				continue;
+			}
 
 			// Clip per draw call
 			vk::Rect2D scissor{};
@@ -510,9 +564,12 @@ void ImGuiVulkanUtil::drawFrame(vk::raii::CommandBuffer& commandBuffer, vk::Imag
 			scissor.extent.height = static_cast<uint32_t>(pcmd->ClipRect.w - pcmd->ClipRect.y);
 			commandBuffer.setScissor(0, scissor);
 
-			// Bind font (and any UI) textures for this draw
+            // Bind texture referenced by this draw command (font or user-registered)
+			vk::DescriptorSet textureSet = pcmd->GetTexID()
+				? reinterpret_cast<VkDescriptorSet>(pcmd->GetTexID())
+				: static_cast<VkDescriptorSet>(*descriptorSet);
 			commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-				*pipelineLayout, 0, *descriptorSet, {});
+                *pipelineLayout, 0, textureSet, {});
 
 			// Issue indexed draw for this UI batch
 			commandBuffer.drawIndexed(pcmd->ElemCount, 1, indexOffset, vertexOffset, 0);

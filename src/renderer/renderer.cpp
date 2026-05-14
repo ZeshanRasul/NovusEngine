@@ -1009,6 +1009,68 @@ void Renderer::renderImgui()
 void Renderer::renderEnttEditor()
 {
 	auto& registry = mEnttScene.getRegistry();
+	auto selectEntityAndSync = [&](entt::entity entity) {
+		mEnttSelectedEntity = entity;
+
+		if (auto* assimp = registry.try_get<AssimpInstanceComponent>(entity); assimp && assimp->instance) {
+			auto instanceIt = std::find(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(), assimp->instance);
+			if (instanceIt != mModelInstData.miAssimpInstances.end()) {
+				mModelInstData.miSelectedInstance = static_cast<int>(std::distance(mModelInstData.miAssimpInstances.begin(), instanceIt));
+			}
+
+			auto model = assimp->instance->getModel();
+			if (model) {
+				auto modelIt = std::find(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(), model);
+				if (modelIt != mModelInstData.miModelList.end()) {
+					mModelInstData.miSelectedModel = static_cast<int>(std::distance(mModelInstData.miModelList.begin(), modelIt));
+				}
+			}
+		}
+	};
+
+	auto duplicateEntity = [&](entt::entity sourceEntity) -> entt::entity {
+		if (!mEnttScene.isValid(sourceEntity))
+			return entt::null;
+
+		auto* sourceTag = registry.try_get<EnttTagComponent>(sourceEntity);
+		auto* sourceTransform = registry.try_get<TransformComponent>(sourceEntity);
+		auto* sourceAnimation = registry.try_get<AnimationComponent>(sourceEntity);
+		auto* sourceAssimp = registry.try_get<AssimpInstanceComponent>(sourceEntity);
+
+		if (sourceAssimp && sourceAssimp->instance) {
+			size_t previousInstanceCount = mModelInstData.miAssimpInstances.size();
+			cloneInstance(sourceAssimp->instance);
+			if (mModelInstData.miAssimpInstances.size() <= previousInstanceCount)
+				return entt::null;
+
+			auto duplicatedInstance = mModelInstData.miAssimpInstances.back();
+			entt::entity duplicatedEntity = AssimpSystems::FindEntityForInstance(registry, duplicatedInstance.get());
+			if (duplicatedEntity == entt::null)
+				return entt::null;
+
+			if (auto* duplicatedTag = registry.try_get<EnttTagComponent>(duplicatedEntity); duplicatedTag && sourceTag) {
+				duplicatedTag->name = makeUniqueEntityName(registry, sourceTag->name + " Copy");
+			}
+
+			return duplicatedEntity;
+		}
+
+		std::string duplicatedName = sourceTag ? makeUniqueEntityName(registry, sourceTag->name + " Copy") : makeUniqueEntityName(registry, "Entity Copy");
+		entt::entity duplicatedEntity = mEnttScene.createEntity(duplicatedName);
+
+		if (sourceTransform) {
+			auto& duplicatedTransform = registry.emplace_or_replace<TransformComponent>(duplicatedEntity);
+			duplicatedTransform.SetPosition(sourceTransform->GetPosition() + glm::vec3(1.0f, 0.0f, -1.0f));
+			duplicatedTransform.SetRotation(sourceTransform->GetRotation());
+			duplicatedTransform.SetScale(sourceTransform->GetScale());
+		}
+
+		if (sourceAnimation) {
+			registry.emplace_or_replace<AnimationComponent>(duplicatedEntity, *sourceAnimation);
+		}
+
+		return duplicatedEntity;
+	};
 
 	ImGui::Begin("ECS Scene");
 	if (ImGui::Button("Create Entity"))
@@ -1022,22 +1084,7 @@ void Renderer::renderEnttEditor()
             ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
 			const bool isSelected = (mEnttSelectedEntity == entity);
             if (ImGui::Selectable(tag.name.c_str(), isSelected)) {
-				mEnttSelectedEntity = entity;
-
-				if (auto* assimp = registry.try_get<AssimpInstanceComponent>(entity); assimp && assimp->instance) {
-					auto instanceIt = std::find(mModelInstData.miAssimpInstances.begin(), mModelInstData.miAssimpInstances.end(), assimp->instance);
-					if (instanceIt != mModelInstData.miAssimpInstances.end()) {
-						mModelInstData.miSelectedInstance = static_cast<int>(std::distance(mModelInstData.miAssimpInstances.begin(), instanceIt));
-					}
-
-					auto model = assimp->instance->getModel();
-					if (model) {
-						auto modelIt = std::find(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(), model);
-						if (modelIt != mModelInstData.miModelList.end()) {
-							mModelInstData.miSelectedModel = static_cast<int>(std::distance(mModelInstData.miModelList.begin(), modelIt));
-						}
-					}
-				}
+               selectEntityAndSync(entity);
 			}
          ImGui::PopID();
 		});
@@ -1153,6 +1200,14 @@ void Renderer::renderEnttEditor()
 			}
 		}
 
+     if (ImGui::Button("Duplicate Entity"))
+		{
+			entt::entity duplicatedEntity = duplicateEntity(mEnttSelectedEntity);
+			if (duplicatedEntity != entt::null) {
+				selectEntityAndSync(duplicatedEntity);
+			}
+		}
+		ImGui::SameLine();
 		if (ImGui::Button("Delete Entity"))
 		{
 			mEnttScene.destroyEntity(mEnttSelectedEntity);

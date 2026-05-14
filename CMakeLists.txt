@@ -55,6 +55,7 @@ add_executable(NovusEngine
     "src/vulkan/CommandBuffer.h" "lib/ImGuiFileDialog.cpp"
     "src/ECS/entt/scene.h"
     "src/ECS/entt/assimp_instance_component.h"
+    "src/ECS/entt/assimp_systems.h"
     "src/physics/physics_system.h" "src/physics/physics_system.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)

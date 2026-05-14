@@ -45,6 +45,7 @@ import vulkan_hpp;
 #include "physics/physics_system.h"
 #include "ECS/entt/scene.h"
 #include "ECS/entt/assimp_instance_component.h"
+#include "ECS/entt/assimp_systems.h"
 
 constexpr uint32_t WIDTH = 1920;
 constexpr uint32_t HEIGHT = 1080;

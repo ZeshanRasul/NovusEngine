@@ -3023,30 +3023,14 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 		return;
 
 	auto& registry = mEnttScene.getRegistry();
-	auto syncTransformFromEnttToAssimp = [&](const std::shared_ptr<AssimpInstance>& assimpInstance) {
-		if (!assimpInstance)
-			return;
-
-		auto it = mAssimpEntityMap.find(assimpInstance.get());
-		if (it == mAssimpEntityMap.end() || !registry.valid(it->second))
-			return;
-
-		auto* transform = registry.try_get<TransformComponent>(it->second);
-		if (!transform)
-			return;
-
-		InstanceSettings settings = assimpInstance->getInstanceSettings();
-		settings.isWorldPosition = transform->GetPosition();
-		settings.isWorldRotation = glm::degrees(glm::eulerAngles(transform->GetRotation()));
-		settings.isScale = transform->GetScale().x;
-		assimpInstance->setInstanceSettings(settings);
-	};
+   AssimpSystems::SyncTransformsFromEntt(registry, mAssimpEntityMap);
+	auto modelBatches = AssimpSystems::CollectValidModelInstanceBatches(mModelInstData.miAssimpInstancesPerModel);
 
 	/* calculate the size of the node matrix buffer over all animated instances */
 	size_t boneMatrixBufferSize = 0;
-	for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
-		size_t numberOfInstances = modelType.second.size();
-		std::shared_ptr<AssimpModel> model = modelType.second.at(0)->getModel();
+    for (const auto& modelType : modelBatches) {
+		size_t numberOfInstances = modelType.instances->size();
+		std::shared_ptr<AssimpModel> model = modelType.model;
 		if (numberOfInstances > 0 && model->getTriangleCount() > 0) {
 
 			/* animated models */
@@ -3072,14 +3056,10 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 
 	size_t instanceToStore = 0;
 	size_t animatedInstancesToStore = 0;
-	for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
-		size_t numberOfInstances = modelType.second.size();
+    for (const auto& modelType : modelBatches) {
+		size_t numberOfInstances = modelType.instances->size();
 		if (numberOfInstances > 0) {
-			std::shared_ptr<AssimpModel> model = modelType.second.at(0)->getModel();
-
-			for (unsigned int i = 0; i < numberOfInstances; ++i) {
-				syncTransformFromEnttToAssimp(modelType.second.at(i));
-			}
+            std::shared_ptr<AssimpModel> model = modelType.model;
 
 			/* animated models */
 			if (model->hasAnimations() && !model->getBoneList().empty()) {
@@ -3087,11 +3067,11 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 				animatedModelLoaded = true;
 
 				for (unsigned int i = 0; i < numberOfInstances; ++i) {
-					modelType.second.at(i)->updateAnimation(deltaTime);
-					std::vector<NodeTransformData> instanceNodeTransform = modelType.second.at(i)->getNodeTransformData();
+                 modelType.instances->at(i)->updateAnimation(deltaTime);
+					std::vector<NodeTransformData> instanceNodeTransform = modelType.instances->at(i)->getNodeTransformData();
 					std::copy(instanceNodeTransform.begin(), instanceNodeTransform.end(), mNodeTransFormData.begin() + animatedInstancesToStore + i * numberOfBones);
-					mWorldPosMatrices.at(instanceToStore + i) = modelType.second.at(i)->getWorldTransformMatrix();
-					mInstanceBoneOffsets[modelType.second.at(i).get()] = static_cast<uint32_t>(animatedInstancesToStore + i * numberOfBones);
+                  mWorldPosMatrices.at(instanceToStore + i) = modelType.instances->at(i)->getWorldTransformMatrix();
+					mInstanceBoneOffsets[modelType.instances->at(i).get()] = static_cast<uint32_t>(animatedInstancesToStore + i * numberOfBones);
 				}
 
 				size_t trsMatrixSize = numberOfBones * numberOfInstances * sizeof(glm::mat4);
@@ -3103,7 +3083,7 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 			else {
 				/* non-animated models */
 				for (unsigned int i = 0; i < numberOfInstances; ++i) {
-					mWorldPosMatrices.at(instanceToStore + i) = modelType.second.at(i)->getWorldTransformMatrix();
+                  mWorldPosMatrices.at(instanceToStore + i) = modelType.instances->at(i)->getWorldTransformMatrix();
 				}
 
 				mRenderData.rdMatricesSize += numberOfInstances * sizeof(glm::mat4);
@@ -3126,11 +3106,11 @@ void Renderer::updateAssimpAnimations(float deltaTime)
 
 	if (animatedModelLoaded && mComputeSkinningEnabled) {
 		uint32_t computeShaderModelOffset = 0;
-		for (const auto& modelType : mModelInstData.miAssimpInstancesPerModel) {
-			size_t numberOfInstances = modelType.second.size();
+        for (const auto& modelType : modelBatches) {
+			size_t numberOfInstances = modelType.instances->size();
 			if (numberOfInstances == 0)
 				continue;
-			std::shared_ptr<AssimpModel> modelRef = modelType.second.at(0)->getModel();
+         std::shared_ptr<AssimpModel> modelRef = modelType.model;
 			if (modelRef && modelRef->hasAnimations() && !modelRef->getBoneList().empty()) {
 				runComputeShaders(modelRef, numberOfInstances, computeShaderModelOffset);
 				computeShaderModelOffset += static_cast<uint32_t>(numberOfInstances * modelRef->getBoneList().size());

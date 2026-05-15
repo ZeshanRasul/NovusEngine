@@ -175,7 +175,7 @@ void Renderer::setupGameObjects()
 
 			if (isPhysicsEntity)
 			{
-               auto& rigidBody = registry.emplace_or_replace<RigidBodyComponent>(ecsEntity);
+				auto& rigidBody = registry.emplace_or_replace<RigidBodyComponent>(ecsEntity);
 				rigidBody.bodyType = RigidBodyType::Dynamic;
 				rigidBody.mass = 1.0f;
 				rigidBody.friction = 0.4f;
@@ -188,7 +188,7 @@ void Renderer::setupGameObjects()
 
 				if (name == "Static Floor")
 				{
-                 rigidBody.bodyType = RigidBodyType::Static;
+					rigidBody.bodyType = RigidBodyType::Static;
 					rigidBody.friction = 0.8f;
 					rigidBody.restitution = 0.1f;
 					collider.shapeType = ColliderShapeType::Box;
@@ -739,7 +739,7 @@ void Renderer::mainLoop()
 		InputSystem::Update(deltaTime);
 
 		camera.processInput(window, camera, deltaTime);
-        auto& reg = mEnttScene.getRegistry();
+		auto& reg = mEnttScene.getRegistry();
 		physicsSystem.step(deltaTime, reg);
 
 		updateAssimpAnimations(deltaTime);
@@ -972,6 +972,7 @@ void Renderer::renderImgui()
 	imGui->newFrame();
 	buildEditorDockspace();
 	renderViewportPanel();
+	auto& registry = mEnttScene.getRegistry();
 
 	// Create a window for camera controls
 	ImGui::Begin("Camera Controls");
@@ -1201,6 +1202,32 @@ void Renderer::renderImgui()
 	ImGui::SliderInt("Spawn Count", &physicsSpawnCount, 1, 128);
 	ImGui::SliderFloat("Spawn Height", &physicsSpawnHeight, 0.0f, -3120.0f, "%.1f");
 
+	int rigidBodyCount = 0;
+	for (auto entity : registry.view<RigidBodyComponent>()) {
+		(void)entity;
+		++rigidBodyCount;
+	}
+	int colliderCount = 0;
+	for (auto entity : registry.view<ColliderComponent>()) {
+		(void)entity;
+		++colliderCount;
+	}
+	ImGui::Text("RigidBodies: %d", rigidBodyCount);
+	ImGui::Text("Colliders: %d", colliderCount);
+
+	if (ImGui::Button("Rebuild Physics Registration"))
+	{
+		physicsSystem.clear();
+		for (auto [entity, rb, col, tr] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each())
+		{
+			(void)rb;
+			(void)col;
+			(void)tr;
+			entt::entity e = entity;
+			physicsSystem.registerEntity(e, registry);
+		}
+	}
+
 	if (ImGui::Button("Reset Physics"))
 	{
 		physicsSystem.reset();
@@ -1271,7 +1298,7 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 		}
 		return false;
 		};
-  auto recalcLocalFromParent = [&](entt::entity child) {
+	auto recalcLocalFromParent = [&](entt::entity child) {
 		TransformSystems::RecalculateLocalFromParent(registry, child);
 		};
 	std::function<void(entt::entity)> applyWorldFromParent = [&](entt::entity parentEntity) {
@@ -1344,7 +1371,7 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 		mEnttMultiSelection.push_back(mEnttSelectedEntity);
 	}
 
-    TransformSystems::UpdateHierarchyFromRoots(registry);
+	TransformSystems::UpdateHierarchyFromRoots(registry);
 
 	auto duplicateEntity = [&](entt::entity sourceEntity) -> entt::entity {
 		if (!mEnttScene.isValid(sourceEntity))
@@ -1419,8 +1446,7 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 		mEnttSelectedEntity = mEnttScene.createEntity("New Entity");
 		mEnttMultiSelection.clear();
 		mEnttMultiSelection.push_back(mEnttSelectedEntity);
-	}
-	ImGui::Separator();
+	}	ImGui::Separator();
 
 	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent& tag)
 		{
@@ -1648,6 +1674,60 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			}
 		}
 
+		if (!registry.any_of<RigidBodyComponent>(mEnttSelectedEntity)) {
+			if (ImGui::Button("Add RigidBodyComponent")) {
+				pushUndoSnapshot();
+				auto& rb = registry.emplace_or_replace<RigidBodyComponent>(mEnttSelectedEntity);
+				rb.bodyType = RigidBodyType::Dynamic;
+				rb.mass = 1.0f;
+				rb.friction = 0.5f;
+				rb.restitution = 0.2f;
+				rb.useGravity = true;
+				rb.linearVelocity = glm::vec3(0.0f);
+				rb.registeredInWorld = false;
+				rb.bodyId = -1;
+
+				if (!registry.any_of<ColliderComponent>(mEnttSelectedEntity)) {
+					registry.emplace_or_replace<ColliderComponent>(mEnttSelectedEntity);
+				}
+
+				entt::entity entity = mEnttSelectedEntity;
+				physicsSystem.registerEntity(entity, registry);
+			}
+		}
+		else {
+			if (ImGui::Button("Remove RigidBodyComponent")) {
+				pushUndoSnapshot();
+				entt::entity entity = mEnttSelectedEntity;
+				physicsSystem.unregisterEntity(entity, registry);
+				registry.remove<RigidBodyComponent>(mEnttSelectedEntity);
+			}
+		}
+
+		if (!registry.any_of<ColliderComponent>(mEnttSelectedEntity)) {
+			if (ImGui::Button("Add ColliderComponent")) {
+				pushUndoSnapshot();
+				auto& col = registry.emplace_or_replace<ColliderComponent>(mEnttSelectedEntity);
+				col.shapeType = ColliderShapeType::Box;
+				col.halfExtents = glm::vec3(0.5f);
+				col.radius = 0.5f;
+				col.halfHeight = 0.5f;
+
+				if (registry.any_of<RigidBodyComponent>(mEnttSelectedEntity)) {
+					entt::entity entity = mEnttSelectedEntity;
+					physicsSystem.registerEntity(entity, registry);
+				}
+			}
+		}
+		else {
+			if (ImGui::Button("Remove ColliderComponent")) {
+				pushUndoSnapshot();
+				entt::entity entity = mEnttSelectedEntity;
+				physicsSystem.unregisterEntity(entity, registry);
+				registry.remove<ColliderComponent>(mEnttSelectedEntity);
+			}
+		}
+
 		if (registry.any_of<HierarchyComponent>(mEnttSelectedEntity)) {
 			auto& hc = registry.get<HierarchyComponent>(mEnttSelectedEntity);
 			std::vector<entt::entity> candidates{};
@@ -1697,6 +1777,87 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			ImGui::DragFloat3("Light Color", &pointLight->color.x, 0.01f, 0.0f, 1000.0f, "%.2f");
 			ImGui::DragFloat("Intensity", &pointLight->intensity, 1.0f, 0.0f, 50000.0f, "%.1f");
 			ImGui::DragFloat("Range", &pointLight->range, 0.5f, 0.0f, 1000.0f, "%.1f");
+		}
+
+		if (auto* rigidBody = registry.try_get<RigidBodyComponent>(mEnttSelectedEntity)) {
+			ImGui::Separator();
+			ImGui::TextUnformatted("Rigid Body");
+
+			bool rebuildBody = false;
+			int bodyTypeIndex = static_cast<int>(rigidBody->bodyType);
+			const char* bodyTypes[] = { "Static", "Dynamic", "Kinematic" };
+			if (ImGui::Combo("Body Type", &bodyTypeIndex, bodyTypes, IM_ARRAYSIZE(bodyTypes))) {
+				rigidBody->bodyType = static_cast<RigidBodyType>(bodyTypeIndex);
+				rebuildBody = true;
+			}
+
+			if (ImGui::DragFloat("Mass", &rigidBody->mass, 0.05f, 0.001f, 10000.0f, "%.3f")) {
+				rigidBody->mass = std::max(0.001f, rigidBody->mass);
+				rebuildBody = true;
+			}
+			if (ImGui::SliderFloat("Friction", &rigidBody->friction, 0.0f, 1.0f, "%.3f")) {
+				rebuildBody = true;
+			}
+			if (ImGui::SliderFloat("Restitution", &rigidBody->restitution, 0.0f, 1.0f, "%.3f")) {
+				rebuildBody = true;
+			}
+			if (ImGui::Checkbox("Use Gravity", &rigidBody->useGravity)) {
+				rebuildBody = true;
+			}
+			if (ImGui::DragFloat3("Linear Velocity", &rigidBody->linearVelocity.x, 0.05f, -500.0f, 500.0f, "%.3f")) {
+				rebuildBody = true;
+			}
+
+			ImGui::Text("Body ID: %d", rigidBody->bodyId);
+			ImGui::Text("Registered: %s", rigidBody->registeredInWorld ? "Yes" : "No");
+
+			if (rebuildBody && registry.any_of<ColliderComponent>(mEnttSelectedEntity) && registry.any_of<TransformComponent>(mEnttSelectedEntity)) {
+				entt::entity entity = mEnttSelectedEntity;
+				physicsSystem.unregisterEntity(entity, registry);
+				physicsSystem.registerEntity(entity, registry);
+			}
+		}
+
+		if (auto* collider = registry.try_get<ColliderComponent>(mEnttSelectedEntity)) {
+			ImGui::Separator();
+			ImGui::TextUnformatted("Collider");
+
+			bool rebuildBody = false;
+			int shapeIndex = static_cast<int>(collider->shapeType);
+			const char* shapeTypes[] = { "Box", "Sphere", "Capsule" };
+			if (ImGui::Combo("Shape", &shapeIndex, shapeTypes, IM_ARRAYSIZE(shapeTypes))) {
+				collider->shapeType = static_cast<ColliderShapeType>(shapeIndex);
+				rebuildBody = true;
+			}
+
+			if (collider->shapeType == ColliderShapeType::Box) {
+				if (ImGui::DragFloat3("Half Extents", &collider->halfExtents.x, 0.05f, 0.001f, 10000.0f, "%.3f")) {
+					collider->halfExtents = glm::max(collider->halfExtents, glm::vec3(0.001f));
+					rebuildBody = true;
+				}
+			}
+			else if (collider->shapeType == ColliderShapeType::Sphere) {
+				if (ImGui::DragFloat("Radius", &collider->radius, 0.05f, 0.001f, 10000.0f, "%.3f")) {
+					collider->radius = std::max(0.001f, collider->radius);
+					rebuildBody = true;
+				}
+			}
+			else {
+				if (ImGui::DragFloat("Radius", &collider->radius, 0.05f, 0.001f, 10000.0f, "%.3f")) {
+					collider->radius = std::max(0.001f, collider->radius);
+					rebuildBody = true;
+				}
+				if (ImGui::DragFloat("Half Height", &collider->halfHeight, 0.05f, 0.001f, 10000.0f, "%.3f")) {
+					collider->halfHeight = std::max(0.001f, collider->halfHeight);
+					rebuildBody = true;
+				}
+			}
+
+			if (rebuildBody && registry.any_of<RigidBodyComponent>(mEnttSelectedEntity) && registry.any_of<TransformComponent>(mEnttSelectedEntity)) {
+				entt::entity entity = mEnttSelectedEntity;
+				physicsSystem.unregisterEntity(entity, registry);
+				physicsSystem.registerEntity(entity, registry);
+			}
 		}
 
 		// Assimp instance controls (add/remove instance for this entity)
@@ -1815,6 +1976,7 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			for (auto entity : targets) {
 				if (!mEnttScene.isValid(entity))
 					continue;
+				physicsSystem.unregisterEntity(entity, registry);
 				detachHierarchy(entity);
 				mEnttScene.destroyEntity(entity);
 				removeFromMultiSelection(entity);
@@ -1899,6 +2061,26 @@ std::string Renderer::serializeEnttScene() const
 				{ "intensity", pointLight->intensity },
 				{ "range", pointLight->range },
 				{ "enabled", pointLight->enabled }
+			};
+		}
+
+		if (const auto* rigidBody = registry.try_get<RigidBodyComponent>(entity)) {
+			node["rigidBody"] = {
+				{ "bodyType", static_cast<int>(rigidBody->bodyType) },
+				{ "mass", rigidBody->mass },
+				{ "friction", rigidBody->friction },
+				{ "restitution", rigidBody->restitution },
+				{ "useGravity", rigidBody->useGravity },
+				{ "linearVelocity", { rigidBody->linearVelocity.x, rigidBody->linearVelocity.y, rigidBody->linearVelocity.z } }
+			};
+		}
+
+		if (const auto* collider = registry.try_get<ColliderComponent>(entity)) {
+			node["collider"] = {
+				{ "shapeType", static_cast<int>(collider->shapeType) },
+				{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
+				{ "radius", collider->radius },
+				{ "halfHeight", collider->halfHeight }
 			};
 		}
 
@@ -2040,6 +2222,32 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			light.range = pl.value("range", light.range);
 			light.enabled = pl.value("enabled", light.enabled);
 		}
+
+		if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
+			auto& rb = registry.emplace_or_replace<RigidBodyComponent>(entity);
+			const auto& rbNode = node["rigidBody"];
+			rb.bodyType = static_cast<RigidBodyType>(rbNode.value("bodyType", static_cast<int>(rb.bodyType)));
+			rb.mass = rbNode.value("mass", rb.mass);
+			rb.friction = rbNode.value("friction", rb.friction);
+			rb.restitution = rbNode.value("restitution", rb.restitution);
+			rb.useGravity = rbNode.value("useGravity", rb.useGravity);
+			if (rbNode.contains("linearVelocity") && rbNode["linearVelocity"].is_array() && rbNode["linearVelocity"].size() == 3) {
+				rb.linearVelocity = glm::vec3(rbNode["linearVelocity"][0].get<float>(), rbNode["linearVelocity"][1].get<float>(), rbNode["linearVelocity"][2].get<float>());
+			}
+			rb.registeredInWorld = false;
+			rb.bodyId = -1;
+		}
+
+		if (node.contains("collider") && node["collider"].is_object()) {
+			auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
+			const auto& colNode = node["collider"];
+			col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
+			if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3) {
+				col.halfExtents = glm::vec3(colNode["halfExtents"][0].get<float>(), colNode["halfExtents"][1].get<float>(), colNode["halfExtents"][2].get<float>());
+			}
+			col.radius = colNode.value("radius", col.radius);
+			col.halfHeight = colNode.value("halfHeight", col.halfHeight);
+		}
 	}
 
 	for (const auto& entry : pendingHierarchy) {
@@ -2068,6 +2276,14 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 	if (selectedIt != entityMap.end() && mEnttScene.isValid(selectedIt->second)) {
 		mEnttSelectedEntity = selectedIt->second;
 		mEnttMultiSelection.push_back(mEnttSelectedEntity);
+	}
+
+	for (auto [entity, rb, col, tr] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each()) {
+		(void)rb;
+		(void)col;
+		(void)tr;
+		entt::entity e = entity;
+		physicsSystem.registerEntity(e, registry);
 	}
 
 	rebuildRenderableRuntimeResources();

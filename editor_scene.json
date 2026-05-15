@@ -1,96 +1,8 @@
 {
   "entities": [
     {
-      "id": 25,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "enabled": false,
-        "intensity": 800.0,
-        "range": 100.0
-      },
-      "transform": {
-        "position": [
-          726.0772094726563,
-          -449.9545593261719,
-          -41.132286071777344
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "id": 24,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          1.0,
-          1.0,
-          1.0
-        ],
-        "enabled": false,
-        "intensity": 800.0,
-        "range": 100.0
-      },
-      "transform": {
-        "position": [
-          728.8698120117188,
-          -451.3377380371094,
-          -41.998775482177734
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "animation": {
-        "clipIndex": 0,
-        "speed": 1.0
-      },
-      "assimp": {
-        "model": "models\\Knight.glb",
-        "settings": {
-          "clipIndex": 0,
-          "playTime": 0.0,
-          "position": [
-            0.0,
-            0.0,
-            0.0
-          ],
-          "rotation": [
-            180.0,
-            -89.98021697998047,
-            0.0
-          ],
-          "scale": 5000.0,
-          "speed": 1.0,
-          "swapYZ": false
-        }
-      },
-      "id": 23,
-      "name": "Assimp: Knight.glb",
+      "id": 1048589,
+      "name": "Main Camera",
       "transform": {
         "position": [
           0.0,
@@ -98,568 +10,36 @@
           0.0
         ],
         "rotation": [
-          0.7071067690849304,
-          3.0908619663705394e-08,
-          0.7071067690849304,
-          -3.0908619663705394e-08
-        ],
-        "scale": [
-          5000.0,
-          5000.0,
-          5000.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 46.0,
-        "shapeType": 1
-      },
-      "id": 22,
-      "name": "Flight Helmet 12",
-      "renderable": {
-        "modelPath": "models/FlightHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          27.85894775390625,
-          -8.0,
-          128.25318908691406
-        ],
-        "mass": 2.799999952316284,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          471.98394775390625,
-          -890.0,
-          -333.1000061035156
-        ],
-        "rotation": [
           0.0,
-          -0.5000001788139343,
           0.0,
-          -0.8660252690315247
-        ],
-        "scale": [
-          100.0,
-          100.0,
-          100.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 18.0,
-        "shapeType": 1
-      },
-      "id": 21,
-      "name": "Damaged Helmet 11",
-      "renderable": {
-        "modelPath": "models/DamagedHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          88.25318908691406,
-          -8.0,
-          97.14100646972656
-        ],
-        "mass": 1.2000000476837158,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          224.9999542236328,
-          -800.0,
-          -366.21099853515625
-        ],
-        "rotation": [
-          -0.0,
-          0.5000000596046448,
-          -0.0,
-          -0.8660253882408142
-        ],
-        "scale": [
-          35.0,
-          35.0,
-          35.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 46.0,
-        "shapeType": 1
-      },
-      "id": 20,
-      "name": "Flight Helmet 10",
-      "renderable": {
-        "modelPath": "models/FlightHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          125.0,
-          15.0,
-          40.0
-        ],
-        "mass": 2.799999952316284,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          19.600000381469727,
-          -1160.0,
-          -355.0
-        ],
-        "rotation": [
           0.0,
-          -8.742277657347586e-08,
-          0.0,
-          -1.0
+          1.0
         ],
         "scale": [
-          100.0,
-          100.0,
-          100.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 18.0,
-        "shapeType": 1
-      },
-      "id": 19,
-      "name": "Damaged Helmet 9",
-      "renderable": {
-        "modelPath": "models/DamagedHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          128.253173828125,
-          -8.0,
-          -27.858970642089844
-        ],
-        "mass": 1.2000000476837158,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          -129.99996948242188,
-          -1070.0,
-          -225.16661071777344
-        ],
-        "rotation": [
-          -0.0,
-          0.8660253882408142,
-          -0.0,
-          -0.5000000596046448
-        ],
-        "scale": [
-          35.0,
-          35.0,
-          35.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 46.0,
-        "shapeType": 1
-      },
-      "id": 18,
-      "name": "Flight Helmet 8",
-      "renderable": {
-        "modelPath": "models/FlightHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          97.1410140991211,
-          -8.0,
-          -88.253173828125
-        ],
-        "mass": 2.799999952316284,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          -471.98382568359375,
-          -980.0,
-          -272.5
-        ],
-        "rotation": [
-          -0.0,
-          0.5000000596046448,
-          -0.0,
-          -0.8660253882408142
-        ],
-        "scale": [
-          100.0,
-          100.0,
-          100.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 18.0,
-        "shapeType": 1
-      },
-      "id": 17,
-      "name": "Damaged Helmet 7",
-      "renderable": {
-        "modelPath": "models/DamagedHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          40.0000114440918,
-          15.0,
-          -125.0
-        ],
-        "mass": 1.2000000476837158,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          -450.0,
-          -890.0,
-          157.39999389648438
-        ],
-        "rotation": [
-          -0.0,
           1.0,
-          -0.0,
-          -4.371138828673793e-08
-        ],
-        "scale": [
-          35.0,
-          35.0,
-          35.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 46.0,
-        "shapeType": 1
-      },
-      "id": 16,
-      "name": "Flight Helmet 6",
-      "renderable": {
-        "modelPath": "models/FlightHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          -27.858993530273438,
-          -8.0,
-          -128.253173828125
-        ],
-        "mass": 2.799999952316284,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          -307.43902587890625,
-          -800.0,
-          177.50001525878906
-        ],
-        "rotation": [
-          -0.0,
-          0.8660253882408142,
-          -0.0,
-          -0.5000000596046448
-        ],
-        "scale": [
-          100.0,
-          100.0,
-          100.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 18.0,
-        "shapeType": 1
-      },
-      "id": 15,
-      "name": "Damaged Helmet 5",
-      "renderable": {
-        "modelPath": "models/DamagedHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          -88.253173828125,
-          -8.0,
-          -97.14102172851563
-        ],
-        "mass": 1.2000000476837158,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          -130.00001525878906,
-          -1160.0,
-          225.16659545898438
-        ],
-        "rotation": [
-          0.0,
-          0.866025447845459,
-          0.0,
-          0.4999999701976776
-        ],
-        "scale": [
-          35.0,
-          35.0,
-          35.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 46.0,
-        "shapeType": 1
-      },
-      "id": 14,
-      "name": "Flight Helmet 4",
-      "renderable": {
-        "modelPath": "models/FlightHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          -125.0,
-          15.0,
-          -40.000003814697266
-        ],
-        "mass": 2.799999952316284,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          -54.0,
-          -1070.0,
-          545.0
-        ],
-        "rotation": [
-          -0.0,
           1.0,
-          -0.0,
-          -4.371138828673793e-08
-        ],
-        "scale": [
-          100.0,
-          100.0,
-          100.0
+          1.0
         ]
       }
     },
     {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
+      "id": 1048588,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          1.0,
+          1.0,
+          1.0
         ],
-        "halfHeight": 0.5,
-        "radius": 18.0,
-        "shapeType": 1
-      },
-      "id": 13,
-      "name": "Damaged Helmet 3",
-      "renderable": {
-        "modelPath": "models/DamagedHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          -128.253173828125,
-          -8.0,
-          27.858978271484375
-        ],
-        "mass": 1.2000000476837158,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
+        "enabled": true,
+        "intensity": 1000.0,
+        "range": 120.0
       },
       "transform": {
         "position": [
-          224.99998474121094,
-          -980.0,
-          389.7114562988281
-        ],
-        "rotation": [
-          0.0,
-          0.5,
-          0.0,
-          0.8660253882408142
-        ],
-        "scale": [
-          35.0,
-          35.0,
-          35.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 46.0,
-        "shapeType": 1
-      },
-      "id": 12,
-      "name": "Flight Helmet 2",
-      "renderable": {
-        "modelPath": "models/FlightHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          -97.1410140991211,
-          -8.0,
-          88.253173828125
-        ],
-        "mass": 2.799999952316284,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          316.53900146484375,
-          -890.0,
-          177.5
-        ],
-        "rotation": [
-          0.0,
-          0.866025447845459,
-          0.0,
-          0.4999999701976776
-        ],
-        "scale": [
-          100.0,
-          100.0,
-          100.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 18.0,
-        "shapeType": 1
-      },
-      "id": 11,
-      "name": "Damaged Helmet 1",
-      "renderable": {
-        "modelPath": "models/DamagedHelmet.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.44999998807907104,
-        "linearVelocity": [
-          -40.0,
-          15.0,
-          125.0
-        ],
-        "mass": 1.2000000476837158,
-        "restitution": 0.6000000238418579,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          260.0,
-          -800.0,
-          33.70000076293945
+          -1035.1124267578125,
+          -45.0,
+          -28.61212158203125
         ],
         "rotation": [
           0.0,
@@ -668,42 +48,119 @@
           1.0
         ],
         "scale": [
-          35.0,
-          35.0,
-          35.0
+          1.0,
+          1.0,
+          1.0
         ]
       }
     },
     {
-      "collider": {
-        "halfExtents": [
-          860.0,
-          300.0,
-          18.0
+      "id": 1048587,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          1.0,
+          0.25,
+          0.25
         ],
-        "halfHeight": 1.0,
-        "radius": 1.0,
-        "shapeType": 0
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
       },
-      "id": 10,
-      "name": "Physics Arena Wall -Z",
-      "rigidBody": {
-        "bodyType": 0,
-        "friction": 0.800000011920929,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
+      "transform": {
+        "position": [
+          -713.9718627929688,
+          -80.0,
+          -135.052978515625
         ],
-        "mass": 1.0,
-        "restitution": 0.10000000149011612,
-        "useGravity": false
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 1048586,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          0.25,
+          0.25,
+          1.0
+        ],
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          -793.021240234375,
+          -50.0,
+          62.710052490234375
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 1048585,
+      "name": "Point Light",
+      "pointLight": {
+        "color": [
+          0.25,
+          1.0,
+          0.25
+        ],
+        "enabled": true,
+        "intensity": 800.0,
+        "range": 120.0
+      },
+      "transform": {
+        "position": [
+          -1315.690673828125,
+          -137.99444580078125,
+          -38.97813415527344
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": 1048584,
+      "name": "Sponza",
+      "renderable": {
+        "modelPath": "models/Sponza.gltf"
       },
       "transform": {
         "position": [
           0.0,
-          -260.0,
-          -860.0
+          0.0,
+          0.0
         ],
         "rotation": [
           0.0,
@@ -722,75 +179,31 @@
       "collider": {
         "halfExtents": [
           860.0,
-          300.0,
-          18.0
-        ],
-        "halfHeight": 1.0,
-        "radius": 1.0,
-        "shapeType": 0
-      },
-      "id": 9,
-      "name": "Physics Arena Wall +Z",
-      "rigidBody": {
-        "bodyType": 0,
-        "friction": 0.800000011920929,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.10000000149011612,
-        "useGravity": false
-      },
-      "transform": {
-        "position": [
-          0.0,
-          -260.0,
-          860.0
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "halfExtents": [
           18.0,
-          300.0,
           860.0
         ],
         "halfHeight": 1.0,
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 8,
-      "name": "Physics Arena Wall -X",
+      "id": 1048583,
+      "name": "Physics Arena Floor",
       "rigidBody": {
         "bodyType": 0,
-        "friction": 0.800000011920929,
+        "friction": 0.8999999761581421,
         "linearVelocity": [
           0.0,
           0.0,
           0.0
         ],
         "mass": 1.0,
-        "restitution": 0.10000000149011612,
+        "restitution": 0.15000000596046448,
         "useGravity": false
       },
       "transform": {
         "position": [
-          -860.0,
-          -260.0,
+          0.0,
+          2.5,
           0.0
         ],
         "rotation": [
@@ -817,7 +230,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 7,
+      "id": 1048582,
       "name": "Physics Arena Wall +X",
       "rigidBody": {
         "bodyType": 0,
@@ -853,33 +266,77 @@
     {
       "collider": {
         "halfExtents": [
-          860.0,
           18.0,
+          300.0,
           860.0
         ],
         "halfHeight": 1.0,
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 6,
-      "name": "Physics Arena Floor",
+      "id": 1048581,
+      "name": "Physics Arena Wall -X",
       "rigidBody": {
         "bodyType": 0,
-        "friction": 0.8999999761581421,
+        "friction": 0.800000011920929,
         "linearVelocity": [
           0.0,
           0.0,
           0.0
         ],
         "mass": 1.0,
-        "restitution": 0.15000000596046448,
+        "restitution": 0.10000000149011612,
+        "useGravity": false
+      },
+      "transform": {
+        "position": [
+          -860.0,
+          -260.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "collider": {
+        "halfExtents": [
+          860.0,
+          300.0,
+          18.0
+        ],
+        "halfHeight": 1.0,
+        "radius": 1.0,
+        "shapeType": 0
+      },
+      "id": 1048580,
+      "name": "Physics Arena Wall +Z",
+      "rigidBody": {
+        "bodyType": 0,
+        "friction": 0.800000011920929,
+        "linearVelocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mass": 1.0,
+        "restitution": 0.10000000149011612,
         "useGravity": false
       },
       "transform": {
         "position": [
           0.0,
-          2.5,
-          0.0
+          -260.0,
+          860.0
         ],
         "rotation": [
           0.0,
@@ -895,15 +352,81 @@
       }
     },
     {
-      "id": 5,
-      "name": "Sponza",
+      "collider": {
+        "halfExtents": [
+          860.0,
+          300.0,
+          18.0
+        ],
+        "halfHeight": 1.0,
+        "radius": 1.0,
+        "shapeType": 0
+      },
+      "id": 1048579,
+      "name": "Physics Arena Wall -Z",
+      "rigidBody": {
+        "bodyType": 0,
+        "friction": 0.800000011920929,
+        "linearVelocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mass": 1.0,
+        "restitution": 0.10000000149011612,
+        "useGravity": false
+      },
+      "transform": {
+        "position": [
+          0.0,
+          -260.0,
+          -860.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "collider": {
+        "halfExtents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "halfHeight": 0.5,
+        "radius": 18.0,
+        "shapeType": 1
+      },
+      "id": 1048578,
+      "name": "Damaged Helmet 1",
       "renderable": {
-        "modelPath": "models/Sponza.gltf"
+        "modelPath": "models/DamagedHelmet.gltf"
+      },
+      "rigidBody": {
+        "bodyType": 1,
+        "friction": 0.44999998807907104,
+        "linearVelocity": [
+          -40.0,
+          15.0,
+          125.0
+        ],
+        "mass": 1.2000000476837158,
+        "restitution": 0.6000000238418579,
+        "useGravity": true
       },
       "transform": {
         "position": [
-          0.0,
-          0.0,
+          260.0,
+          -800.0,
           0.0
         ],
         "rotation": [
@@ -913,143 +436,86 @@
           1.0
         ],
         "scale": [
-          1.0,
-          1.0,
-          1.0
+          35.0,
+          35.0,
+          35.0
         ]
       }
     },
     {
-      "id": 4,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          0.25,
-          1.0,
-          0.25
+      "collider": {
+        "halfExtents": [
+          0.5,
+          0.5,
+          0.5
         ],
-        "enabled": true,
-        "intensity": 800.0,
-        "range": 120.0
+        "halfHeight": 0.5,
+        "radius": 46.0,
+        "shapeType": 1
+      },
+      "id": 1048577,
+      "name": "Flight Helmet 2",
+      "renderable": {
+        "modelPath": "models/FlightHelmet.gltf"
+      },
+      "rigidBody": {
+        "bodyType": 1,
+        "friction": 0.44999998807907104,
+        "linearVelocity": [
+          40.0000114440918,
+          -8.0,
+          -125.0
+        ],
+        "mass": 2.799999952316284,
+        "restitution": 0.6000000238418579,
+        "useGravity": true
       },
       "transform": {
         "position": [
-          -1366.8551025390625,
-          -151.78878784179688,
-          -50.42413330078125
+          -355.0,
+          -890.0,
+          152.3000030517578
         ],
         "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
+          -0.0,
+          0.7071067690849304,
+          -0.0,
+          -0.7071067690849304
         ],
         "scale": [
-          1.0,
-          1.0,
-          1.0
+          100.0,
+          100.0,
+          100.0
         ]
       }
     },
     {
-      "id": 3,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          0.25,
-          0.25,
-          1.0
-        ],
-        "enabled": true,
-        "intensity": 800.0,
-        "range": 120.0
+      "animation": {
+        "clipIndex": 0,
+        "speed": 1.0
       },
-      "transform": {
-        "position": [
-          -744.8156127929688,
-          -146.7763671875,
-          83.05241394042969
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "id": 2,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          1.4600000381469727,
-          0.25,
-          0.25
-        ],
-        "enabled": true,
-        "intensity": 907.0,
-        "range": 120.0
+      "assimp": {
+        "model": "models\\Knight.glb",
+        "settings": {
+          "clipIndex": 0,
+          "playTime": 0.0,
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            -180.0,
+            -89.98021697998047,
+            0.0
+          ],
+          "scale": 5000.0,
+          "speed": 1.0,
+          "swapYZ": false
+        }
       },
-      "transform": {
-        "position": [
-          -700.6679077148438,
-          -148.29293823242188,
-          -139.65219116210938
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "id": 1,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          3.869999885559082,
-          3.9200000762939453,
-          3.9800000190734863
-        ],
-        "enabled": true,
-        "intensity": 1000.0,
-        "range": 322.0
-      },
-      "transform": {
-        "position": [
-          43.58184051513672,
-          -119.6557388305664,
-          -62.728736877441406
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "id": 0,
-      "name": "Main Camera",
+      "id": 1048576,
+      "name": "Assimp: Knight.glb",
       "transform": {
         "position": [
           0.0,
@@ -1057,18 +523,18 @@
           0.0
         ],
         "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
+          0.7072288393974304,
+          3.0903283487759836e-08,
+          0.7069846987724304,
+          -3.091395583965095e-08
         ],
         "scale": [
-          1.0,
-          1.0,
-          1.0
+          5000.0,
+          5000.0,
+          5000.0
         ]
       }
     }
   ],
-  "selected": 22
+  "selected": 1048578
 }

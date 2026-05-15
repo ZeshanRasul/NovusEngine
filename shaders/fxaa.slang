@@ -12,6 +12,8 @@ struct VSOutput {
 [[vk::binding(0, 0)]] SamplerState sceneSampler;
 [[vk::binding(1, 0)]] Texture2D    bloomColor;
 [[vk::binding(1, 0)]] SamplerState bloomSampler;
+[[vk::binding(2, 0)]] Texture2D    sceneDepth;
+[[vk::binding(2, 0)]] SamplerState depthSampler;
 
 struct FxaaPushConstants
 {
@@ -79,8 +81,20 @@ float3 LinearToSRGB(float3 linearColor, float gamma)
     return pow(saturate(linearColor), float3(1.0 / gamma));
 }
 
+float LinearizeDepth(float depth)
+{
+    static const float nearPlane = 0.1;
+    static const float farPlane = 3000.0;
+    float z = depth * 2.0 - 1.0;
+    return (2.0 * nearPlane * farPlane) / (farPlane + nearPlane - z * (farPlane - nearPlane));
+}
+
 float3 SampleTonemapped(float2 uv, float exposure, float gamma)
 {
+    static const float3 fogColor = float3(0.62, 0.70, 0.82);
+    static const float fogDensity = 0.15;
+    static const float fogMax = 0.9;
+
     float3 hdr = sceneColor.Sample(sceneSampler, uv).rgb; // linear HDR
 
     if (pc.debugMode == 1)
@@ -97,6 +111,15 @@ float3 SampleTonemapped(float2 uv, float exposure, float gamma)
     }
 
     hdr += bloom * pc.bloomIntensity;
+
+    float depth = sceneDepth.Sample(depthSampler, uv).r;
+    float distanceToCamera = LinearizeDepth(depth);
+    float fogAmount = 1.0 - exp(-distanceToCamera * fogDensity);
+    fogAmount = saturate(fogAmount);
+    fogAmount = min(fogAmount, fogMax);
+
+    hdr = lerp(hdr, fogColor, fogAmount);
+
     float3 mapped = TonemapACESFilm(hdr * exposure);
     return LinearToSRGB(mapped, gamma);
 }

@@ -240,7 +240,7 @@ void Renderer::setupGameObjects()
 		1.0f, 0.8f, 0.1f, false,
 		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	const int spawnCount = std::max(12, physicsSpawnCount);
+	const int spawnCount = std::max(0, physicsSpawnCount);
 	const float spawnBaseHeight = physicsSpawnHeight;
 	constexpr float twoPi = 6.28318530718f;
 	for (int i = 0; i < spawnCount; ++i)
@@ -461,7 +461,7 @@ void Renderer::initVulkan()
 		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
 	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
-	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
+	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, depthImageView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
 	Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
 
@@ -1009,7 +1009,7 @@ void Renderer::buildEditorDockspace()
 
 void Renderer::renderViewportPanel()
 {
-   if (!uiShowViewport)
+	if (!uiShowViewport)
 		return;
 
 	ImGui::Begin("Viewport");
@@ -1071,7 +1071,7 @@ void Renderer::renderImgui()
 	const bool isEditMode = (sceneState == SceneState::EDIT);
 
 	ImGui::Begin("Play Mode");
- ImGui::Checkbox("Viewport", &uiShowViewport);
+	ImGui::Checkbox("Viewport", &uiShowViewport);
 	ImGui::SameLine();
 	ImGui::Checkbox("Camera", &uiShowCameraControls);
 	ImGui::SameLine();
@@ -1147,54 +1147,54 @@ void Renderer::renderImgui()
 	shadowSettings.enabled = renderEnableShadows ? 1.0f : 0.0f;
 
 	// Create a window for camera controls
-  if (uiShowCameraControls)
+	if (uiShowCameraControls)
 	{
 		ImGui::SetNextWindowBgAlpha(1.0f);
 		ImGui::Begin("Camera Controls");
 
-	// Add a button to reset camera position
-	if (ImGui::Button("Reset Camera")) {
-		camera.setPosition(glm::vec3(400.0f, -120.0f, 0.0f));
-		camera.setYaw(180.0f);
-		camera.setPitch(-5.0f);
-		camera.setMovementSpeed(140.0f);
-		camera.setZoom(55.0f);
-		camera.getViewMatrix();
-		camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
-	}
+		// Add a button to reset camera position
+		if (ImGui::Button("Reset Camera")) {
+			camera.setPosition(glm::vec3(400.0f, -120.0f, 0.0f));
+			camera.setYaw(180.0f);
+			camera.setPitch(-5.0f);
+			camera.setMovementSpeed(140.0f);
+			camera.setZoom(55.0f);
+			camera.getViewMatrix();
+			camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
+		}
 
-	// Add sliders for camera settings
-	float movementSpeed = camera.getMovementSpeed();
-	if (ImGui::SliderFloat("Movement Speed", &movementSpeed, 1.0f, 100.0f)) {
-		camera.setMovementSpeed(movementSpeed);
-	}
+		// Add sliders for camera settings
+		float movementSpeed = camera.getMovementSpeed();
+		if (ImGui::SliderFloat("Movement Speed", &movementSpeed, 1.0f, 100.0f)) {
+			camera.setMovementSpeed(movementSpeed);
+		}
 
-	float sensitivity = camera.getMouseSensitivity();
-	if (ImGui::SliderFloat("Mouse Sensitivity", &sensitivity, 0.1f, 1.0f)) {
-		camera.setMouseSensitivity(sensitivity);
-	}
+		float sensitivity = camera.getMouseSensitivity();
+		if (ImGui::SliderFloat("Mouse Sensitivity", &sensitivity, 0.1f, 1.0f)) {
+			camera.setMouseSensitivity(sensitivity);
+		}
 
-	float zoom = camera.getZoom();
-	if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 90.0f)) {
-		camera.setZoom(zoom);
-	}
+		float zoom = camera.getZoom();
+		if (ImGui::SliderFloat("Zoom", &zoom, 1.0f, 90.0f)) {
+			camera.setZoom(zoom);
+		}
 
-	const glm::vec3 camPos = camera.getPosition();
-	ImGui::Text("Position: (%.2f, %.2f, %.2f)", camPos.x, camPos.y, camPos.z);
+		const glm::vec3 camPos = camera.getPosition();
+		ImGui::Text("Position: (%.2f, %.2f, %.2f)", camPos.x, camPos.y, camPos.z);
 
-	ImGuiIO& io = ImGui::GetIO();
-	const float fps = io.Framerate;
-	const float frameMs = fps > 0.0f ? (1000.0f / fps) : 0.0f;
-	ImGui::Text("FPS: %.1f (%.2f ms)", fps, frameMs);
+		ImGuiIO& io = ImGui::GetIO();
+		const float fps = io.Framerate;
+		const float frameMs = fps > 0.0f ? (1000.0f / fps) : 0.0f;
+		ImGui::Text("FPS: %.1f (%.2f ms)", fps, frameMs);
 
-       ImGui::End();
+		ImGui::End();
 	}
 
 	if (isEditMode)
 	{
 		renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f));
 
-      if (uiShowShadowTuningWindow)
+		if (uiShowShadowTuningWindow)
 		{
 			ImGui::Begin("Shadow Tuning");
 			ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
@@ -1358,36 +1358,36 @@ void Renderer::renderImgui()
 	}
 	else
 	{
-       if (uiShowPlayHud)
+		if (uiShowPlayHud)
 			ImGui::Begin("Play HUD");
 		else
 			ImGui::Begin("Play HUD", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs);
 
 		if (uiShowPlayHud)
 		{
-		ImGui::TextUnformatted("Runtime UI");
-		ImGui::Separator();
-		ImGui::TextUnformatted("W/A/S/D + Mouse: Move camera");
-		ImGui::TextUnformatted("Space/Ctrl: Up/Down");
-		ImGui::TextUnformatted("Esc: Toggle mouse capture");
+			ImGui::TextUnformatted("Runtime UI");
+			ImGui::Separator();
+			ImGui::TextUnformatted("W/A/S/D + Mouse: Move camera");
+			ImGui::TextUnformatted("Space/Ctrl: Up/Down");
+			ImGui::TextUnformatted("Esc: Toggle mouse capture");
 
-		int rigidBodyCount = 0;
-		for (auto entity : registry.view<RigidBodyComponent>()) {
-			(void)entity;
-			++rigidBodyCount;
-		}
-		int colliderCount = 0;
-		for (auto entity : registry.view<ColliderComponent>()) {
-			(void)entity;
-			++colliderCount;
-		}
-		ImGui::Text("RigidBodies: %d", rigidBodyCount);
-        ImGui::Text("Colliders: %d", colliderCount);
+			int rigidBodyCount = 0;
+			for (auto entity : registry.view<RigidBodyComponent>()) {
+				(void)entity;
+				++rigidBodyCount;
+			}
+			int colliderCount = 0;
+			for (auto entity : registry.view<ColliderComponent>()) {
+				(void)entity;
+				++colliderCount;
+			}
+			ImGui::Text("RigidBodies: %d", rigidBodyCount);
+			ImGui::Text("Colliders: %d", colliderCount);
 		}
 		ImGui::End();
 	}
 
-  if ((isEditMode || playShowDebugUI) && uiShowPostProcessingWindow)
+	if ((isEditMode || playShowDebugUI) && uiShowPostProcessingWindow)
 	{
 		ImGui::Begin("Post Processing");
 		ImGui::SliderFloat("FXAA Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
@@ -1403,55 +1403,55 @@ void Renderer::renderImgui()
 		ImGui::Combo("Post Debug", &postProcessDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
 		ImGui::End();
 
-       if (uiShowPhysicsWindow)
+		if (uiShowPhysicsWindow)
 			ImGui::Begin("Physics Demo");
 		else
 			ImGui::Begin("Physics Demo", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs);
 
 		if (uiShowPhysicsWindow)
 		{
-		ImGui::Checkbox("Pause Physics", &physicsPaused);
-		physicsSystem.setPaused(physicsPaused);
+			ImGui::Checkbox("Pause Physics", &physicsPaused);
+			physicsSystem.setPaused(physicsPaused);
 
-		glm::vec3 gravity = physicsSystem.getGravity();
-		if (ImGui::SliderFloat3("Gravity", &gravity.x, -30.0f, 30.0f, "%.2f"))
-		{
-			physicsSystem.setGravity(gravity);
-		}
-
-		ImGui::SliderInt("Spawn Count", &physicsSpawnCount, 1, 128);
-		ImGui::SliderFloat("Spawn Height", &physicsSpawnHeight, 0.0f, -3120.0f, "%.1f");
-
-		int rigidBodyCount = 0;
-		for (auto entity : registry.view<RigidBodyComponent>()) {
-			(void)entity;
-			++rigidBodyCount;
-		}
-		int colliderCount = 0;
-		for (auto entity : registry.view<ColliderComponent>()) {
-			(void)entity;
-			++colliderCount;
-		}
-		ImGui::Text("RigidBodies: %d", rigidBodyCount);
-		ImGui::Text("Colliders: %d", colliderCount);
-
-		if (ImGui::Button("Rebuild Physics Registration"))
-		{
-			physicsSystem.clear();
-			for (auto [entity, rb, col, tr] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each())
+			glm::vec3 gravity = physicsSystem.getGravity();
+			if (ImGui::SliderFloat3("Gravity", &gravity.x, -30.0f, 30.0f, "%.2f"))
 			{
-				(void)rb;
-				(void)col;
-				(void)tr;
-				entt::entity e = entity;
-				physicsSystem.registerEntity(e, registry);
+				physicsSystem.setGravity(gravity);
 			}
-		}
 
-     if (ImGui::Button("Reset Physics"))
-		{
-			physicsSystem.reset();
-		}
+			ImGui::SliderInt("Spawn Count", &physicsSpawnCount, 1, 128);
+			ImGui::SliderFloat("Spawn Height", &physicsSpawnHeight, 0.0f, -3120.0f, "%.1f");
+
+			int rigidBodyCount = 0;
+			for (auto entity : registry.view<RigidBodyComponent>()) {
+				(void)entity;
+				++rigidBodyCount;
+			}
+			int colliderCount = 0;
+			for (auto entity : registry.view<ColliderComponent>()) {
+				(void)entity;
+				++colliderCount;
+			}
+			ImGui::Text("RigidBodies: %d", rigidBodyCount);
+			ImGui::Text("Colliders: %d", colliderCount);
+
+			if (ImGui::Button("Rebuild Physics Registration"))
+			{
+				physicsSystem.clear();
+				for (auto [entity, rb, col, tr] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each())
+				{
+					(void)rb;
+					(void)col;
+					(void)tr;
+					entt::entity e = entity;
+					physicsSystem.registerEntity(e, registry);
+				}
+			}
+
+			if (ImGui::Button("Reset Physics"))
+			{
+				physicsSystem.reset();
+			}
 		}
 		ImGui::End();
 	}
@@ -2801,7 +2801,7 @@ void Renderer::recreateSwapChain()
 	fxaaDescriptorSets.clear();
 	fxaaDescriptorPool = nullptr;
 	DescriptorPool::createFxaaDescriptorPool(device, fxaaDescriptorPool, MAX_FRAMES_IN_FLIGHT);
-	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
+	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, depthImageView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
 
 	ImGuiIO& io = ImGui::GetIO();
 	io.DisplaySize = ImVec2(static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height));
@@ -2891,7 +2891,7 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	auto& commandBuffer = commandBuffers[frameIndex];
 	commandBuffer.begin({});
 
-  if (renderEnableShadows)
+	if (renderEnableShadows)
 	{
 		// Transition all cascade shadow maps to depth attachment, render each, then transition to shader read
 		for (uint32_t cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade)
@@ -2926,7 +2926,7 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
 
-   if (renderEnablePostProcessing)
+	if (renderEnablePostProcessing)
 	{
 		if (renderEnableBloom && bloomEnabled)
 			recordBloomPasses(commandBuffer);
@@ -3498,6 +3498,15 @@ void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
 
 void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
 {
+	transition_image_layout(*depthImage,
+		vk::ImageLayout::eDepthAttachmentOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+		vk::AccessFlagBits2::eShaderSampledRead,
+		vk::PipelineStageFlagBits2::eLateFragmentTests,
+		vk::PipelineStageFlagBits2::eFragmentShader,
+		vk::ImageAspectFlagBits::eDepth);
+
 	// Transition swapchain image: undefined → color attachment for FXAA output
 	transition_image_layout(swapChainImages[imageIndex],
 		vk::ImageLayout::eUndefined,

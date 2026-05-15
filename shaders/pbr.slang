@@ -153,6 +153,9 @@ float ComputeCascadeShadow(int cascadeIndex, float3 worldPos, float3 normal, flo
 
 float ShadowCalculation(float viewDepth, float3 worldPos, float3 normal, float3 lightDir)
 {
+    if (ubo.shadowTuning.w < 0.5)
+        return 0.0;
+
     int cascadeIndex = 4;
     if      (viewDepth < ubo.cascadeSplits.x) cascadeIndex = 0;
     else if (viewDepth < ubo.cascadeSplits.y) cascadeIndex = 1;

@@ -16,10 +16,11 @@ static constexpr uint32_t SHADOW_CASCADE_COUNT = 5;
 
 struct ShadowSettings
 {
-	float shadowMaxDistance = 450.0f;
+	float shadowMaxDistance = 3000.0f;
 	float lambda = 0.9f;
 	float biasScale = 0.0015f;
 	float biasMin = 0.0002f;
+	float enabled = 1.0f;
 	glm::vec3 lightDirection = glm::normalize(glm::vec3(23.0f, 90.0f, -8.0f));
 	float cascadeBlendFactor = 0.15f;
 	float cascadeDebugView = 0.0f;

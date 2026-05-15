@@ -366,7 +366,7 @@ void Renderer::initWindow()
 	camera.setMovementSpeed(140.0f);
 	camera.setZoom(55.0f);
 	camera.getViewMatrix();
-	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f);
+	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 
 }
 
@@ -1009,6 +1009,9 @@ void Renderer::buildEditorDockspace()
 
 void Renderer::renderViewportPanel()
 {
+   if (!uiShowViewport)
+		return;
+
 	ImGui::Begin("Viewport");
 	mViewportFocused = ImGui::IsWindowFocused();
 	mViewportHovered = ImGui::IsWindowHovered();
@@ -1068,6 +1071,28 @@ void Renderer::renderImgui()
 	const bool isEditMode = (sceneState == SceneState::EDIT);
 
 	ImGui::Begin("Play Mode");
+ ImGui::Checkbox("Viewport", &uiShowViewport);
+	ImGui::SameLine();
+	ImGui::Checkbox("Camera", &uiShowCameraControls);
+	ImGui::SameLine();
+	ImGui::Checkbox("Play HUD", &uiShowPlayHud);
+	ImGui::SameLine();
+	ImGui::Checkbox("Post UI", &uiShowPostProcessingWindow);
+	ImGui::SameLine();
+	ImGui::Checkbox("Shadow UI", &uiShowShadowTuningWindow);
+	ImGui::SameLine();
+	ImGui::Checkbox("Physics UI", &uiShowPhysicsWindow);
+
+	ImGui::Checkbox("Render Shadows", &renderEnableShadows);
+	ImGui::SameLine();
+	ImGui::Checkbox("Post Processing", &renderEnablePostProcessing);
+	ImGui::SameLine();
+	ImGui::BeginDisabled(!renderEnablePostProcessing);
+	ImGui::Checkbox("FXAA", &renderEnableFxaa);
+	ImGui::SameLine();
+	ImGui::Checkbox("Bloom", &renderEnableBloom);
+	ImGui::EndDisabled();
+
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 8.0f));
 
@@ -1119,9 +1144,13 @@ void Renderer::renderImgui()
 	ImGui::PopStyleVar(2);
 	ImGui::End();
 
+	shadowSettings.enabled = renderEnableShadows ? 1.0f : 0.0f;
+
 	// Create a window for camera controls
-	ImGui::SetNextWindowBgAlpha(1.0f);
-	ImGui::Begin("Camera Controls");
+  if (uiShowCameraControls)
+	{
+		ImGui::SetNextWindowBgAlpha(1.0f);
+		ImGui::Begin("Camera Controls");
 
 	// Add a button to reset camera position
 	if (ImGui::Button("Reset Camera")) {
@@ -1131,7 +1160,7 @@ void Renderer::renderImgui()
 		camera.setMovementSpeed(140.0f);
 		camera.setZoom(55.0f);
 		camera.getViewMatrix();
-		camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f);
+		camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 	}
 
 	// Add sliders for camera settings
@@ -1158,30 +1187,34 @@ void Renderer::renderImgui()
 	const float frameMs = fps > 0.0f ? (1000.0f / fps) : 0.0f;
 	ImGui::Text("FPS: %.1f (%.2f ms)", fps, frameMs);
 
-	ImGui::End();
+       ImGui::End();
+	}
 
 	if (isEditMode)
 	{
-		renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f));
+		renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f));
 
-		ImGui::Begin("Shadow Tuning");
-		ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
-		ImGui::SliderFloat("Lambda", &shadowSettings.lambda, 0.0f, 1.0f);
-		ImGui::SliderFloat("Bias Scale", &shadowSettings.biasScale, 0.0001f, 0.01f, "%.5f", ImGuiSliderFlags_Logarithmic);
-		ImGui::SliderFloat("Bias Min", &shadowSettings.biasMin, 0.00001f, 0.005f, "%.5f", ImGuiSliderFlags_Logarithmic);
-		ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
-		ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
-		ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
-		ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
-		ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
-		ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
-		ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
-		ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
-		if (ImGui::Button("Reset Shadows")) {
-			shadowSettings = ShadowSettings{};
+      if (uiShowShadowTuningWindow)
+		{
+			ImGui::Begin("Shadow Tuning");
+			ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
+			ImGui::SliderFloat("Lambda", &shadowSettings.lambda, 0.0f, 1.0f);
+			ImGui::SliderFloat("Bias Scale", &shadowSettings.biasScale, 0.0001f, 0.01f, "%.5f", ImGuiSliderFlags_Logarithmic);
+			ImGui::SliderFloat("Bias Min", &shadowSettings.biasMin, 0.00001f, 0.005f, "%.5f", ImGuiSliderFlags_Logarithmic);
+			ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
+			ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
+			ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
+			ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
+			ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
+			ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
+			ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
+			ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
+			if (ImGui::Button("Reset Shadows")) {
+				shadowSettings = ShadowSettings{};
+			}
+
+			ImGui::End();
 		}
-
-		ImGui::End();
 
 		ImGui::Begin("Animation Controls");
 
@@ -1325,7 +1358,13 @@ void Renderer::renderImgui()
 	}
 	else
 	{
-		ImGui::Begin("Play HUD");
+       if (uiShowPlayHud)
+			ImGui::Begin("Play HUD");
+		else
+			ImGui::Begin("Play HUD", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs);
+
+		if (uiShowPlayHud)
+		{
 		ImGui::TextUnformatted("Runtime UI");
 		ImGui::Separator();
 		ImGui::TextUnformatted("W/A/S/D + Mouse: Move camera");
@@ -1343,11 +1382,12 @@ void Renderer::renderImgui()
 			++colliderCount;
 		}
 		ImGui::Text("RigidBodies: %d", rigidBodyCount);
-		ImGui::Text("Colliders: %d", colliderCount);
+        ImGui::Text("Colliders: %d", colliderCount);
+		}
 		ImGui::End();
 	}
 
-	if (isEditMode || playShowDebugUI)
+  if ((isEditMode || playShowDebugUI) && uiShowPostProcessingWindow)
 	{
 		ImGui::Begin("Post Processing");
 		ImGui::SliderFloat("FXAA Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
@@ -1363,7 +1403,13 @@ void Renderer::renderImgui()
 		ImGui::Combo("Post Debug", &postProcessDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
 		ImGui::End();
 
-		ImGui::Begin("Physics Demo");
+       if (uiShowPhysicsWindow)
+			ImGui::Begin("Physics Demo");
+		else
+			ImGui::Begin("Physics Demo", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs);
+
+		if (uiShowPhysicsWindow)
+		{
 		ImGui::Checkbox("Pause Physics", &physicsPaused);
 		physicsSystem.setPaused(physicsPaused);
 
@@ -1402,9 +1448,10 @@ void Renderer::renderImgui()
 			}
 		}
 
-		if (ImGui::Button("Reset Physics"))
+     if (ImGui::Button("Reset Physics"))
 		{
 			physicsSystem.reset();
+		}
 		}
 		ImGui::End();
 	}
@@ -2844,41 +2891,55 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 	auto& commandBuffer = commandBuffers[frameIndex];
 	commandBuffer.begin({});
 
-	// Transition all cascade shadow maps to depth attachment, render each, then transition to shader read
-	for (uint32_t cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade)
+  if (renderEnableShadows)
 	{
-		transition_image_layout(*shadowImages[cascade],
-			shadowImageLayouts[cascade],
-			vk::ImageLayout::eDepthAttachmentOptimal,
-			vk::AccessFlags2{},
-			vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-			vk::PipelineStageFlagBits2::eTopOfPipe,
-			vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-			vk::ImageAspectFlagBits::eDepth);
-		shadowImageLayouts[cascade] = vk::ImageLayout::eDepthAttachmentOptimal;
+		// Transition all cascade shadow maps to depth attachment, render each, then transition to shader read
+		for (uint32_t cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade)
+		{
+			transition_image_layout(*shadowImages[cascade],
+				shadowImageLayouts[cascade],
+				vk::ImageLayout::eDepthAttachmentOptimal,
+				vk::AccessFlags2{},
+				vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+				vk::PipelineStageFlagBits2::eTopOfPipe,
+				vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+				vk::ImageAspectFlagBits::eDepth);
+			shadowImageLayouts[cascade] = vk::ImageLayout::eDepthAttachmentOptimal;
 
-		recordShadowPass(commandBuffer, cascade);
-		recordAssimpShadowPass(commandBuffer, cascade);
-		commandBuffer.endRendering();
+			recordShadowPass(commandBuffer, cascade);
+			recordAssimpShadowPass(commandBuffer, cascade);
+			commandBuffer.endRendering();
 
-		transition_image_layout(*shadowImages[cascade],
-			vk::ImageLayout::eDepthAttachmentOptimal,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-			vk::AccessFlagBits2::eShaderSampledRead,
-			vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-			vk::PipelineStageFlagBits2::eFragmentShader,
-			vk::ImageAspectFlagBits::eDepth);
-		shadowImageLayouts[cascade] = vk::ImageLayout::eShaderReadOnlyOptimal;
+			transition_image_layout(*shadowImages[cascade],
+				vk::ImageLayout::eDepthAttachmentOptimal,
+				vk::ImageLayout::eShaderReadOnlyOptimal,
+				vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+				vk::AccessFlagBits2::eShaderSampledRead,
+				vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+				vk::PipelineStageFlagBits2::eFragmentShader,
+				vk::ImageAspectFlagBits::eDepth);
+			shadowImageLayouts[cascade] = vk::ImageLayout::eShaderReadOnlyOptimal;
+		}
 	}
 
 	beginMainPass(commandBuffer, imageIndex);
 	recordScenePass(commandBuffer);
 	commandBuffer.endRendering();
 
-	recordBloomPasses(commandBuffer);
+   if (renderEnablePostProcessing)
+	{
+		if (renderEnableBloom && bloomEnabled)
+			recordBloomPasses(commandBuffer);
 
-	recordFxaaPass(commandBuffer, imageIndex);
+		if (renderEnableFxaa)
+			recordFxaaPass(commandBuffer, imageIndex);
+		else
+			recordSceneCopyPass(commandBuffer, imageIndex);
+	}
+	else
+	{
+		recordSceneCopyPass(commandBuffer, imageIndex);
+	}
 
 	recordImguiPass(commandBuffer, imageIndex);
 
@@ -3545,6 +3606,80 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
 		vk::ImageAspectFlagBits::eColor);
 
+}
+
+void Renderer::recordSceneCopyPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
+{
+	transition_image_layout(swapChainImages[imageIndex],
+		vk::ImageLayout::eUndefined,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::AccessFlags2{},
+		vk::AccessFlagBits2::eTransferWrite,
+		vk::PipelineStageFlagBits2::eTopOfPipe,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::ImageAspectFlagBits::eColor);
+
+	transition_image_layout(*fxaaImage,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::ImageLayout::eTransferSrcOptimal,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::AccessFlagBits2::eTransferRead,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::ImageAspectFlagBits::eColor);
+
+	vk::ImageCopy copyRegion{
+		.srcSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
+		.srcOffset = { 0, 0, 0 },
+		.dstSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
+		.dstOffset = { 0, 0, 0 },
+		.extent = { swapChainExtent.width, swapChainExtent.height, 1 }
+	};
+	commandBuffer.copyImage(*fxaaImage, vk::ImageLayout::eTransferSrcOptimal,
+		swapChainImages[imageIndex], vk::ImageLayout::eTransferDstOptimal,
+		copyRegion);
+
+	transition_image_layout(*viewportPreviewImage,
+		viewportPreviewImageLayout,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::AccessFlags2{},
+		vk::AccessFlagBits2::eTransferWrite,
+		vk::PipelineStageFlagBits2::eTopOfPipe,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::ImageAspectFlagBits::eColor);
+	viewportPreviewImageLayout = vk::ImageLayout::eTransferDstOptimal;
+
+	commandBuffer.copyImage(*fxaaImage, vk::ImageLayout::eTransferSrcOptimal,
+		*viewportPreviewImage, vk::ImageLayout::eTransferDstOptimal,
+		copyRegion);
+
+	transition_image_layout(*viewportPreviewImage,
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::ImageLayout::eShaderReadOnlyOptimal,
+		vk::AccessFlagBits2::eTransferWrite,
+		vk::AccessFlagBits2::eShaderSampledRead,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::PipelineStageFlagBits2::eFragmentShader,
+		vk::ImageAspectFlagBits::eColor);
+	viewportPreviewImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+	transition_image_layout(*fxaaImage,
+		vk::ImageLayout::eTransferSrcOptimal,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::AccessFlagBits2::eTransferRead,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::ImageAspectFlagBits::eColor);
+
+	transition_image_layout(swapChainImages[imageIndex],
+		vk::ImageLayout::eTransferDstOptimal,
+		vk::ImageLayout::eColorAttachmentOptimal,
+		vk::AccessFlagBits2::eTransferWrite,
+		vk::AccessFlagBits2::eColorAttachmentWrite,
+		vk::PipelineStageFlagBits2::eTransfer,
+		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		vk::ImageAspectFlagBits::eColor);
 }
 
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
@@ -4669,7 +4804,7 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 			ubo = *shadowTemplateUbo;
 		ubo.model = gpuData.instance->getWorldTransformMatrix();
 		ubo.view = camera.getViewMatrix();
-		ubo.proj = camera.getProjectionMatrix(aspect, 0.005f, 3000.0f);
+		ubo.proj = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f);
 		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);
 		ubo.directionalLightColor = glm::vec4(1.0f);
 		memcpy(gpuData.uboMapped[frameIndex], &ubo, sizeof(UniformBufferObject));

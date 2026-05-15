@@ -344,7 +344,7 @@ private:
 	ShadowSettings shadowSettings;
 	PhysicsSystem physicsSystem;
 	bool physicsPaused = false;
-	int physicsSpawnCount = 24;
+	int physicsSpawnCount = 2;
 	float physicsSpawnHeight = -800.0f;
 	float  lastFrameTime = 0.0f;
 
@@ -396,6 +396,7 @@ private:
 	void updateAssimpAnimations(float deltaTime);
 	void recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer);
 	void recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex);
+	void recordSceneCopyPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex);
 
 	struct ComputeModelResources {
 		VkShaderStorageBufferData parentIndexBuffer{};
@@ -511,4 +512,16 @@ private:
 	SceneState sceneState = SceneState::EDIT;
 	int currentFrameIndex = 0;
 	bool playShowDebugUI = false;
+
+	bool uiShowViewport = true;
+	bool uiShowCameraControls = true;
+	bool uiShowPlayHud = true;
+	bool uiShowPostProcessingWindow = true;
+	bool uiShowShadowTuningWindow = true;
+	bool uiShowPhysicsWindow = true;
+
+	bool renderEnableShadows = true;
+	bool renderEnablePostProcessing = true;
+	bool renderEnableFxaa = true;
+	bool renderEnableBloom = true;
 };

@@ -41,12 +41,12 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	if (cam)
 	{
 		ubo.view = cam->getViewMatrix();
-		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.005f, 3000.0f);
+		ubo.proj = cam->getProjectionMatrix(static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 3000.0f);
 	}
 	else
 	{
 		ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-		ubo.proj = glm::perspective(glm::radians(55.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.005f, 3000.0f);
+		ubo.proj = glm::perspective(glm::radians(55.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 3000.0f);
 		ubo.proj[1][1] *= -1;
 	}
 
@@ -54,7 +54,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	// Cascaded Shadow Maps
 	// ---------------------------------------------------------------------------
 	// Camera frustum parameters (must match the projection built above)
-	const float camNear = 0.005f;
+	const float camNear = 0.1f;
 	const float camFar = 3000.0f;
 	const float shadowMaxDistance = glm::clamp(shadowSettings.shadowMaxDistance, camNear, camFar);
 	const float cascadeFar = glm::min(camFar, shadowMaxDistance);
@@ -174,7 +174,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.gamma = 2.2f;
 	ubo.prefilteredCubeMipLevels = 1.0f;
 	ubo.scaleIBLAmbient = 0.02f;
-	ubo.shadowTuning = glm::vec4(shadowSettings.biasScale, shadowSettings.biasMin, shadowSettings.cascadeBlendFactor, 0.0f);
+    ubo.shadowTuning = glm::vec4(shadowSettings.biasScale, shadowSettings.biasMin, shadowSettings.cascadeBlendFactor, shadowSettings.enabled);
 	ubo.shadowDebug = glm::vec4(shadowSettings.cascadeDebugView, 0.0f, 0.0f, 0.0f);
 
 	memcpy(renderable->uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));

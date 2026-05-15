@@ -61,9 +61,18 @@ void ImGuiVulkanUtil::init(float width, float height) {
 	// Initialize ImGui context
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+
+	io.Fonts->AddFontDefault();
+
+	// Configure and load Font Awesome icons
+	ImFontConfig config;
+	config.MergeMode = false; // Merge with default font
+	config.PixelSnapH = true;
+	static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+	io.Fonts->AddFontFromFileTTF("fonts/fa-solid-900.ttf", 16.0f, &config, icon_ranges);
 
 	// Configure ImGui
-	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable keyboard controls
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable docking
 

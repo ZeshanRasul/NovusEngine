@@ -64,6 +64,11 @@ import vulkan_hpp;
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 #include <ECS/jolt_physics/physics_world.h>
 
+enum SceneState {
+	PLAY,
+	EDIT
+};
+
 namespace Layers
 {
 	static constexpr JPH::ObjectLayer NON_MOVING = 0;
@@ -254,6 +259,8 @@ private:
 	void pushUndoSnapshot();
 	void performUndo();
 	void performRedo();
+	void enterPlayMode();
+	void exitPlayMode();
 
 	// -------------------------------------------------------------------------
 	// Members
@@ -357,6 +364,7 @@ private:
 	std::vector<std::string> mRedoSnapshots{};
 	bool mHistoryMuted = false;
 	std::string mSceneFilePath = "scene.json";
+	std::string mEditorSceneFilePath = "editor_scene.json";
 
 	bool hasModel(std::string modelFileName);
 	std::shared_ptr<AssimpModel> getModel(std::string modelFileName);
@@ -500,4 +508,6 @@ private:
 	ObjectVsBroadPhaseLayerFilterImpl object_vs_broadphase_layer_filter;
 	ObjectLayerPairFilterImpl object_vs_object_layer_filter;
 
+	SceneState sceneState = SceneState::EDIT;
+	int currentFrameIndex = 0;
 };

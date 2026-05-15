@@ -27,7 +27,6 @@
 #include "../../lib/ImGuiFileDialog.h"
 #include "../../include/imgui_internal.h"
 
-
 namespace {
 	using json = nlohmann::json;
 
@@ -303,7 +302,6 @@ void Renderer::initWindow()
 	glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
 	camera.setupInputCallbacks(window);
-	glfwSetWindowUserPointer(window, &camera); // Set the user pointer for the InputSystem callbacks
 	InputSystem::Initialize(window, &camera);
 	camera.setPosition(glm::vec3(400.0f, -120.0f, 0.0f));
 	camera.setYaw(180.0f);
@@ -311,7 +309,7 @@ void Renderer::initWindow()
 	camera.setMovementSpeed(140.0f);
 	camera.setZoom(55.0f);
 	camera.getViewMatrix();
-	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
+	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f);
 
 }
 
@@ -729,6 +727,7 @@ void Renderer::destroyAssimpEnttEntity(const std::shared_ptr<AssimpInstance>& in
 void Renderer::mainLoop()
 {
 	lastFrameTime = 0.0f;
+	currentFrameIndex = 0;
 	while (!glfwWindowShouldClose(window))
 	{
 		static auto startTime = std::chrono::high_resolution_clock::now();
@@ -740,10 +739,16 @@ void Renderer::mainLoop()
 
 		camera.processInput(window, camera, deltaTime);
 		auto& reg = mEnttScene.getRegistry();
-		physicsSystem.step(deltaTime, reg);
 
-		updateAssimpAnimations(deltaTime);
+		if (sceneState == SceneState::PLAY)
+		{
+			physicsSystem.step(deltaTime, reg);
+			updateAssimpAnimations(deltaTime);
+		}
+		updateAssimpAnimations(0.0f);
+
 		drawFrame();
+		currentFrameIndex++;
 	}
 
 	device.waitIdle();
@@ -974,6 +979,20 @@ void Renderer::renderImgui()
 	renderViewportPanel();
 	auto& registry = mEnttScene.getRegistry();
 
+	ImGui::Begin("Play Mode");
+
+	if (ImGui::Button(ICON_FA_PLAY " Play") && sceneState == SceneState::EDIT)
+		enterPlayMode();
+
+	if (ImGui::Button(ICON_FA_STOP " Stop") && sceneState == SceneState::PLAY)
+		exitPlayMode();
+	ImGui::End();
+
+	if (sceneState == SceneState::PLAY)
+		ImGui::BeginDisabled();
+
+
+
 	// Create a window for camera controls
 	ImGui::Begin("Camera Controls");
 
@@ -985,7 +1004,7 @@ void Renderer::renderImgui()
 		camera.setMovementSpeed(140.0f);
 		camera.setZoom(55.0f);
 		camera.getViewMatrix();
-		camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
+		camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f);
 	}
 
 	// Add sliders for camera settings
@@ -1014,7 +1033,10 @@ void Renderer::renderImgui()
 
 	ImGui::End();
 
-	renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f));
+	if (sceneState == SceneState::PLAY)
+		ImGui::EndDisabled();
+
+	renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f));
 
 	ImGui::Begin("Shadow Tuning");
 	ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
@@ -1248,6 +1270,30 @@ void Renderer::renderImgui()
 //	}
 //}
 	imGui->updateBuffers();
+}
+
+void Renderer::enterPlayMode()
+{
+	std::ofstream outFile(mEditorSceneFilePath, std::ios::out | std::ios::trunc);
+	if (outFile.is_open())
+		outFile << serializeEnttScene();
+
+	sceneState = SceneState::PLAY;
+	currentFrameIndex = 0;
+	physicsSystem.setPaused(false);
+}
+
+void Renderer::exitPlayMode()
+{
+	std::ifstream inFile(mEditorSceneFilePath);
+	if (inFile.is_open()) {
+		std::string jsonContent((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+		pushUndoSnapshot();
+		deserializeEnttScene(jsonContent);
+	}
+
+	sceneState = SceneState::EDIT;
+	currentFrameIndex = 0;
 }
 
 void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)

@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 #include <ImGuizmo.h>
+#include <IconsFontAwesome7.h>
 
 enum OPERATION
 {

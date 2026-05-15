@@ -58,7 +58,7 @@ add_executable(NovusEngine
     "src/ECS/entt/scene.h"
     "src/ECS/entt/assimp_instance_component.h"
     "src/ECS/entt/assimp_systems.h"
-    "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp")
+    "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp" "include/IconsFontAwesome7.h")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -202,3 +202,5 @@ target_compile_definitions(NovusEngine PRIVATE
     GLM_ENABLE_EXPERIMENTAL
 )
 
+
+add_subdirectory("NovusEngineProject")

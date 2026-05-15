@@ -130,8 +130,8 @@ void Renderer::createSkinningPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
+		{ "shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	config.vertexBindings = { bindingDesc };
 	config.vertexAttributes = { attribDescs.begin(), attribDescs.end() };
@@ -480,8 +480,8 @@ void Renderer::initVulkan()
 
 	initAssimpRenderData();
 
-	if (!mModelInstData.miModelAddCallbackFunction("D:\\dev\\Graphics\\NovusEngine\\models\\Knight.glb")) {
-		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "D:\\dev\\Graphics\\NovusEngine\\models\\Knight.glb");
+	if (!mModelInstData.miModelAddCallbackFunction("models\\Knight.glb")) {
+		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "models\\Knight.glb");
 	}
 	else {
 		/* select new model and new instance */
@@ -2472,8 +2472,8 @@ void Renderer::createGraphicsPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 
 	config.vertexBindings = { bindingDescription };
@@ -2506,8 +2506,8 @@ bool Renderer::createPBRPipeline()
 
 		Pipeline::PipelineConfig config{};
 		config.shaderStages = {
-			{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-			{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+			{ "shaders\\pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+			{ "shaders\\pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 		};
 
 		config.vertexBindings = { bindingDescription };
@@ -2909,8 +2909,8 @@ void Renderer::createBloomPipelines()
 	};
 	Pipeline::PipelineConfig extractConfig{};
 	extractConfig.shaderStages = {
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	extractConfig.descriptorSetLayouts = { *bloomExtractDescriptorSetLayout };
 	extractConfig.pushConstantRanges = { extractPushRange };
@@ -2930,8 +2930,8 @@ void Renderer::createBloomPipelines()
 	};
 	Pipeline::PipelineConfig blurConfig{};
 	blurConfig.shaderStages = {
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	blurConfig.descriptorSetLayouts = { *bloomBlurDescriptorSetLayout };
 	blurConfig.pushConstantRanges = { blurPushRange };
@@ -3713,7 +3713,7 @@ void Renderer::initAssimpRenderData()
 	{
 		Pipeline::PipelineConfig config{};
 		config.shaderStages = {
-			{ "D:\\dev\\Graphics\\NovusEngine\\shaders\\shadow_skinning.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
+			{ "shaders\\shadow_skinning.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
 		};
 		config.vertexBindings = { SkinnedVertex::getBindingDescription() };
 		auto skinnedAttrib = SkinnedVertex::getAttributeDescriptions();
@@ -3782,7 +3782,7 @@ void Renderer::initComputeSkinningResources()
 	mComputeTrsSet0 = std::move(set0[0]);
 	mComputeBoneSet0 = std::move(set0[1]);
 
-	const std::string shaderDir = "D:\\dev\\Graphics\\NovusEngine\\shaders\\";
+	const std::string shaderDir = "shaders\\";
 	const std::string trsCompPath = shaderDir + "trs_matrix.comp.spv";
 	const std::string boneCompPath = shaderDir + "bone_matrix.comp.spv";
 	if (!std::filesystem::exists(trsCompPath) || !std::filesystem::exists(boneCompPath))

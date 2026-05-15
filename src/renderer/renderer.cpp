@@ -1,6 +1,7 @@
 #include "renderer/renderer.h"
 #include <ktx.h>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -156,7 +157,7 @@ void Renderer::setupGameObjects()
 	auto& registry = mEnttScene.getRegistry();
 	auto makeEntity = [&](const std::string& name,
 		glm::vec3 position, glm::vec3 rotation, glm::vec3 scale,
-		const std::string& modelPath, bool isPhysicsEntity) -> entt::entity {
+		const std::string& modelPath) -> entt::entity {
 			auto ecsEntity = mEnttScene.createEntity(name);
 			auto& transform = registry.emplace_or_replace<TransformComponent>(ecsEntity);
 			transform.SetPosition(position);
@@ -172,49 +173,105 @@ void Renderer::setupGameObjects()
 					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
 			}
 
-			if (isPhysicsEntity)
-			{
-				auto& rigidBody = registry.emplace_or_replace<RigidBodyComponent>(ecsEntity);
-				rigidBody.bodyType = RigidBodyType::Dynamic;
-				rigidBody.mass = 1.0f;
-				rigidBody.friction = 0.4f;
-				rigidBody.restitution = 0.8f;
-				rigidBody.useGravity = true;
-
-				auto& collider = registry.emplace_or_replace<ColliderComponent>(ecsEntity);
-				collider.shapeType = ColliderShapeType::Sphere;
-				collider.radius = 15.0f;
-
-				if (name == "Static Floor")
-				{
-					rigidBody.bodyType = RigidBodyType::Static;
-					rigidBody.friction = 0.8f;
-					rigidBody.restitution = 0.1f;
-					collider.shapeType = ColliderShapeType::Box;
-					collider.halfExtents = { 1500.0f, 5.0f, 1500.0f };
-				}
-
-				physicsSystem.registerEntity(ecsEntity, registry);
-			}
-
 			return ecsEntity;
 		};
 
+	auto addPhysics = [&](entt::entity entity,
+		RigidBodyType bodyType,
+		ColliderShapeType shapeType,
+		float mass,
+		float friction,
+		float restitution,
+		bool useGravity,
+		const glm::vec3& halfExtents,
+		float radius,
+		float halfHeight,
+		const glm::vec3& linearVelocity) {
+			auto& rigidBody = registry.emplace_or_replace<RigidBodyComponent>(entity);
+			rigidBody.bodyType = bodyType;
+			rigidBody.mass = mass;
+			rigidBody.friction = friction;
+			rigidBody.restitution = restitution;
+			rigidBody.useGravity = useGravity;
+			rigidBody.linearVelocity = linearVelocity;
+
+			auto& collider = registry.emplace_or_replace<ColliderComponent>(entity);
+			collider.shapeType = shapeType;
+			collider.halfExtents = halfExtents;
+			collider.radius = radius;
+			collider.halfHeight = halfHeight;
+
+			physicsSystem.registerEntity(entity, registry);
+		};
+
 	makeEntity("Sponza",
-		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f },
-		"models/Sponza.gltf", false);
+		{ 0.0f, 0.0f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		{ 1.0f, 1.0f, 1.0f },
+		"models/Sponza.gltf");
 
-	makeEntity("Damaged Helmet",
-		{ -150.0f, -1020.0f, 0.0f }, { 0.0f, glm::radians(0.0f), 0.0f }, { 35.0f, 35.0f, 35.0f },
-		"models/DamagedHelmet.gltf", true);
+	const entt::entity floor = makeEntity(
+		"Physics Arena Floor",
+		{ 0.0f, 40.0f, 0.0f },
+		{ 0.0f, 0.0f, 0.0f },
+		{ 1.0f, 1.0f, 1.0f },
+		"");
+	addPhysics(floor, RigidBodyType::Static, ColliderShapeType::Box,
+		1.0f, 0.9f, 0.15f, false,
+		{ 900.0f, 20.0f, 900.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	makeEntity("Flight Helmet",
-		{ 100.0f, -1020.0f, 0.0f }, { 0.0f, glm::radians(90.0f), 0.0f }, { 200.0f, 200.0f, 200.0f },
-		"models/FlightHelmet.gltf", false);
+	const entt::entity wallPosX = makeEntity("Physics Arena Wall +X", { 900.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	addPhysics(wallPosX, RigidBodyType::Static, ColliderShapeType::Box,
+		1.0f, 0.8f, 0.1f, false,
+		{ 20.0f, 320.0f, 900.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	makeEntity("Static Floor",
-		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3000.0f, 1.0f, 3000.0f },
-		"", true);
+	const entt::entity wallNegX = makeEntity("Physics Arena Wall -X", { -900.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	addPhysics(wallNegX, RigidBodyType::Static, ColliderShapeType::Box,
+		1.0f, 0.8f, 0.1f, false,
+		{ 20.0f, 320.0f, 900.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+
+	const entt::entity wallPosZ = makeEntity("Physics Arena Wall +Z", { 0.0f, -260.0f, 900.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	addPhysics(wallPosZ, RigidBodyType::Static, ColliderShapeType::Box,
+		1.0f, 0.8f, 0.1f, false,
+		{ 900.0f, 320.0f, 20.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+
+	const entt::entity wallNegZ = makeEntity("Physics Arena Wall -Z", { 0.0f, -260.0f, -900.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	addPhysics(wallNegZ, RigidBodyType::Static, ColliderShapeType::Box,
+		1.0f, 0.8f, 0.1f, false,
+		{ 900.0f, 320.0f, 20.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+
+	const int spawnCount = std::max(12, physicsSpawnCount);
+	const float spawnBaseHeight = physicsSpawnHeight;
+	constexpr float twoPi = 6.28318530718f;
+	for (int i = 0; i < spawnCount; ++i)
+	{
+		const bool damagedHelmet = (i % 2) == 0;
+		const float angle = (static_cast<float>(i) / static_cast<float>(spawnCount)) * twoPi;
+		const float ringRadius = 260.0f + static_cast<float>(i % 4) * 95.0f;
+		const float height = spawnBaseHeight - static_cast<float>(i % 5) * 90.0f;
+		const glm::vec3 position = glm::vec3(glm::cos(angle) * ringRadius, height, glm::sin(angle) * ringRadius);
+		const glm::vec3 tangent = glm::normalize(glm::vec3(-glm::sin(angle), 0.0f, glm::cos(angle)));
+		const glm::vec3 inward = glm::normalize(glm::vec3(-glm::cos(angle), 0.0f, -glm::sin(angle)));
+		const glm::vec3 startVelocity = tangent * 125.0f + inward * 40.0f + glm::vec3(0.0f, (i % 3 == 0) ? 15.0f : -8.0f, 0.0f);
+
+		const std::string namePrefix = damagedHelmet ? "Damaged Helmet " : "Flight Helmet ";
+		const std::string modelPath = damagedHelmet ? "models/DamagedHelmet.gltf" : "models/FlightHelmet.gltf";
+		const glm::vec3 scale = damagedHelmet ? glm::vec3(35.0f) : glm::vec3(200.0f);
+		const glm::vec3 rotation = damagedHelmet ? glm::vec3(0.0f, angle, 0.0f) : glm::vec3(0.0f, angle + glm::radians(90.0f), 0.0f);
+
+		entt::entity helmet = makeEntity(namePrefix + std::to_string(i + 1), position, rotation, scale, modelPath);
+		addPhysics(helmet,
+			RigidBodyType::Dynamic,
+			ColliderShapeType::Sphere,
+			damagedHelmet ? 1.2f : 2.8f,
+			0.45f,
+			0.6f,
+			true,
+			glm::vec3(0.5f),
+			damagedHelmet ? 18.0f : 46.0f,
+			0.5f,
+			startVelocity);
+	}
 }
 
 void Renderer::rebuildRenderableRuntimeResources()

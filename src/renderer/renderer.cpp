@@ -175,17 +175,24 @@ void Renderer::setupGameObjects()
 
 			if (isPhysicsEntity)
 			{
-				auto& physics = registry.emplace_or_replace<PhysicsComponent>(ecsEntity);
-				physics.bodyType = PhysicsBodyType::Dynamic;
-				physics.shapeType = PhysicsShapeType::Box;
-				physics.bodyId = static_cast<int>(ecsEntity); // Use the entity ID as the physics body ID for simplicity
-				physics.halfExtents = { 1.0f, 1.0f, 1.0f };
+               auto& rigidBody = registry.emplace_or_replace<RigidBodyComponent>(ecsEntity);
+				rigidBody.bodyType = RigidBodyType::Dynamic;
+				rigidBody.mass = 1.0f;
+				rigidBody.friction = 0.4f;
+				rigidBody.restitution = 0.8f;
+				rigidBody.useGravity = true;
+
+				auto& collider = registry.emplace_or_replace<ColliderComponent>(ecsEntity);
+				collider.shapeType = ColliderShapeType::Sphere;
+				collider.radius = 15.0f;
 
 				if (name == "Static Floor")
 				{
-					physics.bodyType = PhysicsBodyType::Static;
-					physics.shapeType = PhysicsShapeType::Box;
-					physics.halfExtents = { 1500.0f, 5.0f, 1500.0f }; // collider half-size in world units
+                 rigidBody.bodyType = RigidBodyType::Static;
+					rigidBody.friction = 0.8f;
+					rigidBody.restitution = 0.1f;
+					collider.shapeType = ColliderShapeType::Box;
+					collider.halfExtents = { 1500.0f, 5.0f, 1500.0f };
 				}
 
 				physicsSystem.registerEntity(ecsEntity, registry);
@@ -208,7 +215,7 @@ void Renderer::setupGameObjects()
 
 	makeEntity("Static Floor",
 		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3000.0f, 1.0f, 3000.0f },
-		"", false);
+		"", true);
 }
 
 void Renderer::rebuildRenderableRuntimeResources()
@@ -306,61 +313,6 @@ void Renderer::initWindow()
 	camera.getViewMatrix();
 	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
 
-	JPH::RegisterDefaultAllocator();
-
-	JPH::Factory::sInstance = new JPH::Factory();
-	JPH::RegisterTypes();
-
-	physicsWorld = new PhysicsWorld();
-
-	physicsWorld->tempAllocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
-
-	physicsWorld->jobSystem = new JPH::JobSystemThreadPool(
-		JPH::cMaxPhysicsJobs,
-		JPH::cMaxPhysicsBarriers,
-		std::thread::hardware_concurrency() - 1
-	);
-
-	physicsWorld->physicsSystem.Init(1024, 0, 1024, 1024, broad_phase_layer_interface, object_vs_broadphase_layer_filter, object_vs_object_layer_filter);
-
-	physicsWorld->bodies = &physicsWorld->physicsSystem.GetBodyInterface();
-	JPH::BoxShapeSettings floor_shape_settings(JPH::Vec3(1000.0f, 1.0f, 1000.0f));
-	floor_shape_settings.SetEmbedded(); // A ref counted object on the stack (base class RefTarget) should be marked as such to prevent it from being freed when its reference count goes to 0.
-
-	// Create the shape
-	JPH::ShapeSettings::ShapeResult floor_shape_result = floor_shape_settings.Create();
-	JPH::ShapeRefC floor_shape = floor_shape_result.Get(); // We don't expect an error here, but you can check floor_shape_result for HasError() / GetError()
-
-	JPH::BodyCreationSettings floorSettings(
-		floor_shape,
-		JPH::RVec3(0.0, -1.0, 0.0),
-		JPH::Quat::sIdentity(),
-		JPH::EMotionType::Static,
-		Layers::NON_MOVING
-	);
-
-	JPH::BodyID floorID = physicsWorld->bodies->CreateAndAddBody(
-		floorSettings,
-		JPH::EActivation::DontActivate
-	);
-
-	JPH::BodyCreationSettings sphereSettings(
-		new JPH::SphereShape(10.0f),
-		JPH::RVec3(150.0, -300.0, 0.0),
-		JPH::Quat::sIdentity(),
-		JPH::EMotionType::Dynamic,
-		Layers::MOVING
-	);
-
-	sphereSettings.mRestitution = 0.8f;
-	sphereSettings.mFriction = 0.4f;
-	physicsWorld->physicsSystem.SetGravity(JPH::Vec3(0.0f, 9.0f, 0.0f));
-	sphereBodyID = physicsWorld->bodies->CreateAndAddBody(
-		sphereSettings,
-		JPH::EActivation::Activate
-	);
-
-//	physicsWorld->bodies->SetLinearVelocity(sphereBodyID, JPH::Vec3(0.0f, -9.0f, 0.0f));
 }
 
 void Renderer::initVulkan()
@@ -787,24 +739,8 @@ void Renderer::mainLoop()
 		InputSystem::Update(deltaTime);
 
 		camera.processInput(window, camera, deltaTime);
-		//physicsSystem.step(deltaTime);
-		{
-			// Next step
-			++step;
-
-
-			// If you take larger steps than 1 / 60th of a second you need to do multiple collision steps in order to keep the simulation stable. Do 1 collision step per 1 / 60th of a second (round up).
-			const int cCollisionSteps = 1;
-			// Step the world
-			physicsWorld->physicsSystem.Update(deltaTime, cCollisionSteps, physicsWorld->tempAllocator, physicsWorld->jobSystem);
-
-			// Output current position and velocity of the sphere
-			JPH::RVec3 position = physicsWorld->bodies->GetCenterOfMassPosition(sphereBodyID);
-			JPH::Vec3 velocity = physicsWorld->bodies->GetLinearVelocity(sphereBodyID);
-			auto& reg = mEnttScene.getRegistry();
-			entt::entity entity = reg.view<PhysicsComponent>().front();
-			reg.try_get<TransformComponent>(entity)->SetPosition(glm::vec3(position.GetX(), position.GetY(), position.GetZ()));
-		}
+        auto& reg = mEnttScene.getRegistry();
+		physicsSystem.step(deltaTime, reg);
 
 		updateAssimpAnimations(deltaTime);
 		drawFrame();
@@ -1335,60 +1271,11 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 		}
 		return false;
 		};
-	auto recalcLocalFromParent = [&](entt::entity child) {
-		auto* childHc = registry.try_get<HierarchyComponent>(child);
-		auto* childTransform = registry.try_get<TransformComponent>(child);
-		if (!childHc || !childTransform)
-			return;
-
-		if (childHc->parent == entt::null || !registry.valid(childHc->parent)) {
-			childHc->localPosition = childTransform->GetPosition();
-			childHc->localRotation = childTransform->GetRotation();
-			childHc->localScale = childTransform->GetScale();
-			return;
-		}
-
-		auto* parentTransform = registry.try_get<TransformComponent>(childHc->parent);
-		if (!parentTransform)
-			return;
-
-		const glm::vec3 parentScale = parentTransform->GetScale();
-		const glm::vec3 safeParentScale(
-			std::abs(parentScale.x) < 1e-5f ? 1.0f : parentScale.x,
-			std::abs(parentScale.y) < 1e-5f ? 1.0f : parentScale.y,
-			std::abs(parentScale.z) < 1e-5f ? 1.0f : parentScale.z);
-
-		childHc->localPosition = glm::inverse(parentTransform->GetRotation()) *
-			((childTransform->GetPosition() - parentTransform->GetPosition()) / safeParentScale);
-		childHc->localRotation = glm::inverse(parentTransform->GetRotation()) * childTransform->GetRotation();
-		childHc->localScale = childTransform->GetScale() / safeParentScale;
+  auto recalcLocalFromParent = [&](entt::entity child) {
+		TransformSystems::RecalculateLocalFromParent(registry, child);
 		};
 	std::function<void(entt::entity)> applyWorldFromParent = [&](entt::entity parentEntity) {
-		auto* parentHc = registry.try_get<HierarchyComponent>(parentEntity);
-		auto* parentTransform = registry.try_get<TransformComponent>(parentEntity);
-		if (!parentHc || !parentTransform)
-			return;
-
-		for (auto child : parentHc->children) {
-			if (!registry.valid(child))
-				continue;
-			auto* childTransform = registry.try_get<TransformComponent>(child);
-			auto* childHc = registry.try_get<HierarchyComponent>(child);
-			if (!childTransform || !childHc)
-				continue;
-
-			const glm::vec3 parentScale = parentTransform->GetScale();
-			const glm::vec3 worldPos = parentTransform->GetPosition() +
-				(parentTransform->GetRotation() * (childHc->localPosition * parentScale));
-			const glm::quat worldRot = parentTransform->GetRotation() * childHc->localRotation;
-			const glm::vec3 worldScale = parentScale * childHc->localScale;
-
-			childTransform->SetPosition(worldPos);
-			childTransform->SetRotation(worldRot);
-			childTransform->SetScale(worldScale);
-
-			applyWorldFromParent(child);
-		}
+		TransformSystems::ApplyWorldFromParent(registry, parentEntity);
 		};
 	auto setParent = [&](entt::entity child, entt::entity newParent) {
 		if (!registry.valid(child))
@@ -1457,12 +1344,7 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 		mEnttMultiSelection.push_back(mEnttSelectedEntity);
 	}
 
-	for (auto [entity, hierarchy, transform] : registry.view<HierarchyComponent, TransformComponent>().each()) {
-		if (hierarchy.parent == entt::null || !registry.valid(hierarchy.parent)) {
-			recalcLocalFromParent(entity);
-			applyWorldFromParent(entity);
-		}
-	}
+    TransformSystems::UpdateHierarchyFromRoots(registry);
 
 	auto duplicateEntity = [&](entt::entity sourceEntity) -> entt::entity {
 		if (!mEnttScene.isValid(sourceEntity))

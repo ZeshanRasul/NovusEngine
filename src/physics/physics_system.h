@@ -1,13 +1,17 @@
 #pragma once
 
 #include <glm/glm.hpp>
-#include <unordered_map>
-#include <vector>
-#include "ECS/entt/scene.h"
 
-class Entity;
-class TransformComponent;
-class PhysicsComponent;
+#include <entt/entt.hpp>
+
+#include <Jolt/Jolt.h>
+#include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Core/TempAllocator.h>
+#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
+#include <Jolt/Physics/PhysicsSystem.h>
+
+#include "ECS/entt/physics_systems.h"
 
 class PhysicsSystem
 {
@@ -29,28 +33,47 @@ public:
     void reset();
 
     void step(float deltaTime);
+    void step(float deltaTime, entt::registry& registry);
+    void bindRegistry(entt::registry& registry);
 
 private:
-    struct SpawnState
+    struct ObjectLayerPairFilterImpl final : public JPH::ObjectLayerPairFilter
     {
-        glm::vec3 position;
-        glm::vec3 velocity;
+        virtual bool ShouldCollide(JPH::ObjectLayer inObject1, JPH::ObjectLayer inObject2) const override;
     };
 
-    struct BodyState
+    struct BPLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface
     {
-        entt::entity entity = entt::null;
-        TransformComponent* transform = nullptr;
-        PhysicsComponent* physics = nullptr;
-        glm::vec3 velocity = glm::vec3(0.0f);
-        SpawnState spawn{};
+        BPLayerInterfaceImpl();
+        virtual JPH::uint GetNumBroadPhaseLayers() const override;
+        virtual JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer inLayer) const override;
+
+    private:
+        JPH::BroadPhaseLayer mObjectToBroadPhase[2];
     };
 
-    int nextBodyId = 0;
+    struct ObjectVsBroadPhaseLayerFilterImpl final : public JPH::ObjectVsBroadPhaseLayerFilter
+    {
+        virtual bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const override;
+    };
+
+    bool initialized = false;
+    bool ownsJoltFactory = false;
     glm::vec3 gravity = glm::vec3(0.0f, 9.81f, 0.0f);
     bool paused = false;
-    std::unordered_map<int, BodyState> bodies;
+    entt::registry* boundRegistry = nullptr;
 
-    void stepDynamicBody(BodyState& state, float dt);
-    void resolveBodyCollisions();
+    JPH::TempAllocatorImpl* tempAllocator = nullptr;
+    JPH::JobSystemThreadPool* jobSystem = nullptr;
+    JPH::PhysicsSystem physicsSystem;
+    JPH::BodyInterface* bodyInterface = nullptr;
+
+    PhysicsSystems::Context context{};
+    PhysicsSystems::LayerConfig layerConfig{};
+
+    BPLayerInterfaceImpl broadPhaseLayerInterface;
+    ObjectVsBroadPhaseLayerFilterImpl objectVsBroadPhaseLayerFilter;
+    ObjectLayerPairFilterImpl objectLayerPairFilter;
+
+    void applyContextSettings();
 };

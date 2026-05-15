@@ -1,35 +1,144 @@
 #include "physics/physics_system.h"
 
-#include "ECS/entity.h"
 #include "ECS/components/physics_component.h"
 #include "ECS/components/transform_component.h"
-#include <algorithm>
-#include <cmath>
-#include <glm/gtx/norm.hpp>
+#include <Jolt/RegisterTypes.h>
+#include <thread>
+
+bool PhysicsSystem::ObjectLayerPairFilterImpl::ShouldCollide(JPH::ObjectLayer inObject1, JPH::ObjectLayer inObject2) const
+{
+    constexpr JPH::ObjectLayer nonMoving = 0;
+    constexpr JPH::ObjectLayer moving = 1;
+
+    if (inObject1 == nonMoving)
+        return inObject2 == moving;
+    if (inObject1 == moving)
+        return true;
+    return false;
+}
+
+PhysicsSystem::BPLayerInterfaceImpl::BPLayerInterfaceImpl()
+{
+    mObjectToBroadPhase[0] = JPH::BroadPhaseLayer(0);
+    mObjectToBroadPhase[1] = JPH::BroadPhaseLayer(1);
+}
+
+JPH::uint PhysicsSystem::BPLayerInterfaceImpl::GetNumBroadPhaseLayers() const
+{
+    return 2;
+}
+
+JPH::BroadPhaseLayer PhysicsSystem::BPLayerInterfaceImpl::GetBroadPhaseLayer(JPH::ObjectLayer inLayer) const
+{
+    JPH_ASSERT(inLayer < 2);
+    return mObjectToBroadPhase[inLayer];
+}
+
+bool PhysicsSystem::ObjectVsBroadPhaseLayerFilterImpl::ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const
+{
+    constexpr JPH::ObjectLayer nonMoving = 0;
+    constexpr JPH::BroadPhaseLayer moving(1);
+
+    if (inLayer1 == nonMoving)
+        return inLayer2 == moving;
+    return true;
+}
+
+void PhysicsSystem::applyContextSettings()
+{
+    context.physicsSystem = &physicsSystem;
+    context.bodyInterface = bodyInterface;
+    context.tempAllocator = tempAllocator;
+    context.jobSystem = jobSystem;
+    context.layers = layerConfig;
+    context.paused = paused;
+    context.gravity = gravity;
+}
 
 void PhysicsSystem::initialize()
 {
+    if (initialized)
+        return;
+
+    JPH::RegisterDefaultAllocator();
+    if (JPH::Factory::sInstance == nullptr)
+    {
+        JPH::Factory::sInstance = new JPH::Factory();
+        ownsJoltFactory = true;
+        JPH::RegisterTypes();
+    }
+
+    constexpr uint32_t maxBodies = 8192;
+    constexpr uint32_t numBodyMutexes = 0;
+    constexpr uint32_t maxBodyPairs = 8192;
+    constexpr uint32_t maxContactConstraints = 8192;
+
+    tempAllocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
+    jobSystem = new JPH::JobSystemThreadPool(
+        JPH::cMaxPhysicsJobs,
+        JPH::cMaxPhysicsBarriers,
+        std::max(1u, std::thread::hardware_concurrency() - 1));
+
+    physicsSystem.Init(
+        maxBodies,
+        numBodyMutexes,
+        maxBodyPairs,
+        maxContactConstraints,
+        broadPhaseLayerInterface,
+        objectVsBroadPhaseLayerFilter,
+        objectLayerPairFilter);
+
+    bodyInterface = &physicsSystem.GetBodyInterface();
+    layerConfig.nonMoving = 0;
+    layerConfig.moving = 1;
+
     paused = false;
+    applyContextSettings();
+    PhysicsSystems::SetGravity(context, gravity);
+    initialized = true;
 }
 
 void PhysicsSystem::shutdown()
 {
+    if (!initialized)
+        return;
+
     clear();
+
+    delete jobSystem;
+    jobSystem = nullptr;
+
+    delete tempAllocator;
+    tempAllocator = nullptr;
+
+    bodyInterface = nullptr;
+
+    if (ownsJoltFactory)
+    {
+        JPH::UnregisterTypes();
+        delete JPH::Factory::sInstance;
+        JPH::Factory::sInstance = nullptr;
+        ownsJoltFactory = false;
+    }
+
+    initialized = false;
 }
 
 void PhysicsSystem::setPaused(bool value)
 {
     paused = value;
+    PhysicsSystems::SetPaused(context, value);
 }
 
 bool PhysicsSystem::isPaused() const
 {
-    return paused;
+    return PhysicsSystems::IsPaused(context);
 }
 
 void PhysicsSystem::setGravity(glm::vec3 const& g)
 {
     gravity = g;
+    PhysicsSystems::SetGravity(context, g);
 }
 
 glm::vec3 const& PhysicsSystem::getGravity() const
@@ -37,197 +146,101 @@ glm::vec3 const& PhysicsSystem::getGravity() const
     return gravity;
 }
 
+void PhysicsSystem::bindRegistry(entt::registry& registry)
+{
+    boundRegistry = &registry;
+}
+
 void PhysicsSystem::registerEntity(entt::entity& entity, entt::registry& registry)
 {
-    if (entity == entt::null)
+    if (!initialized || entity == entt::null)
         return;
 
-	auto [transform, physics] = registry.try_get<TransformComponent, PhysicsComponent>(entity);
-    if (!transform || !physics)
+    auto* legacy = registry.try_get<PhysicsComponent>(entity);
+
+    if (!registry.any_of<RigidBodyComponent>(entity))
+        registry.emplace<RigidBodyComponent>(entity);
+    if (!registry.any_of<ColliderComponent>(entity))
+        registry.emplace<ColliderComponent>(entity);
+
+    auto* rb = registry.try_get<RigidBodyComponent>(entity);
+    auto* col = registry.try_get<ColliderComponent>(entity);
+    if (!rb || !col)
         return;
 
-    if (physics->registeredInWorld)
-        return;
+    // Legacy compatibility: if PhysicsComponent alias data exists, mirror values.
+    if (legacy)
+    {
+        rb->bodyType = legacy->bodyType;
+        rb->mass = legacy->mass;
+        rb->friction = legacy->friction;
+        rb->restitution = legacy->restitution;
+        rb->useGravity = legacy->useGravity;
+        rb->linearVelocity = legacy->getLinearVelocity();
 
-    physics->bodyId = nextBodyId++;
-    physics->registeredInWorld = true;
+        col->shapeType = legacy->shapeType;
+        col->halfExtents = legacy->halfExtents;
+        col->radius = legacy->radius;
+    }
 
-    BodyState state{};
-    state.entity = entity;
-    state.transform = transform;
-    state.physics = physics;
-    state.velocity = physics->getLinearVelocity();
-    state.spawn.position = transform->GetPosition();
-    state.spawn.velocity = state.velocity;
-    bodies[physics->bodyId] = state;
+    PhysicsSystems::RegisterEntity(context, registry, entity);
+
+    auto bodyIt = context.entityToBody.find(entity);
+    if (bodyIt != context.entityToBody.end())
+    {
+        rb->bodyId = static_cast<int>(bodyIt->second.GetIndex());
+        rb->registeredInWorld = true;
+    }
+
+    boundRegistry = &registry;
 }
 
 void PhysicsSystem::unregisterEntity(entt::entity& entity, entt::registry& registry)
 {
-    if (entity == entt::null)
+    if (!initialized || entity == entt::null)
         return;
 
-    auto* physics = registry.try_get<PhysicsComponent>(entity);
-    if (!physics || !physics->registeredInWorld)
-        return;
+    PhysicsSystems::UnregisterEntity(context, registry, entity);
 
-    bodies.erase(physics->bodyId);
-    physics->bodyId = -1;
-    physics->registeredInWorld = false;
+    if (auto* rb = registry.try_get<RigidBodyComponent>(entity))
+    {
+        rb->bodyId = -1;
+        rb->registeredInWorld = false;
+    }
 }
 
 void PhysicsSystem::clear()
 {
-    for (auto& [id, body] : bodies)
+    if (!initialized)
+        return;
+
+    if (boundRegistry)
+        PhysicsSystems::Clear(context, *boundRegistry);
+    else
     {
-        if (body.physics)
-        {
-            body.physics->bodyId = -1;
-            body.physics->registeredInWorld = false;
-            body.physics->setLinearVelocity(glm::vec3(0.0f));
-        }
+        context.entityToBody.clear();
+        context.bodyToEntity.clear();
     }
-    bodies.clear();
 }
 
 void PhysicsSystem::reset()
 {
-    for (auto& [id, body] : bodies)
-    {
-        if (!body.physics || !body.transform)
-            continue;
-
-        if (body.physics->bodyType == PhysicsBodyType::Dynamic)
-        {
-            body.transform->SetPosition(body.spawn.position);
-            body.velocity = body.spawn.velocity;
-            body.physics->setLinearVelocity(body.velocity);
-        }
-    }
+    if (initialized && boundRegistry)
+        PhysicsSystems::Reset(context, *boundRegistry);
 }
 
 void PhysicsSystem::step(float deltaTime)
 {
-    if (paused || deltaTime <= 0.0f)
+    if (boundRegistry)
+        step(deltaTime, *boundRegistry);
+}
+
+void PhysicsSystem::step(float deltaTime, entt::registry& registry)
+{
+    if (!initialized)
         return;
 
-    // Clamp to avoid spiral-of-death on a stall frame
-    const float dt = std::min(deltaTime, 0.05f);
-
-    for (auto& [id, body] : bodies)
-    {
-        if (!body.physics || !body.transform)
-            continue;
-
-        switch (body.physics->bodyType)
-        {
-        case PhysicsBodyType::Dynamic:
-            stepDynamicBody(body, dt);
-            break;
-        case PhysicsBodyType::Kinematic:
-            body.velocity = body.physics->getLinearVelocity();
-            body.transform->SetPosition(body.transform->GetPosition() + body.velocity * dt);
-            break;
-        case PhysicsBodyType::Static:
-        default:
-            break;
-        }
-    }
-
-    resolveBodyCollisions();
-}
-
-void PhysicsSystem::stepDynamicBody(BodyState& state, float dt)
-{
-    auto& physics = *state.physics;
-    auto& transform = *state.transform;
-
-    if (physics.useGravity)
-        state.velocity += gravity * dt;
-
-    glm::vec3 pos = transform.GetPosition();
-    pos += state.velocity * dt;
-
-    transform.SetPosition(pos);
-    physics.setLinearVelocity(state.velocity);
-}
-
-void PhysicsSystem::resolveBodyCollisions()
-{
-    std::vector<BodyState*> dynamics;
-    std::vector<BodyState*> statics;
-    dynamics.reserve(bodies.size());
-    statics.reserve(bodies.size());
-
-    for (auto& [id, body] : bodies)
-    {
-        if (!body.physics || !body.transform)
-            continue;
-
-        if (body.physics->bodyType == PhysicsBodyType::Dynamic)
-            dynamics.push_back(&body);
-        else if (body.physics->bodyType == PhysicsBodyType::Static)
-            statics.push_back(&body);
-    }
-
-    auto scaledHalfExtents = [](BodyState const& b) {
-        const glm::vec3 s = glm::abs(b.transform->GetScale());
-        return b.physics->halfExtents * s;
-    };
-
-    // Dynamic vs Static (AABB, axis-aligned, no rotation)
-    for (BodyState* d : dynamics)
-    {
-        if (d->physics->shapeType != PhysicsShapeType::Box)
-            continue;
-
-        glm::vec3 dPos = d->transform->GetPosition();
-        const glm::vec3 dHalf = scaledHalfExtents(*d);
-
-        for (BodyState* s : statics)
-        {
-            if (s->physics->shapeType != PhysicsShapeType::Box)
-                continue;
-
-            const glm::vec3 sPos = s->transform->GetPosition();
-            const glm::vec3 sHalf = scaledHalfExtents(*s);
-
-            const glm::vec3 delta = dPos - sPos;
-            const glm::vec3 overlap = (dHalf + sHalf) - glm::abs(delta);
-            if (overlap.x <= 0.0f || overlap.y <= 0.0f || overlap.z <= 0.0f)
-                continue;
-
-            // Resolve along minimum penetration axis
-            glm::vec3 normal(0.0f);
-            float minPen = overlap.x;
-            normal.x = (delta.x >= 0.0f) ? 1.0f : -1.0f;
-
-            if (overlap.y < minPen) {
-                minPen = overlap.y;
-                normal = glm::vec3(0.0f, (delta.y >= 0.0f) ? 1.0f : -1.0f, 0.0f);
-            }
-            if (overlap.z < minPen) {
-                minPen = overlap.z;
-                normal = glm::vec3(0.0f, 0.0f, (delta.z >= 0.0f) ? 1.0f : -1.0f);
-            }
-
-            dPos += normal * minPen;
-
-            const float vRelN = glm::dot(d->velocity, normal);
-            if (vRelN < 0.0f) {
-                const float e = glm::clamp(d->physics->restitution, 0.0f, 1.0f);
-                d->velocity -= (1.0f + e) * vRelN * normal;
-            }
-
-            // Basic ground friction when resting on top surface
-            if (normal.y > 0.5f) {
-                const float fr = glm::clamp(1.0f - d->physics->friction * 0.1f, 0.0f, 1.0f);
-                d->velocity.x *= fr;
-                d->velocity.z *= fr;
-            }
-        }
-
-        d->transform->SetPosition(dPos);
-        d->physics->setLinearVelocity(d->velocity);
-    }
+    boundRegistry = &registry;
+    applyContextSettings();
+    PhysicsSystems::Update(context, registry, deltaTime);
 }

@@ -1,5 +1,4 @@
 #pragma once
-#include "../component.h"
 #include "../../renderer/renderer_types.h"
 #include <vector>
 #include <vulkan/vulkan_raii.hpp>
@@ -7,8 +6,7 @@
 // Holds all GPU resources and render data for a renderable entity.
 // This component replaces the old monolithic GameObject structure and is
 // consumed directly by the Vulkan renderer.
-class RenderableComponent : public Component {
-public:
+struct RenderableComponent {
     // Vertex / index data (CPU side kept for reference; GPU side is below)
     std::vector<Vertex>   vertices;
     std::vector<uint32_t> indices;

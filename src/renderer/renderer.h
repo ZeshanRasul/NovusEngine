@@ -49,6 +49,7 @@ import vulkan_hpp;
 #include "ECS/entt/scene.h"
 #include "ECS/entt/assimp_instance_component.h"
 #include "ECS/entt/assimp_systems.h"
+#include "ECS/entt/transform_systems.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/RegisterTypes.h>

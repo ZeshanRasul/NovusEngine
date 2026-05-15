@@ -138,7 +138,10 @@ void Renderer::createSkinningPipeline()
 	config.descriptorSetLayouts = { *skinningDescriptorSetLayout };
 	config.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat };
 	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+	config.depthTestEnable = true;
+	config.depthWriteEnable = true;
 	config.cullMode = vk::CullModeFlagBits::eNone;
+	config.depthCompareOp = vk::CompareOp::eLess;
 
 	auto bundle = Pipeline::createPipeline(device, config);
 	skinningPipelineLayout = std::move(bundle.layout);
@@ -196,7 +199,7 @@ void Renderer::setupGameObjects()
 		"models/Sponza.gltf", false);
 
 	makeEntity("Damaged Helmet",
-		{ -100.0f, -1020.0f, 0.0f }, { 0.0f, glm::radians(0.0f), 0.0f }, { 35.0f, 35.0f, 35.0f },
+		{ -150.0f, -1020.0f, 0.0f }, { 0.0f, glm::radians(0.0f), 0.0f }, { 35.0f, 35.0f, 35.0f },
 		"models/DamagedHelmet.gltf", true);
 
 	makeEntity("Flight Helmet",
@@ -321,7 +324,7 @@ void Renderer::initWindow()
 	physicsWorld->physicsSystem.Init(1024, 0, 1024, 1024, broad_phase_layer_interface, object_vs_broadphase_layer_filter, object_vs_object_layer_filter);
 
 	physicsWorld->bodies = &physicsWorld->physicsSystem.GetBodyInterface();
-	JPH::BoxShapeSettings floor_shape_settings(JPH::Vec3(100.0f, 1.0f, 100.0f));
+	JPH::BoxShapeSettings floor_shape_settings(JPH::Vec3(1000.0f, 1.0f, 1000.0f));
 	floor_shape_settings.SetEmbedded(); // A ref counted object on the stack (base class RefTarget) should be marked as such to prevent it from being freed when its reference count goes to 0.
 
 	// Create the shape
@@ -343,7 +346,7 @@ void Renderer::initWindow()
 
 	JPH::BodyCreationSettings sphereSettings(
 		new JPH::SphereShape(10.0f),
-		JPH::RVec3(0.0, -300.0, 0.0),
+		JPH::RVec3(150.0, -300.0, 0.0),
 		JPH::Quat::sIdentity(),
 		JPH::EMotionType::Dynamic,
 		Layers::MOVING
@@ -557,6 +560,11 @@ bool Renderer::addModel(std::string modelFileName) {
 		settings.isSwapYZAxis = true;
 		settings.isWorldRotation.z = -90.0f;
 		settings.isScale = 10.0f;
+	}
+	else if (fileNameLower == "knight.glb") {
+		settings.isWorldRotation.y = -90.0f;
+		settings.isWorldRotation.z = 180.0f;
+		settings.isScale = 5000.0f;
 	}
 	newInstance->setInstanceSettings(settings);
 
@@ -2512,6 +2520,9 @@ bool Renderer::createPBRPipeline()
 		config.pushConstantRanges = { pushConstantRange };
 		config.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat };
 		config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+		config.depthTestEnable = true;
+		config.depthWriteEnable = true;
+		config.depthCompareOp = vk::CompareOp::eLess;
 
 		auto pipelineBundle = Pipeline::createPipeline(device, config);
 		pbrPipelineLayout = std::move(pipelineBundle.layout);
@@ -4360,7 +4371,7 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 			ubo = *shadowTemplateUbo;
 		ubo.model = gpuData.instance->getWorldTransformMatrix();
 		ubo.view = camera.getViewMatrix();
-		ubo.proj = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f);
+		ubo.proj = camera.getProjectionMatrix(aspect, 0.005f, 3000.0f);
 		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);
 		ubo.directionalLightColor = glm::vec4(1.0f);
 		memcpy(gpuData.uboMapped[frameIndex], &ubo, sizeof(UniformBufferObject));

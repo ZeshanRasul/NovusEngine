@@ -27,6 +27,7 @@
 #include "../../lib/ImGuiFileDialog.h"
 #include "../../include/imgui_internal.h"
 
+
 namespace {
 	using json = nlohmann::json;
 
@@ -200,11 +201,11 @@ void Renderer::setupGameObjects()
 
 	makeEntity("Flight Helmet",
 		{ 100.0f, -1020.0f, 0.0f }, { 0.0f, glm::radians(90.0f), 0.0f }, { 200.0f, 200.0f, 200.0f },
-		"models/FlightHelmet.gltf", true);
+		"models/FlightHelmet.gltf", false);
 
 	makeEntity("Static Floor",
 		{ 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3000.0f, 1.0f, 3000.0f },
-		"", true);
+		"", false);
 }
 
 void Renderer::rebuildRenderableRuntimeResources()
@@ -301,6 +302,62 @@ void Renderer::initWindow()
 	camera.setZoom(55.0f);
 	camera.getViewMatrix();
 	camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f);
+
+	JPH::RegisterDefaultAllocator();
+
+	JPH::Factory::sInstance = new JPH::Factory();
+	JPH::RegisterTypes();
+
+	physicsWorld = new PhysicsWorld();
+
+	physicsWorld->tempAllocator = new JPH::TempAllocatorImpl(10 * 1024 * 1024);
+
+	physicsWorld->jobSystem = new JPH::JobSystemThreadPool(
+		JPH::cMaxPhysicsJobs,
+		JPH::cMaxPhysicsBarriers,
+		std::thread::hardware_concurrency() - 1
+	);
+
+	physicsWorld->physicsSystem.Init(1024, 0, 1024, 1024, broad_phase_layer_interface, object_vs_broadphase_layer_filter, object_vs_object_layer_filter);
+
+	physicsWorld->bodies = &physicsWorld->physicsSystem.GetBodyInterface();
+	JPH::BoxShapeSettings floor_shape_settings(JPH::Vec3(100.0f, 1.0f, 100.0f));
+	floor_shape_settings.SetEmbedded(); // A ref counted object on the stack (base class RefTarget) should be marked as such to prevent it from being freed when its reference count goes to 0.
+
+	// Create the shape
+	JPH::ShapeSettings::ShapeResult floor_shape_result = floor_shape_settings.Create();
+	JPH::ShapeRefC floor_shape = floor_shape_result.Get(); // We don't expect an error here, but you can check floor_shape_result for HasError() / GetError()
+
+	JPH::BodyCreationSettings floorSettings(
+		floor_shape,
+		JPH::RVec3(0.0, -1.0, 0.0),
+		JPH::Quat::sIdentity(),
+		JPH::EMotionType::Static,
+		Layers::NON_MOVING
+	);
+
+	JPH::BodyID floorID = physicsWorld->bodies->CreateAndAddBody(
+		floorSettings,
+		JPH::EActivation::DontActivate
+	);
+
+	JPH::BodyCreationSettings sphereSettings(
+		new JPH::SphereShape(10.0f),
+		JPH::RVec3(0.0, -300.0, 0.0),
+		JPH::Quat::sIdentity(),
+		JPH::EMotionType::Dynamic,
+		Layers::MOVING
+	);
+
+	sphereSettings.mRestitution = 0.8f;
+	sphereSettings.mFriction = 0.4f;
+	physicsWorld->physicsSystem.SetGravity(JPH::Vec3(0.0f, 9.0f, 0.0f));
+	sphereBodyID = physicsWorld->bodies->CreateAndAddBody(
+		sphereSettings,
+		JPH::EActivation::Activate
+	);
+
+//	physicsWorld->bodies->SetLinearVelocity(sphereBodyID, JPH::Vec3(0.0f, -9.0f, 0.0f));
 }
 
 void Renderer::initVulkan()
@@ -722,7 +779,25 @@ void Renderer::mainLoop()
 		InputSystem::Update(deltaTime);
 
 		camera.processInput(window, camera, deltaTime);
-		physicsSystem.step(deltaTime);
+		//physicsSystem.step(deltaTime);
+		{
+			// Next step
+			++step;
+
+
+			// If you take larger steps than 1 / 60th of a second you need to do multiple collision steps in order to keep the simulation stable. Do 1 collision step per 1 / 60th of a second (round up).
+			const int cCollisionSteps = 1;
+			// Step the world
+			physicsWorld->physicsSystem.Update(deltaTime, cCollisionSteps, physicsWorld->tempAllocator, physicsWorld->jobSystem);
+
+			// Output current position and velocity of the sphere
+			JPH::RVec3 position = physicsWorld->bodies->GetCenterOfMassPosition(sphereBodyID);
+			JPH::Vec3 velocity = physicsWorld->bodies->GetLinearVelocity(sphereBodyID);
+			auto& reg = mEnttScene.getRegistry();
+			entt::entity entity = reg.view<PhysicsComponent>().front();
+			reg.try_get<TransformComponent>(entity)->SetPosition(glm::vec3(position.GetX(), position.GetY(), position.GetZ()));
+		}
+
 		updateAssimpAnimations(deltaTime);
 		drawFrame();
 	}

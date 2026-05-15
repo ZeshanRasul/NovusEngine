@@ -6,27 +6,49 @@
         "speed": 1.0
       },
       "assimp": {
-        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Woman.gltf",
+        "model": "D:\\dev\\Graphics\\NovusEngine\\models\\Knight.glb",
         "settings": {
           "clipIndex": 0,
-          "playTime": 606.733642578125,
+          "playTime": 797.670654296875,
           "position": [
-            0.0,
-            0.0,
-            0.0
+            -16.917707443237305,
+            29.372154235839844,
+            -94.2440185546875
           ],
           "rotation": [
-            180.0,
-            -89.98021697998047,
-            0.0
+            8.50318717956543,
+            -87.79096221923828,
+            -179.11253356933594
           ],
-          "scale": 30.0,
+          "scale": 6079.51904296875,
           "speed": 1.0,
           "swapYZ": false
         }
       },
-      "id": 6,
-      "name": "Assimp: Woman.gltf",
+      "id": 9,
+      "name": "Assimp: Knight.glb",
+      "transform": {
+        "position": [
+          -16.917707443237305,
+          29.372154235839844,
+          -94.2440185546875
+        ],
+        "rotation": [
+          -0.6910016536712646,
+          -0.05877643823623657,
+          -0.7182040214538574,
+          0.0569659061729908
+        ],
+        "scale": [
+          6079.51904296875,
+          2312.024169921875,
+          12908.373046875
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "name": "Static Floor",
       "transform": {
         "position": [
           0.0,
@@ -34,15 +56,65 @@
           0.0
         ],
         "rotation": [
-          0.7071067690849304,
-          3.0908619663705394e-08,
-          0.7071067690849304,
-          -3.0908619663705394e-08
+          0.0,
+          0.0,
+          0.0,
+          1.0
         ],
         "scale": [
-          30.0,
-          30.0,
-          30.0
+          3000.0,
+          1.0,
+          3000.0
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "name": "Flight Helmet",
+      "renderable": {
+        "modelPath": "models/FlightHelmet.gltf"
+      },
+      "transform": {
+        "position": [
+          100.0,
+          -1020.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.7071067690849304,
+          0.0,
+          0.7071067690849304
+        ],
+        "scale": [
+          200.0,
+          200.0,
+          200.0
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "name": "Damaged Helmet",
+      "renderable": {
+        "modelPath": "models/DamagedHelmet.gltf"
+      },
+      "transform": {
+        "position": [
+          0.0,
+          -12.0,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          35.0,
+          35.0,
+          35.0
         ]
       }
     },
@@ -81,13 +153,13 @@
           0.25
         ],
         "enabled": true,
-        "intensity": 1656.0,
-        "range": 254.5
+        "intensity": 800.0,
+        "range": 120.0
       },
       "transform": {
         "position": [
           20.0,
-          -91.19999694824219,
+          40.0,
           -10.0
         ],
         "rotation": [
@@ -108,13 +180,13 @@
       "name": "Point Light",
       "pointLight": {
         "color": [
-          0.25,
-          0.25,
+          4.090000152587891,
+          0.0,
           1.0
         ],
         "enabled": true,
-        "intensity": 800.0,
-        "range": 120.0
+        "intensity": 1051.0,
+        "range": 641.5
       },
       "transform": {
         "position": [
@@ -177,13 +249,13 @@
           1.0
         ],
         "enabled": true,
-        "intensity": 1990.0,
-        "range": 655.0
+        "intensity": 1000.0,
+        "range": 120.0
       },
       "transform": {
         "position": [
           0.0,
-          -132.5,
+          -45.0,
           0.0
         ],
         "rotation": [
@@ -222,5 +294,5 @@
       }
     }
   ],
-  "selected": 4
+  "selected": 3
 }

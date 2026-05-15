@@ -8,6 +8,7 @@
     "ktx",
     "assimp",
     "entt",
-    "imguizmo"
+    "imguizmo",
+    "joltphysics"
   ]
 }

@@ -58,7 +58,7 @@ add_executable(NovusEngine
     "src/ECS/entt/scene.h"
     "src/ECS/entt/assimp_instance_component.h"
     "src/ECS/entt/assimp_systems.h"
-    "src/physics/physics_system.h" "src/physics/physics_system.cpp")
+    "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -67,6 +67,7 @@ find_package(ktx CONFIG REQUIRED)
 find_package(Vulkan 1.4 REQUIRED)
 find_package(assimp REQUIRED)
 find_package(imguizmo CONFIG REQUIRED)
+find_package(jolt CONFIG REQUIRED)
 
 find_program(SLANGC_EXECUTABLE slangc REQUIRED)
 
@@ -192,6 +193,7 @@ target_link_libraries(NovusEngine PRIVATE
     KTX::ktx        
     Vulkan::Vulkan
     assimp::assimp
+    Jolt::Jolt
 )
 
 target_compile_definitions(NovusEngine PRIVATE

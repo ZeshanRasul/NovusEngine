@@ -212,33 +212,33 @@ void Renderer::setupGameObjects()
 
 	const entt::entity floor = makeEntity(
 		"Physics Arena Floor",
-		{ 0.0f, 40.0f, 0.0f },
+		{ 0.0f, 2.5f, 0.0f },
 		{ 0.0f, 0.0f, 0.0f },
 		{ 1.0f, 1.0f, 1.0f },
 		"");
 	addPhysics(floor, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.9f, 0.15f, false,
-		{ 900.0f, 20.0f, 900.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+		{ 860.0f, 18.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	const entt::entity wallPosX = makeEntity("Physics Arena Wall +X", { 900.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	const entt::entity wallPosX = makeEntity("Physics Arena Wall +X", { 860.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallPosX, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 20.0f, 320.0f, 900.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+		{ 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	const entt::entity wallNegX = makeEntity("Physics Arena Wall -X", { -900.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	const entt::entity wallNegX = makeEntity("Physics Arena Wall -X", { -860.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallNegX, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 20.0f, 320.0f, 900.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+		{ 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	const entt::entity wallPosZ = makeEntity("Physics Arena Wall +Z", { 0.0f, -260.0f, 900.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	const entt::entity wallPosZ = makeEntity("Physics Arena Wall +Z", { 0.0f, -260.0f, 860.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallPosZ, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 900.0f, 320.0f, 20.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	const entt::entity wallNegZ = makeEntity("Physics Arena Wall -Z", { 0.0f, -260.0f, -900.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
+	const entt::entity wallNegZ = makeEntity("Physics Arena Wall -Z", { 0.0f, -260.0f, -860.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallNegZ, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 900.0f, 320.0f, 20.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
 	const int spawnCount = std::max(12, physicsSpawnCount);
 	const float spawnBaseHeight = physicsSpawnHeight;
@@ -256,7 +256,7 @@ void Renderer::setupGameObjects()
 
 		const std::string namePrefix = damagedHelmet ? "Damaged Helmet " : "Flight Helmet ";
 		const std::string modelPath = damagedHelmet ? "models/DamagedHelmet.gltf" : "models/FlightHelmet.gltf";
-		const glm::vec3 scale = damagedHelmet ? glm::vec3(35.0f) : glm::vec3(200.0f);
+		const glm::vec3 scale = damagedHelmet ? glm::vec3(35.0f) : glm::vec3(100.0f);
 		const glm::vec3 rotation = damagedHelmet ? glm::vec3(0.0f, angle, 0.0f) : glm::vec3(0.0f, angle + glm::radians(90.0f), 0.0f);
 
 		entt::entity helmet = makeEntity(namePrefix + std::to_string(i + 1), position, rotation, scale, modelPath);
@@ -1037,12 +1037,50 @@ void Renderer::renderImgui()
 	auto& registry = mEnttScene.getRegistry();
 
 	ImGui::Begin("Play Mode");
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 8.0f));
 
-	if (ImGui::Button(ICON_FA_PLAY " Play") && sceneState == SceneState::EDIT)
+	const bool canPlay = (sceneState == SceneState::EDIT);
+	const bool canStop = (sceneState == SceneState::PLAY);
+
+	if (canPlay)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.58f, 0.28f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.68f, 0.33f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.48f, 0.23f, 1.0f));
+	}
+	else
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+	}
+	if (ImGui::Button(ICON_FA_PLAY "  Play") && canPlay)
 		enterPlayMode();
+	ImGui::PopStyleColor(3);
 
-	if (ImGui::Button(ICON_FA_STOP " Stop") && sceneState == SceneState::PLAY)
+	ImGui::SameLine();
+
+	if (canStop)
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.72f, 0.22f, 0.22f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.82f, 0.27f, 0.27f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.62f, 0.16f, 0.16f, 1.0f));
+	}
+	else
+	{
+		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+		ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.16f, 0.16f, 1.0f));
+	}
+	if (ImGui::Button(ICON_FA_STOP "  Stop") && canStop)
 		exitPlayMode();
+	ImGui::PopStyleColor(3);
+
+	ImGui::SameLine();
+	ImGui::TextUnformatted(sceneState == SceneState::PLAY ? "State: PLAY" : "State: EDIT");
+
+	ImGui::PopStyleVar(2);
 	ImGui::End();
 
 	if (sceneState == SceneState::PLAY)
@@ -1051,6 +1089,7 @@ void Renderer::renderImgui()
 
 
 	// Create a window for camera controls
+	ImGui::SetNextWindowBgAlpha(1.0f);
 	ImGui::Begin("Camera Controls");
 
 	// Add a button to reset camera position
@@ -1622,6 +1661,7 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 	}
 	ImGui::End();
 
+	ImGui::SetNextWindowBgAlpha(1.0f);
 	ImGui::Begin("ECS Inspector");
 	if (mEnttScene.isValid(mEnttSelectedEntity))
 	{

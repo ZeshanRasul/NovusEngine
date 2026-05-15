@@ -62,7 +62,7 @@ void toggleInputMode() {
 
 // GLFW callback functions
 static void glfwMouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    ImGuiIO& io = ImGui::GetIO();
+	ImGuiIO& io = ImGui::GetIO();
 	if (button >= 0 && button < ImGuiMouseButton_COUNT)
 		io.AddMouseButtonEvent(button, action == GLFW_PRESS);
 
@@ -82,8 +82,10 @@ static void glfwCursorPosCallback(GLFWwindow* window, double xpos, double ypos) 
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddMousePosEvent(static_cast<float>(xpos), static_cast<float>(ypos));
 
-    if (mouseCaptureMode) {
-		Camera::mouseCallback(window, xpos, ypos);
+	if (mouseCaptureMode && InputSystem::gCamera) {
+		const float xoffset = state.cursorDelta.x;
+		const float yoffset = -state.cursorDelta.y;
+		InputSystem::gCamera->processMouseMovement(xoffset, yoffset);
 	}
 }
 
@@ -93,8 +95,8 @@ static void glfwScrollCallback(GLFWwindow* window, double xoffset, double yoffse
 	ImGuiIO& io = ImGui::GetIO();
 	io.AddMouseWheelEvent(static_cast<float>(xoffset), static_cast<float>(yoffset));
 
-    if (mouseCaptureMode) {
-		Camera::scrollCallback(window, xoffset, yoffset);
+	if (mouseCaptureMode && InputSystem::gCamera) {
+		InputSystem::gCamera->processMouseScroll(static_cast<float>(yoffset));
 	}
 }
 
@@ -115,11 +117,12 @@ static void glfwKeyCallback(GLFWwindow* window, int key, int scancode, int actio
 			}
 		}
 
-		}
+	}
 }
 
 void InputSystem::Initialize(GLFWwindow* window, Camera* camera) {
 	gWindow = window;
+	gCamera = camera;
 
 	// Set up GLFW callbacks
 	glfwSetMouseButtonCallback(window, glfwMouseButtonCallback);

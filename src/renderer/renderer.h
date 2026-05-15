@@ -156,8 +156,8 @@ public:
 	}
 };
 
-constexpr uint32_t WIDTH = 1920;
-constexpr uint32_t HEIGHT = 1080;
+constexpr uint32_t WIDTH = 3840;
+constexpr uint32_t HEIGHT = 2160;
 constexpr int      MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<char const*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
@@ -502,7 +502,7 @@ private:
 	PhysicsWorld* physicsWorld;
 	JPH::BodyID sphereBodyID;
 	JPH::uint step = 0;
-	
+
 	JPH::JobSystemThreadPool jobSystem;
 	BPLayerInterfaceImpl broad_phase_layer_interface;
 	ObjectVsBroadPhaseLayerFilterImpl object_vs_broadphase_layer_filter;
@@ -510,4 +510,5 @@ private:
 
 	SceneState sceneState = SceneState::EDIT;
 	int currentFrameIndex = 0;
+	bool playShowDebugUI = false;
 };

@@ -1015,11 +1015,41 @@ void Renderer::renderViewportPanel()
 
 	const ImVec2 imagePos = ImGui::GetCursorScreenPos();
 	const ImVec2 available = ImGui::GetContentRegionAvail();
-	ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
-	ImGuizmo::SetRect(imagePos.x, imagePos.y, available.x, available.y);
-	if (mViewportTextureId && available.x > 1.0f && available.y > 1.0f)
+	const float targetAspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
+	const float availableAspect = (available.y > 0.0f) ? (available.x / available.y) : targetAspect;
+	ImVec2 drawSize = available;
+	if (availableAspect > targetAspect)
 	{
-		ImGui::Image(mViewportTextureId, available, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+		drawSize.x = available.y * targetAspect;
+		drawSize.y = available.y;
+	}
+	else
+	{
+		drawSize.x = available.x;
+		drawSize.y = (targetAspect > 0.0f) ? (available.x / targetAspect) : available.y;
+	}
+	const ImVec2 drawPos = ImVec2(
+		imagePos.x + (available.x - drawSize.x) * 0.5f,
+		imagePos.y + (available.y - drawSize.y) * 0.5f);
+	ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+	ImGuizmo::SetRect(drawPos.x, drawPos.y, drawSize.x, drawSize.y);
+	if (mViewportTextureId && drawSize.x > 1.0f && drawSize.y > 1.0f)
+	{
+		if (drawPos.y > imagePos.y)
+			ImGui::Dummy(ImVec2(0.0f, drawPos.y - imagePos.y));
+
+		const float indentX = drawPos.x - ImGui::GetCursorScreenPos().x;
+		if (indentX > 0.0f)
+			ImGui::Indent(indentX);
+
+		ImGui::Image(mViewportTextureId, drawSize, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
+
+		if (indentX > 0.0f)
+			ImGui::Unindent(indentX);
+
+		const float bottomPad = (imagePos.y + available.y) - (drawPos.y + drawSize.y);
+		if (bottomPad > 0.0f)
+			ImGui::Dummy(ImVec2(0.0f, bottomPad));
 	}
 	else
 	{
@@ -1035,13 +1065,14 @@ void Renderer::renderImgui()
 	buildEditorDockspace();
 	renderViewportPanel();
 	auto& registry = mEnttScene.getRegistry();
+	const bool isEditMode = (sceneState == SceneState::EDIT);
 
 	ImGui::Begin("Play Mode");
 	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 8.0f));
 
-	const bool canPlay = (sceneState == SceneState::EDIT);
-	const bool canStop = (sceneState == SceneState::PLAY);
+	const bool canPlay = isEditMode;
+	const bool canStop = !isEditMode;
 
 	if (canPlay)
 	{
@@ -1079,14 +1110,14 @@ void Renderer::renderImgui()
 
 	ImGui::SameLine();
 	ImGui::TextUnformatted(sceneState == SceneState::PLAY ? "State: PLAY" : "State: EDIT");
+	if (sceneState == SceneState::PLAY)
+	{
+		ImGui::SameLine();
+		ImGui::Checkbox("Show Debug UI", &playShowDebugUI);
+	}
 
 	ImGui::PopStyleVar(2);
 	ImGui::End();
-
-	if (sceneState == SceneState::PLAY)
-		ImGui::BeginDisabled();
-
-
 
 	// Create a window for camera controls
 	ImGui::SetNextWindowBgAlpha(1.0f);
@@ -1129,228 +1160,254 @@ void Renderer::renderImgui()
 
 	ImGui::End();
 
-	if (sceneState == SceneState::PLAY)
-		ImGui::EndDisabled();
+	if (isEditMode)
+	{
+		renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f));
 
-	renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.005f, 3000.0f));
-
-	ImGui::Begin("Shadow Tuning");
-	ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
-	ImGui::SliderFloat("Lambda", &shadowSettings.lambda, 0.0f, 1.0f);
-	ImGui::SliderFloat("Bias Scale", &shadowSettings.biasScale, 0.0001f, 0.01f, "%.5f", ImGuiSliderFlags_Logarithmic);
-	ImGui::SliderFloat("Bias Min", &shadowSettings.biasMin, 0.00001f, 0.005f, "%.5f", ImGuiSliderFlags_Logarithmic);
-	ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
-	ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
-	ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
-	ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
-	ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
-	ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
-	ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
-	ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
-	if (ImGui::Button("Reset Shadows")) {
-		shadowSettings = ShadowSettings{};
-	}
-
-	ImGui::End();
-
-	ImGui::Begin("Animation Controls");
-
-	if (ImGui::CollapsingHeader("Models")) {
-		/* state is changed during model deletion, so save it first */
-		bool modelListEmtpy = mModelInstData.miModelList.empty();
-		std::string selectedModelName;
-
-		if (!modelListEmtpy) {
-			selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
+		ImGui::Begin("Shadow Tuning");
+		ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
+		ImGui::SliderFloat("Lambda", &shadowSettings.lambda, 0.0f, 1.0f);
+		ImGui::SliderFloat("Bias Scale", &shadowSettings.biasScale, 0.0001f, 0.01f, "%.5f", ImGuiSliderFlags_Logarithmic);
+		ImGui::SliderFloat("Bias Min", &shadowSettings.biasMin, 0.00001f, 0.005f, "%.5f", ImGuiSliderFlags_Logarithmic);
+		ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
+		ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
+		ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
+		ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
+		ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
+		ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
+		ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
+		ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
+		if (ImGui::Button("Reset Shadows")) {
+			shadowSettings = ShadowSettings{};
 		}
 
-		if (modelListEmtpy) {
-			ImGui::BeginDisabled();
-		}
+		ImGui::End();
 
-		ImGui::AlignTextToFramePadding();
-		ImGui::Text("Models :");
-		ImGui::SameLine();
-		ImGui::PushItemWidth(200);
-		if (ImGui::BeginCombo("##ModelCombo",
-			// avoid access the empty model vector
-			selectedModelName.c_str())) {
-			for (int i = 0; i < mModelInstData.miModelList.size(); ++i) {
-				const bool isSelected = (mModelInstData.miSelectedModel == i);
-				if (ImGui::Selectable(mModelInstData.miModelList.at(i)->getModelFileName().c_str(), isSelected)) {
-					mModelInstData.miSelectedModel = i;
-					selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
-				}
+		ImGui::Begin("Animation Controls");
 
-				if (isSelected) {
-					ImGui::SetItemDefaultFocus();
-				}
+		if (ImGui::CollapsingHeader("Models")) {
+			/* state is changed during model deletion, so save it first */
+			bool modelListEmtpy = mModelInstData.miModelList.empty();
+			std::string selectedModelName;
+
+			if (!modelListEmtpy) {
+				selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
 			}
-			ImGui::EndCombo();
-		}
-		ImGui::PopItemWidth();
 
-		if (modelListEmtpy) {
-			ImGui::EndDisabled();
-		}
-
-
-		if (ImGui::Button("Import Model")) {
-			IGFD::FileDialogConfig config;
-			config.path = ".";
-			config.countSelectionMax = 1;
-			config.flags = ImGuiFileDialogFlags_Modal;
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-			ImGuiFileDialog::Instance()->OpenDialog("ChooseModelFile", "Choose Model File",
-				"Supported Model Files{.gltf,.glb,.obj,.fbx,.dae,.mdl,.md3,.pk3}", config);
-		}
-
-		if (ImGuiFileDialog::Instance()->Display("ChooseModelFile")) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
-
-				/* try to construct a relative path */
-				std::filesystem::path currentPath = std::filesystem::current_path();
-				std::string relativePath = std::filesystem::relative(filePathName, currentPath).generic_string();
-
-				if (!relativePath.empty()) {
-					filePathName = relativePath;
-				}
-				/* Windows does understand forward slashes, but std::filesystem preferres backslashes... */
-				std::replace(filePathName.begin(), filePathName.end(), '\\', '/');
-
-				if (!mModelInstData.miModelAddCallbackFunction(filePathName)) {
-					Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, filePathName.c_str());
-				}
-				else {
-					/* select new model and new instance */
-					mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
-					mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-				}
+			if (modelListEmtpy) {
+				ImGui::BeginDisabled();
 			}
-			ImGuiFileDialog::Instance()->Close();
-		}
 
-		if (modelListEmtpy) {
-			ImGui::BeginDisabled();
-		}
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("Models :");
+			ImGui::SameLine();
+			ImGui::PushItemWidth(200);
+			if (ImGui::BeginCombo("##ModelCombo",
+				// avoid access the empty model vector
+				selectedModelName.c_str())) {
+				for (int i = 0; i < mModelInstData.miModelList.size(); ++i) {
+					const bool isSelected = (mModelInstData.miSelectedModel == i);
+					if (ImGui::Selectable(mModelInstData.miModelList.at(i)->getModelFileName().c_str(), isSelected)) {
+						mModelInstData.miSelectedModel = i;
+						selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
+					}
 
-		ImGui::SameLine();
-		if (ImGui::Button("Delete Model")) {
-			ImGui::OpenPopup("Delete Model?");
-		}
-
-		if (ImGui::BeginPopupModal("Delete Model?", nullptr, ImGuiChildFlags_AlwaysAutoResize)) {
-			ImGui::Text("Delete Model '%s'?", mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
-
-			/* cheating a bit to get buttons more to the center */
-			ImGui::Indent();
-			ImGui::Indent();
-			if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-				mModelInstData.miModelDeleteCallbackFunction(mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
-
-				/* decrement selected model index to point to model that is in list before the deleted one */
-				if (mModelInstData.miSelectedModel > 0) {
-					mModelInstData.miSelectedModel -= 1;
+					if (isSelected) {
+						ImGui::SetItemDefaultFocus();
+					}
 				}
+				ImGui::EndCombo();
+			}
+			ImGui::PopItemWidth();
 
-				/* reset model instance to first instnace - if we have instances */
-				if (!mModelInstData.miAssimpInstances.empty()) {
-					mModelInstData.miSelectedInstance = 0;
+			if (modelListEmtpy) {
+				ImGui::EndDisabled();
+			}
+
+
+			if (ImGui::Button("Import Model")) {
+				IGFD::FileDialogConfig config;
+				config.path = ".";
+				config.countSelectionMax = 1;
+				config.flags = ImGuiFileDialogFlags_Modal;
+				ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+				ImGuiFileDialog::Instance()->OpenDialog("ChooseModelFile", "Choose Model File",
+					"Supported Model Files{.gltf,.glb,.obj,.fbx,.dae,.mdl,.md3,.pk3}", config);
+			}
+
+			if (ImGuiFileDialog::Instance()->Display("ChooseModelFile")) {
+				if (ImGuiFileDialog::Instance()->IsOk()) {
+					std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+
+					/* try to construct a relative path */
+					std::filesystem::path currentPath = std::filesystem::current_path();
+					std::string relativePath = std::filesystem::relative(filePathName, currentPath).generic_string();
+
+					if (!relativePath.empty()) {
+						filePathName = relativePath;
+					}
+					/* Windows does understand forward slashes, but std::filesystem preferres backslashes... */
+					std::replace(filePathName.begin(), filePathName.end(), '\\', '/');
+
+					if (!mModelInstData.miModelAddCallbackFunction(filePathName)) {
+						Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, filePathName.c_str());
+					}
+					else {
+						/* select new model and new instance */
+						mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
+						mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+					}
 				}
-				ImGui::CloseCurrentPopup();
+				ImGuiFileDialog::Instance()->Close();
+			}
+
+			if (modelListEmtpy) {
+				ImGui::BeginDisabled();
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Delete Model")) {
+				ImGui::OpenPopup("Delete Model?");
+			}
+
+			if (ImGui::BeginPopupModal("Delete Model?", nullptr, ImGuiChildFlags_AlwaysAutoResize)) {
+				ImGui::Text("Delete Model '%s'?", mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
+
+				/* cheating a bit to get buttons more to the center */
+				ImGui::Indent();
+				ImGui::Indent();
+				if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+					mModelInstData.miModelDeleteCallbackFunction(mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
+
+					/* decrement selected model index to point to model that is in list before the deleted one */
+					if (mModelInstData.miSelectedModel > 0) {
+						mModelInstData.miSelectedModel -= 1;
+					}
+
+					/* reset model instance to first instnace - if we have instances */
+					if (!mModelInstData.miAssimpInstances.empty()) {
+						mModelInstData.miSelectedInstance = 0;
+					}
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::EndPopup();
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Create Instance")) {
+				std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
+				mModelInstData.miInstanceAddCallbackFunction(currentModel);
+				/* select new instance */
+				mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
+			}
+
+			if (ImGui::Button("Create Multiple Instances")) {
+				std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
+				mModelInstData.miInstanceAddManyCallbackFunction(currentModel, mManyInstanceCreateNum);
+				mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-				ImGui::CloseCurrentPopup();
+			ImGui::SliderInt("##MassInstanceCreation", &mManyInstanceCreateNum, 1, 100, "%d");
+
+			if (modelListEmtpy) {
+				ImGui::EndDisabled();
 			}
-			ImGui::EndPopup();
 		}
 
-		ImGui::SameLine();
-		if (ImGui::Button("Create Instance")) {
-			std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
-			mModelInstData.miInstanceAddCallbackFunction(currentModel);
-			/* select new instance */
-			mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-		}
+		ImGui::Separator();
+		ImGui::TextUnformatted("Instance and animation editing moved to ECS Inspector.");
 
-		if (ImGui::Button("Create Multiple Instances")) {
-			std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
-			mModelInstData.miInstanceAddManyCallbackFunction(currentModel, mManyInstanceCreateNum);
-			mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-		}
-		ImGui::SameLine();
-		ImGui::SliderInt("##MassInstanceCreation", &mManyInstanceCreateNum, 1, 100, "%d");
-
-		if (modelListEmtpy) {
-			ImGui::EndDisabled();
-		}
+		ImGui::End();
 	}
-
-	ImGui::Separator();
-	ImGui::TextUnformatted("Instance and animation editing moved to ECS Inspector.");
-
-	ImGui::End();
-
-	ImGui::Begin("Post Processing");
-	ImGui::SliderFloat("FXAA Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
-	ImGui::SliderFloat("FXAA Gamma", &fxaaGamma, 1.0f, 3.0f, "%.2f");
-	ImGui::Checkbox("Bloom Enabled", &bloomEnabled);
-	ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.05f, 4.0f, "%.2f");
-	ImGui::SliderFloat("Bloom Soft Knee", &bloomSoftKnee, 0.0f, 1.0f, "%.2f");
-	ImGui::SliderFloat("Bloom Prefilter", &bloomPrefilterScale, 0.5f, 6.0f, "%.2f");
-	ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 4.0f, "%.3f");
-	ImGui::SliderFloat("Bloom Blur Scale", &bloomBlurScale, 0.25f, 3.0f, "%.2f");
-	ImGui::SliderInt("Bloom Blur Passes", &bloomBlurPasses, 1, 8);
-	const char* debugModes[] = { "Final", "Scene HDR", "Bloom Only" };
-	ImGui::Combo("Post Debug", &postProcessDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
-	ImGui::End();
-
-	ImGui::Begin("Physics Demo");
-	ImGui::Checkbox("Pause Physics", &physicsPaused);
-	physicsSystem.setPaused(physicsPaused);
-
-	glm::vec3 gravity = physicsSystem.getGravity();
-	if (ImGui::SliderFloat3("Gravity", &gravity.x, -30.0f, 30.0f, "%.2f"))
+	else
 	{
-		physicsSystem.setGravity(gravity);
+		ImGui::Begin("Play HUD");
+		ImGui::TextUnformatted("Runtime UI");
+		ImGui::Separator();
+		ImGui::TextUnformatted("W/A/S/D + Mouse: Move camera");
+		ImGui::TextUnformatted("Space/Ctrl: Up/Down");
+		ImGui::TextUnformatted("Esc: Toggle mouse capture");
+
+		int rigidBodyCount = 0;
+		for (auto entity : registry.view<RigidBodyComponent>()) {
+			(void)entity;
+			++rigidBodyCount;
+		}
+		int colliderCount = 0;
+		for (auto entity : registry.view<ColliderComponent>()) {
+			(void)entity;
+			++colliderCount;
+		}
+		ImGui::Text("RigidBodies: %d", rigidBodyCount);
+		ImGui::Text("Colliders: %d", colliderCount);
+		ImGui::End();
 	}
 
-	ImGui::SliderInt("Spawn Count", &physicsSpawnCount, 1, 128);
-	ImGui::SliderFloat("Spawn Height", &physicsSpawnHeight, 0.0f, -3120.0f, "%.1f");
-
-	int rigidBodyCount = 0;
-	for (auto entity : registry.view<RigidBodyComponent>()) {
-		(void)entity;
-		++rigidBodyCount;
-	}
-	int colliderCount = 0;
-	for (auto entity : registry.view<ColliderComponent>()) {
-		(void)entity;
-		++colliderCount;
-	}
-	ImGui::Text("RigidBodies: %d", rigidBodyCount);
-	ImGui::Text("Colliders: %d", colliderCount);
-
-	if (ImGui::Button("Rebuild Physics Registration"))
+	if (isEditMode || playShowDebugUI)
 	{
-		physicsSystem.clear();
-		for (auto [entity, rb, col, tr] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each())
+		ImGui::Begin("Post Processing");
+		ImGui::SliderFloat("FXAA Exposure", &fxaaExposure, 0.1f, 8.0f, "%.2f");
+		ImGui::SliderFloat("FXAA Gamma", &fxaaGamma, 1.0f, 3.0f, "%.2f");
+		ImGui::Checkbox("Bloom Enabled", &bloomEnabled);
+		ImGui::SliderFloat("Bloom Threshold", &bloomThreshold, 0.05f, 4.0f, "%.2f");
+		ImGui::SliderFloat("Bloom Soft Knee", &bloomSoftKnee, 0.0f, 1.0f, "%.2f");
+		ImGui::SliderFloat("Bloom Prefilter", &bloomPrefilterScale, 0.5f, 6.0f, "%.2f");
+		ImGui::SliderFloat("Bloom Intensity", &bloomIntensity, 0.0f, 4.0f, "%.3f");
+		ImGui::SliderFloat("Bloom Blur Scale", &bloomBlurScale, 0.25f, 3.0f, "%.2f");
+		ImGui::SliderInt("Bloom Blur Passes", &bloomBlurPasses, 1, 8);
+		const char* debugModes[] = { "Final", "Scene HDR", "Bloom Only" };
+		ImGui::Combo("Post Debug", &postProcessDebugMode, debugModes, IM_ARRAYSIZE(debugModes));
+		ImGui::End();
+
+		ImGui::Begin("Physics Demo");
+		ImGui::Checkbox("Pause Physics", &physicsPaused);
+		physicsSystem.setPaused(physicsPaused);
+
+		glm::vec3 gravity = physicsSystem.getGravity();
+		if (ImGui::SliderFloat3("Gravity", &gravity.x, -30.0f, 30.0f, "%.2f"))
 		{
-			(void)rb;
-			(void)col;
-			(void)tr;
-			entt::entity e = entity;
-			physicsSystem.registerEntity(e, registry);
+			physicsSystem.setGravity(gravity);
 		}
-	}
 
-	if (ImGui::Button("Reset Physics"))
-	{
-		physicsSystem.reset();
+		ImGui::SliderInt("Spawn Count", &physicsSpawnCount, 1, 128);
+		ImGui::SliderFloat("Spawn Height", &physicsSpawnHeight, 0.0f, -3120.0f, "%.1f");
+
+		int rigidBodyCount = 0;
+		for (auto entity : registry.view<RigidBodyComponent>()) {
+			(void)entity;
+			++rigidBodyCount;
+		}
+		int colliderCount = 0;
+		for (auto entity : registry.view<ColliderComponent>()) {
+			(void)entity;
+			++colliderCount;
+		}
+		ImGui::Text("RigidBodies: %d", rigidBodyCount);
+		ImGui::Text("Colliders: %d", colliderCount);
+
+		if (ImGui::Button("Rebuild Physics Registration"))
+		{
+			physicsSystem.clear();
+			for (auto [entity, rb, col, tr] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each())
+			{
+				(void)rb;
+				(void)col;
+				(void)tr;
+				entt::entity e = entity;
+				physicsSystem.registerEntity(e, registry);
+			}
+		}
+
+		if (ImGui::Button("Reset Physics"))
+		{
+			physicsSystem.reset();
+		}
+		ImGui::End();
 	}
-	ImGui::End();
 
 	// End the frame
 	ImGui::EndFrame();

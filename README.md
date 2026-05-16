@@ -16,6 +16,4 @@ Novus Engine is a game engine built on top of the Vulkan graphics API. It is des
 
 ## Demo Examples
 
-![Demo Screenshot 1](./docs/gifs/demo_gif_14_05_2026.gif)
-
-![Demo Screenshot 2](./docs/images/demo_14_05_2026.png)
+![Demo Screenshot 1](./docs/images/demo_16_05_2026.png)

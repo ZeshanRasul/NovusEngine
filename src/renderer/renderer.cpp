@@ -240,7 +240,7 @@ void Renderer::setupGameObjects()
 		1.0f, 0.8f, 0.1f, false,
 		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	const int spawnCount = std::max(0, physicsSpawnCount);
+	const int spawnCount = std::max(12, physicsSpawnCount);
 	const float spawnBaseHeight = physicsSpawnHeight;
 	constexpr float twoPi = 6.28318530718f;
 	for (int i = 0; i < spawnCount; ++i)

@@ -31,6 +31,32 @@
 namespace {
 	using json = nlohmann::json;
 
+	bool hasLoadedTextureViews(const RenderableComponent::PBRTextures& textures)
+	{
+		return (*textures.baseColorView != VK_NULL_HANDLE) ||
+			(*textures.metallicRoughnessView != VK_NULL_HANDLE) ||
+			(*textures.normalView != VK_NULL_HANDLE) ||
+			(*textures.occlusionView != VK_NULL_HANDLE) ||
+			(*textures.emissiveView != VK_NULL_HANDLE);
+	}
+
+	bool hasAnyLoadedTextureViews(const std::vector<RenderableComponent::PBRTextures>& textures)
+	{
+		return std::any_of(textures.begin(), textures.end(),
+			[](const RenderableComponent::PBRTextures& textureSet) {
+				return hasLoadedTextureViews(textureSet);
+			});
+	}
+
+	bool materialHasTexturePaths(const Material& material)
+	{
+		return !material.albedoTexturePath.empty() ||
+			!material.metallicRoughnessTexturePath.empty() ||
+			!material.normalTexturePath.empty() ||
+			!material.occlusionTexturePath.empty() ||
+			!material.emissiveTexturePath.empty();
+	}
+
 	std::vector<uint32_t> readSpvU32(const std::string& filePath)
 	{
 		std::ifstream file(filePath, std::ios::ate | std::ios::binary);
@@ -278,14 +304,6 @@ void Renderer::rebuildRenderableRuntimeResources()
 {
 	auto& registry = mEnttScene.getRegistry();
 
-	auto hasLoadedTextureViews = [](const RenderableComponent::PBRTextures& textures) {
-		return (*textures.baseColorView != VK_NULL_HANDLE) ||
-			(*textures.metallicRoughnessView != VK_NULL_HANDLE) ||
-			(*textures.normalView != VK_NULL_HANDLE) ||
-			(*textures.occlusionView != VK_NULL_HANDLE) ||
-			(*textures.emissiveView != VK_NULL_HANDLE);
-	};
-
 	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
 		(void)entity;
@@ -298,22 +316,23 @@ void Renderer::rebuildRenderableRuntimeResources()
 		}
 
 		if (!renderable.sourceModelFile.empty()) {
-			bool hasAnyLoadedTextures = std::any_of(renderable.materialTextures.begin(), renderable.materialTextures.end(),
-				[&](const RenderableComponent::PBRTextures& textures) {
-					return hasLoadedTextureViews(textures);
-				});
-
-			if (!hasAnyLoadedTextures) {
+         if (!hasAnyLoadedTextureViews(renderable.materialTextures)) {
 				tryReuseCachedGltfTextures(renderable.sourceModelFile, renderable);
 			}
 		}
 
 		createVertexBuffer(renderable);
 		createIndexBuffer(renderable);
-        for (size_t i = 0; i < renderable.materials.size(); ++i) {
-			if (!hasLoadedTextureViews(renderable.materialTextures[i])) {
+      for (size_t i = 0; i < renderable.materials.size(); ++i) {
+			if (hasLoadedTextureViews(renderable.materialTextures[i]))
+				continue;
+
+			if (!materialHasTexturePaths(renderable.materials[i]))
+				continue;
+
+			{
 				loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
-			}
+           }
 		}
 	}
 
@@ -654,6 +673,11 @@ bool Renderer::tryReuseCachedGltfTextures(const std::string& modelFileName, Rend
 	if (key.empty())
 		return false;
 
+	if (renderable.materialTextures.size() != renderable.materials.size()) {
+		renderable.materialTextures.clear();
+		renderable.materialTextures.resize(renderable.materials.size());
+	}
+
 	auto it = mGltfModelTextureCache.find(key);
 	if (it == mGltfModelTextureCache.end() || it->second.empty())
 		return false;
@@ -665,6 +689,9 @@ bool Renderer::tryReuseCachedGltfTextures(const std::string& modelFileName, Rend
 		cachedEntries.pop_front();
 
 		if (textures.size() != renderable.materials.size())
+			continue;
+
+		if (!hasAnyLoadedTextureViews(textures))
 			continue;
 
 		renderable.materialTextures = std::move(textures);
@@ -686,6 +713,23 @@ void Renderer::captureGltfTexturesFromScene(entt::registry& registry)
 
 		const std::string key = normalizeModelAssetKey(renderable.sourceModelFile);
 		if (key.empty())
+			continue;
+
+		if (auto it = mGltfModelAssetCache.find(key); it == mGltfModelAssetCache.end() || !it->second)
+		{
+			auto modelAsset = std::make_shared<RenderableComponent>();
+			modelAsset->vertices = renderable.vertices;
+			modelAsset->indices = renderable.indices;
+			modelAsset->meshes = renderable.meshes;
+			modelAsset->materials = renderable.materials;
+			modelAsset->sourceModelFile = std::filesystem::path(renderable.sourceModelFile).lexically_normal().generic_string();
+			mGltfModelAssetCache[key] = modelAsset;
+		}
+
+		if (renderable.materialTextures.size() != renderable.materials.size())
+			continue;
+
+		if (!hasAnyLoadedTextureViews(renderable.materialTextures))
 			continue;
 
 		mGltfModelTextureCache[key].emplace_back(std::move(renderable.materialTextures));

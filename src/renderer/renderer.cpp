@@ -192,11 +192,23 @@ void Renderer::setupGameObjects()
 
 			if (!modelPath.empty())
 			{
-				auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
-				renderable.sourceModelFile = modelPath;
-				Model::loadModel(modelPath, renderable);
-				for (size_t i = 0; i < renderable.materials.size(); ++i)
-					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+             auto model = getOrLoadModelGltfAsset(modelPath);
+				if (model)
+				{
+					auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
+					renderable.vertices = model->vertices;
+					renderable.indices = model->indices;
+					renderable.meshes = model->meshes;
+					renderable.materials = model->materials;
+					renderable.sourceModelFile = model->sourceModelFile;
+					renderable.materialTextures.clear();
+					renderable.materialTextures.resize(renderable.materials.size());
+					renderable.materialDescriptorSets.clear();
+
+					tryReuseCachedGltfTextures(modelPath, renderable);
+					for (size_t i = 0; i < renderable.materials.size(); ++i)
+						loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+				}
 			}
 
 			return ecsEntity;
@@ -669,32 +681,94 @@ std::shared_ptr<RenderableComponent> Renderer::getOrLoadModelGltfAsset(const std
 
 bool Renderer::tryReuseCachedGltfTextures(const std::string& modelFileName, RenderableComponent& renderable)
 {
-	const std::string key = normalizeModelAssetKey(modelFileName);
-	if (key.empty())
-		return false;
-
 	if (renderable.materialTextures.size() != renderable.materials.size()) {
 		renderable.materialTextures.clear();
 		renderable.materialTextures.resize(renderable.materials.size());
 	}
 
-	auto it = mGltfModelTextureCache.find(key);
-	if (it == mGltfModelTextureCache.end() || it->second.empty())
+	bool reusedAny = false;
+	for (size_t i = 0; i < renderable.materials.size(); ++i)
+	{
+		auto& material = renderable.materials[i];
+		auto& textures = renderable.materialTextures[i];
+
+		if (*textures.baseColorView == VK_NULL_HANDLE &&
+			tryAssignCachedTextureResource(material.albedoTexturePath, textures.baseColorImage, textures.baseColorMemory, textures.baseColorView))
+		{
+			reusedAny = true;
+		}
+
+		if (*textures.metallicRoughnessView == VK_NULL_HANDLE &&
+			tryAssignCachedTextureResource(material.metallicRoughnessTexturePath, textures.metallicRoughnessImage, textures.metallicRoughnessMemory, textures.metallicRoughnessView))
+		{
+			reusedAny = true;
+		}
+
+		if (*textures.normalView == VK_NULL_HANDLE &&
+			tryAssignCachedTextureResource(material.normalTexturePath, textures.normalImage, textures.normalMemory, textures.normalView))
+		{
+			reusedAny = true;
+		}
+
+		if (*textures.occlusionView == VK_NULL_HANDLE &&
+			tryAssignCachedTextureResource(material.occlusionTexturePath, textures.occlusionImage, textures.occlusionMemory, textures.occlusionView))
+		{
+			reusedAny = true;
+		}
+
+		if (*textures.emissiveView == VK_NULL_HANDLE &&
+			tryAssignCachedTextureResource(material.emissiveTexturePath, textures.emissiveImage, textures.emissiveMemory, textures.emissiveView))
+		{
+			reusedAny = true;
+		}
+	}
+
+	return reusedAny;
+}
+
+void Renderer::cacheTextureResource(const std::string& texturePath, vk::raii::Image& image, vk::raii::DeviceMemory& memory, vk::raii::ImageView& view)
+{
+	if (texturePath.empty())
+		return;
+
+	if (*view == VK_NULL_HANDLE)
+		return;
+
+	const std::string key = normalizeModelAssetKey(texturePath);
+	if (key.empty())
+		return;
+
+	CachedTextureResource resource{};
+	resource.image = std::move(image);
+	resource.memory = std::move(memory);
+	resource.view = std::move(view);
+	mTextureAssetCache[key].emplace_back(std::move(resource));
+}
+
+bool Renderer::tryAssignCachedTextureResource(const std::string& texturePath, vk::raii::Image& image, vk::raii::DeviceMemory& memory, vk::raii::ImageView& view)
+{
+	if (texturePath.empty())
 		return false;
 
-	auto& cachedEntries = it->second;
-	while (!cachedEntries.empty())
+	const std::string key = normalizeModelAssetKey(texturePath);
+	if (key.empty())
+		return false;
+
+	auto it = mTextureAssetCache.find(key);
+	if (it == mTextureAssetCache.end() || it->second.empty())
+		return false;
+
+	auto& entries = it->second;
+	while (!entries.empty())
 	{
-		auto textures = std::move(cachedEntries.front());
-		cachedEntries.pop_front();
-
-		if (textures.size() != renderable.materials.size())
+		auto cached = std::move(entries.front());
+		entries.pop_front();
+		if (*cached.view == VK_NULL_HANDLE)
 			continue;
 
-		if (!hasAnyLoadedTextureViews(textures))
-			continue;
-
-		renderable.materialTextures = std::move(textures);
+		image = std::move(cached.image);
+		memory = std::move(cached.memory);
+		view = std::move(cached.view);
 		return true;
 	}
 
@@ -704,6 +778,7 @@ bool Renderer::tryReuseCachedGltfTextures(const std::string& modelFileName, Rend
 void Renderer::captureGltfTexturesFromScene(entt::registry& registry)
 {
 	mGltfModelTextureCache.clear();
+	mTextureAssetCache.clear();
 
 	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
@@ -732,7 +807,22 @@ void Renderer::captureGltfTexturesFromScene(entt::registry& registry)
 		if (!hasAnyLoadedTextureViews(renderable.materialTextures))
 			continue;
 
-		mGltfModelTextureCache[key].emplace_back(std::move(renderable.materialTextures));
+      for (size_t materialIndex = 0; materialIndex < renderable.materialTextures.size(); ++materialIndex)
+		{
+            auto& material = renderable.materials[materialIndex];
+			auto& materialTextures = renderable.materialTextures[materialIndex];
+
+			cacheTextureResource(material.albedoTexturePath,
+				materialTextures.baseColorImage, materialTextures.baseColorMemory, materialTextures.baseColorView);
+			cacheTextureResource(material.metallicRoughnessTexturePath,
+				materialTextures.metallicRoughnessImage, materialTextures.metallicRoughnessMemory, materialTextures.metallicRoughnessView);
+			cacheTextureResource(material.normalTexturePath,
+				materialTextures.normalImage, materialTextures.normalMemory, materialTextures.normalView);
+			cacheTextureResource(material.occlusionTexturePath,
+				materialTextures.occlusionImage, materialTextures.occlusionMemory, materialTextures.occlusionView);
+			cacheTextureResource(material.emissiveTexturePath,
+				materialTextures.emissiveImage, materialTextures.emissiveMemory, materialTextures.emissiveView);
+		}
 	}
 }
 
@@ -1767,6 +1857,8 @@ void Renderer::enterPlayMode()
 	if (outFile.is_open())
 		outFile << serializeEnttScene();
 
+	mLogPlayToEditCacheStats = false;
+
 	sceneState = SceneState::PLAY;
 	currentFrameIndex = 0;
 	physicsSystem.setPaused(false);
@@ -1774,12 +1866,16 @@ void Renderer::enterPlayMode()
 
 void Renderer::exitPlayMode()
 {
+ mLogPlayToEditCacheStats = true;
+
 	std::ifstream inFile(mEditorSceneFilePath);
 	if (inFile.is_open()) {
 		std::string jsonContent((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
 		pushUndoSnapshot();
 		deserializeEnttScene(jsonContent);
 	}
+
+	mLogPlayToEditCacheStats = false;
 
 	sceneState = SceneState::EDIT;
 	currentFrameIndex = 0;
@@ -2641,6 +2737,14 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 		return false;
 	}
 
+	struct CacheReloadStats {
+		uint32_t gltfModelCacheHits = 0;
+		uint32_t gltfModelReloads = 0;
+		uint32_t gltfTextureCacheHits = 0;
+		uint32_t gltfTextureReloads = 0;
+	};
+	CacheReloadStats cacheStats{};
+
 	auto& registry = mEnttScene.getRegistry();
  captureGltfTexturesFromScene(registry);
 
@@ -2696,8 +2800,15 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			const auto& renderableNode = node["renderable"];
 			const std::string modelPath = renderableNode.value("modelPath", std::string());
 			if (!modelPath.empty()) {
+                const std::string modelKey = normalizeModelAssetKey(modelPath);
+				const bool hadModelAssetInCache = (!modelKey.empty() && mGltfModelAssetCache.contains(modelKey));
                 auto model = getOrLoadModelGltfAsset(modelPath);
 				if (model) {
+                    if (hadModelAssetInCache)
+						++cacheStats.gltfModelCacheHits;
+					else
+						++cacheStats.gltfModelReloads;
+
 					auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
 					renderableComp.vertices = model->vertices;
 					renderableComp.indices = model->indices;
@@ -2707,7 +2818,11 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 					renderableComp.materialTextures.clear();
 					renderableComp.materialDescriptorSets.clear();
 
-					if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
+                   if (tryReuseCachedGltfTextures(modelPath, renderableComp)) {
+						++cacheStats.gltfTextureCacheHits;
+					}
+					else {
+						++cacheStats.gltfTextureReloads;
 						renderableComp.materialTextures.resize(renderableComp.materials.size());
 						for (size_t i = 0; i < renderableComp.materials.size(); ++i)
 							loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
@@ -4176,22 +4291,59 @@ void Renderer::transition_image_layout(vk::Image               image,
 
 void Renderer::loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures)
 {
-	std::cout << "Loading PBR textures for material: " << material.GetName() << std::endl;
+  bool loadedAnyFromDisk = false;
 
-	if (!material.albedoTexturePath.empty())
-		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.albedoTexturePath, textures.baseColorImage, textures.baseColorMemory, textures.baseColorView, true);
+ auto assignOrLoad = [&](const std::string& texturePath,
+		vk::raii::Image& image,
+		vk::raii::DeviceMemory& memory,
+		vk::raii::ImageView& view,
+		bool isSRGB) {
+		if (texturePath.empty())
+			return;
 
-	if (!material.metallicRoughnessTexturePath.empty())
-		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.metallicRoughnessTexturePath, textures.metallicRoughnessImage, textures.metallicRoughnessMemory, textures.metallicRoughnessView, false);
+		if (*view != VK_NULL_HANDLE)
+			return;
 
-	if (!material.normalTexturePath.empty())
-		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.normalTexturePath, textures.normalImage, textures.normalMemory, textures.normalView, false);
+		if (tryAssignCachedTextureResource(texturePath, image, memory, view))
+			return;
 
-	if (!material.occlusionTexturePath.empty())
-		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.occlusionTexturePath, textures.occlusionImage, textures.occlusionMemory, textures.occlusionView, false);
+     if (!loadedAnyFromDisk) {
+			std::cout << "Loading PBR textures for material: " << material.GetName() << std::endl;
+			loadedAnyFromDisk = true;
+		}
 
-	if (!material.emissiveTexturePath.empty())
-		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, material.emissiveTexturePath, textures.emissiveImage, textures.emissiveMemory, textures.emissiveView, true);
+		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, texturePath, image, memory, view, isSRGB);
+	};
+
+	assignOrLoad(material.albedoTexturePath,
+		textures.baseColorImage,
+		textures.baseColorMemory,
+		textures.baseColorView,
+		true);
+
+	assignOrLoad(material.metallicRoughnessTexturePath,
+		textures.metallicRoughnessImage,
+		textures.metallicRoughnessMemory,
+		textures.metallicRoughnessView,
+		false);
+
+	assignOrLoad(material.normalTexturePath,
+		textures.normalImage,
+		textures.normalMemory,
+		textures.normalView,
+		false);
+
+	assignOrLoad(material.occlusionTexturePath,
+		textures.occlusionImage,
+		textures.occlusionMemory,
+		textures.occlusionView,
+		false);
+
+	assignOrLoad(material.emissiveTexturePath,
+		textures.emissiveImage,
+		textures.emissiveMemory,
+		textures.emissiveView,
+		true);
 }
 
 void Renderer::createDefaultTextures()

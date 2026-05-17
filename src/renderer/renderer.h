@@ -345,7 +345,7 @@ private:
 	ShadowSettings shadowSettings;
 	PhysicsSystem physicsSystem;
 	bool physicsPaused = false;
-	int physicsSpawnCount = 2;
+	int physicsSpawnCount = 22;
 	float physicsSpawnHeight = -400.0f;
 	float  lastFrameTime = 0.0f;
 
@@ -366,6 +366,7 @@ private:
 	bool mHistoryMuted = false;
 	std::string mSceneFilePath = "scene.json";
 	std::string mEditorSceneFilePath = "editor_scene.json";
+	bool mLogPlayToEditCacheStats = false;
 
 	std::string normalizeModelAssetKey(const std::string& modelFileName) const;
 	std::shared_ptr<AssimpModel> getOrLoadModelAssimpAsset(const std::string& modelFileName);
@@ -377,10 +378,18 @@ private:
 	void ensureGltfModelInSceneList(const std::shared_ptr<RenderableComponent>& model);
 	bool tryReuseCachedGltfTextures(const std::string& modelFileName, RenderableComponent& renderable);
 	void captureGltfTexturesFromScene(entt::registry& registry);
+	struct CachedTextureResource {
+		vk::raii::Image image = nullptr;
+		vk::raii::DeviceMemory memory = nullptr;
+		vk::raii::ImageView view = nullptr;
+	};
+	void cacheTextureResource(const std::string& texturePath, vk::raii::Image& image, vk::raii::DeviceMemory& memory, vk::raii::ImageView& view);
+	bool tryAssignCachedTextureResource(const std::string& texturePath, vk::raii::Image& image, vk::raii::DeviceMemory& memory, vk::raii::ImageView& view);
 
 	std::unordered_map<std::string, std::shared_ptr<RenderableComponent>> mGltfModelAssetCache;
 	std::vector<std::shared_ptr<RenderableComponent>> mSceneRenderableModels;
  std::unordered_map<std::string, std::deque<std::vector<RenderableComponent::PBRTextures>>> mGltfModelTextureCache;
+	std::unordered_map<std::string, std::deque<CachedTextureResource>> mTextureAssetCache;
 	std::shared_ptr<RenderableComponent> getRenderableModel(std::string modelFileName);
 
 	bool hasModel(std::string modelFileName);

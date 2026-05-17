@@ -166,22 +166,11 @@ void Renderer::setupGameObjects()
 
 			if (!modelPath.empty())
 			{
-             auto asset = getOrLoadModelGltfAsset(modelPath);
-				if (asset)
-				{
-					auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
-					renderable.vertices = asset->vertices;
-					renderable.indices = asset->indices;
-					renderable.meshes = asset->meshes;
-					renderable.materials = asset->materials;
-					renderable.sourceModelFile = asset->sourceModelFile;
-                    renderable.materialTextures.clear();
-					renderable.materialTextures.resize(renderable.materials.size());
-					renderable.materialDescriptorSets.clear();
-
-					for (size_t i = 0; i < renderable.materials.size(); ++i)
-						loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
-				}
+				auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
+				renderable.sourceModelFile = modelPath;
+				Model::loadModel(modelPath, renderable);
+				for (size_t i = 0; i < renderable.materials.size(); ++i)
+					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
 			}
 
 			return ecsEntity;
@@ -251,7 +240,7 @@ void Renderer::setupGameObjects()
 		1.0f, 0.8f, 0.1f, false,
 		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
 
-	const int spawnCount = std::max(12, physicsSpawnCount);
+	const int spawnCount = std::max(2, physicsSpawnCount);
 	const float spawnBaseHeight = physicsSpawnHeight;
 	constexpr float twoPi = 6.28318530718f;
 	for (int i = 0; i < spawnCount; ++i)
@@ -289,16 +278,43 @@ void Renderer::rebuildRenderableRuntimeResources()
 {
 	auto& registry = mEnttScene.getRegistry();
 
+	auto hasLoadedTextureViews = [](const RenderableComponent::PBRTextures& textures) {
+		return (*textures.baseColorView != VK_NULL_HANDLE) ||
+			(*textures.metallicRoughnessView != VK_NULL_HANDLE) ||
+			(*textures.normalView != VK_NULL_HANDLE) ||
+			(*textures.occlusionView != VK_NULL_HANDLE) ||
+			(*textures.emissiveView != VK_NULL_HANDLE);
+	};
+
 	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
 	{
 		(void)entity;
 		if (renderable.vertices.empty() || renderable.indices.empty())
 			continue;
 
+		if (renderable.materialTextures.size() != renderable.materials.size()) {
+			renderable.materialTextures.clear();
+			renderable.materialTextures.resize(renderable.materials.size());
+		}
+
+		if (!renderable.sourceModelFile.empty()) {
+			bool hasAnyLoadedTextures = std::any_of(renderable.materialTextures.begin(), renderable.materialTextures.end(),
+				[&](const RenderableComponent::PBRTextures& textures) {
+					return hasLoadedTextureViews(textures);
+				});
+
+			if (!hasAnyLoadedTextures) {
+				tryReuseCachedGltfTextures(renderable.sourceModelFile, renderable);
+			}
+		}
+
 		createVertexBuffer(renderable);
 		createIndexBuffer(renderable);
-		for (size_t i = 0; i < renderable.materials.size(); ++i)
-			loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+        for (size_t i = 0; i < renderable.materials.size(); ++i) {
+			if (!hasLoadedTextureViews(renderable.materialTextures[i])) {
+				loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+			}
+		}
 	}
 
 	UniformBuffer::createUniformBuffers(registry, device, physicalDevice, MAX_FRAMES_IN_FLIGHT);
@@ -638,15 +654,15 @@ bool Renderer::tryReuseCachedGltfTextures(const std::string& modelFileName, Rend
 	if (key.empty())
 		return false;
 
-	auto cacheIt = mGltfModelTextureCache.find(key);
-	if (cacheIt == mGltfModelTextureCache.end())
+	auto it = mGltfModelTextureCache.find(key);
+	if (it == mGltfModelTextureCache.end() || it->second.empty())
 		return false;
 
-	auto& entries = cacheIt->second;
-	while (!entries.empty())
+	auto& cachedEntries = it->second;
+	while (!cachedEntries.empty())
 	{
-		auto textures = std::move(entries.front());
-		entries.pop_front();
+		auto textures = std::move(cachedEntries.front());
+		cachedEntries.pop_front();
 
 		if (textures.size() != renderable.materials.size())
 			continue;
@@ -798,7 +814,6 @@ bool Renderer::addModel(std::string modelFileName) {
 }
 
 void Renderer::deleteModel(std::string modelFileName) {
-  const std::string key = normalizeModelAssetKey(modelFileName);
 	std::string shortModelFileName = std::filesystem::path(modelFileName).filename().generic_string();
 
 	if (!mModelInstData.miAssimpInstances.empty()) {
@@ -851,11 +866,6 @@ void Renderer::deleteModel(std::string modelFileName) {
 	);
 
 	updateTriangleCount();
-
-	if (!key.empty()) {
-		mModelAssetCache.erase(key);
-		mModelAssetCache.erase(normalizeModelAssetKey(shortModelFileName));
-	}
 }
 
 std::shared_ptr<AssimpInstance> Renderer::addInstance(std::shared_ptr<AssimpModel> model) {
@@ -2642,23 +2652,23 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			const auto& renderableNode = node["renderable"];
 			const std::string modelPath = renderableNode.value("modelPath", std::string());
 			if (!modelPath.empty()) {
-            auto model = getOrLoadModelGltfAsset(modelPath);
-			if (model) {
-				auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
-				renderableComp.vertices = model->vertices;
-				renderableComp.indices = model->indices;
-				renderableComp.meshes = model->meshes;
-				renderableComp.materials = model->materials;
-				renderableComp.sourceModelFile = model->sourceModelFile;
-                renderableComp.materialTextures.clear();
-				renderableComp.materialDescriptorSets.clear();
+                auto model = getOrLoadModelGltfAsset(modelPath);
+				if (model) {
+					auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
+					renderableComp.vertices = model->vertices;
+					renderableComp.indices = model->indices;
+					renderableComp.meshes = model->meshes;
+					renderableComp.materials = model->materials;
+					renderableComp.sourceModelFile = model->sourceModelFile;
+					renderableComp.materialTextures.clear();
+					renderableComp.materialDescriptorSets.clear();
 
-				if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
-					renderableComp.materialTextures.resize(renderableComp.materials.size());
-					for (size_t i = 0; i < renderableComp.materials.size(); ++i)
-						loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
+					if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
+						renderableComp.materialTextures.resize(renderableComp.materials.size());
+						for (size_t i = 0; i < renderableComp.materials.size(); ++i)
+							loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
+					}
 				}
-			}
 			}
 		}
 

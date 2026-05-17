@@ -785,13 +785,23 @@ void Renderer::mainLoop()
 {
 	lastFrameTime = 0.0f;
 	currentFrameIndex = 0;
+
+	constexpr float fixedStep = 1.0f / 60.0f;
+	constexpr float maxFrameDelta = 0.25f;
+	constexpr int maxSubsteps = 8;
+
+	float accumulator = 0.0f;
+	auto startTime = std::chrono::high_resolution_clock::now();
+
 	while (!glfwWindowShouldClose(window))
 	{
-		static auto startTime = std::chrono::high_resolution_clock::now();
 		auto        currentTime = std::chrono::high_resolution_clock::now();
 		float       time = std::chrono::duration<float>(currentTime - startTime).count();
 		float       deltaTime = time - lastFrameTime;
 		lastFrameTime = time;
+
+		deltaTime = std::min(deltaTime, maxFrameDelta);
+
 		InputSystem::Update(deltaTime);
 
 		camera.processInput(window, camera, deltaTime);
@@ -799,10 +809,23 @@ void Renderer::mainLoop()
 
 		if (sceneState == SceneState::PLAY)
 		{
-			physicsSystem.step(deltaTime, reg);
-			updateAssimpAnimations(deltaTime);
+			accumulator += deltaTime;
+
+			int substeps = 0;
+
+			while (accumulator >= fixedStep && substeps < maxSubsteps)
+			{
+				physicsSystem.step(fixedStep, reg);
+				updateAssimpAnimations(fixedStep);
+				accumulator -= fixedStep;
+				substeps++;
+			}
 		}
-		updateAssimpAnimations(0.0f);
+		else
+		{
+			accumulator = 0.0f;
+			updateAssimpAnimations(0.0f);
+		}
 
 		drawFrame();
 		currentFrameIndex++;

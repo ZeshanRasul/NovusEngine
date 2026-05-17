@@ -344,7 +344,7 @@ private:
 	ShadowSettings shadowSettings;
 	PhysicsSystem physicsSystem;
 	bool physicsPaused = false;
-	int physicsSpawnCount = 20;
+	int physicsSpawnCount = 2;
 	float physicsSpawnHeight = -400.0f;
 	float  lastFrameTime = 0.0f;
 

@@ -166,11 +166,22 @@ void Renderer::setupGameObjects()
 
 			if (!modelPath.empty())
 			{
-				auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
-				renderable.sourceModelFile = modelPath;
-				Model::loadModel(modelPath, renderable);
-				for (size_t i = 0; i < renderable.materials.size(); ++i)
-					loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+             auto asset = getOrLoadModelGltfAsset(modelPath);
+				if (asset)
+				{
+					auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
+					renderable.vertices = asset->vertices;
+					renderable.indices = asset->indices;
+					renderable.meshes = asset->meshes;
+					renderable.materials = asset->materials;
+					renderable.sourceModelFile = asset->sourceModelFile;
+                    renderable.materialTextures.clear();
+					renderable.materialTextures.resize(renderable.materials.size());
+					renderable.materialDescriptorSets.clear();
+
+					for (size_t i = 0; i < renderable.materials.size(); ++i)
+						loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
+				}
 			}
 
 			return ecsEntity;
@@ -518,18 +529,215 @@ void Renderer::initEnttDemoScene()
 	pushUndoSnapshot();
 }
 
+std::string Renderer::normalizeModelAssetKey(const std::string& modelFileName) const
+{
+	if (modelFileName.empty())
+		return {};
+
+	std::filesystem::path path(modelFileName);
+	std::string key = path.lexically_normal().generic_string();
+	std::transform(key.begin(), key.end(), key.begin(),
+		[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	return key;
+}
+
+std::shared_ptr<AssimpModel> Renderer::getOrLoadModelAssimpAsset(const std::string& modelFileName)
+{
+	const std::string key = normalizeModelAssetKey(modelFileName);
+	if (key.empty())
+		return nullptr;
+
+	if (auto it = mModelAssetCache.find(key); it != mModelAssetCache.end() && it->second)
+	{
+		ensureModelInSceneList(it->second);
+		return it->second;
+	}
+
+	for (const auto& existing : mModelInstData.miModelList)
+	{
+		if (!existing)
+			continue;
+
+		const std::string fullPathKey = normalizeModelAssetKey(existing->getModelFileNamePath());
+		const std::string fileNameKey = normalizeModelAssetKey(existing->getModelFileName());
+		if (fullPathKey == key || fileNameKey == key)
+		{
+			mModelAssetCache[key] = existing;
+			ensureModelInSceneList(existing);
+			return existing;
+		}
+	}
+
+	auto model = std::make_shared<AssimpModel>();
+	if (!model->loadModel(mRenderData, modelFileName))
+		return nullptr;
+
+	mModelAssetCache[key] = model;
+	ensureModelInSceneList(model);
+	return model;
+}
+
+void Renderer::ensureModelInSceneList(const std::shared_ptr<AssimpModel>& model)
+{
+	if (!model)
+		return;
+
+	const std::string fullPathKey = normalizeModelAssetKey(model->getModelFileNamePath());
+	const std::string fileNameKey = normalizeModelAssetKey(model->getModelFileName());
+
+	auto it = std::find_if(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(),
+		[&](const std::shared_ptr<AssimpModel>& existing) {
+			if (!existing)
+				return false;
+			return normalizeModelAssetKey(existing->getModelFileNamePath()) == fullPathKey ||
+				normalizeModelAssetKey(existing->getModelFileName()) == fileNameKey;
+		});
+
+	if (it == mModelInstData.miModelList.end())
+		mModelInstData.miModelList.emplace_back(model);
+}
+
+std::shared_ptr<RenderableComponent> Renderer::getOrLoadModelGltfAsset(const std::string& modelFileName)
+{
+	const std::string key = normalizeModelAssetKey(modelFileName);
+	if (key.empty())
+		return nullptr;
+
+	if (auto it = mGltfModelAssetCache.find(key); it != mGltfModelAssetCache.end() && it->second)
+	{
+		ensureGltfModelInSceneList(it->second);
+		return it->second;
+	}
+
+	if (auto existing = getRenderableModel(modelFileName))
+	{
+		mGltfModelAssetCache[key] = existing;
+		ensureGltfModelInSceneList(existing);
+		return existing;
+	}
+
+	auto model = std::make_shared<RenderableComponent>();
+	try
+	{
+		Model::loadModel(modelFileName, *model);
+	}
+	catch (...)
+	{
+		return nullptr;
+	}
+
+	model->sourceModelFile = std::filesystem::path(modelFileName).lexically_normal().generic_string();
+	mGltfModelAssetCache[key] = model;
+	ensureGltfModelInSceneList(model);
+	return model;
+}
+
+bool Renderer::tryReuseCachedGltfTextures(const std::string& modelFileName, RenderableComponent& renderable)
+{
+	const std::string key = normalizeModelAssetKey(modelFileName);
+	if (key.empty())
+		return false;
+
+	auto cacheIt = mGltfModelTextureCache.find(key);
+	if (cacheIt == mGltfModelTextureCache.end())
+		return false;
+
+	auto& entries = cacheIt->second;
+	while (!entries.empty())
+	{
+		auto textures = std::move(entries.front());
+		entries.pop_front();
+
+		if (textures.size() != renderable.materials.size())
+			continue;
+
+		renderable.materialTextures = std::move(textures);
+		return true;
+	}
+
+	return false;
+}
+
+void Renderer::captureGltfTexturesFromScene(entt::registry& registry)
+{
+	mGltfModelTextureCache.clear();
+
+	for (auto [entity, renderable] : registry.view<RenderableComponent>().each())
+	{
+		(void)entity;
+		if (renderable.sourceModelFile.empty() || renderable.materialTextures.empty())
+			continue;
+
+		const std::string key = normalizeModelAssetKey(renderable.sourceModelFile);
+		if (key.empty())
+			continue;
+
+		mGltfModelTextureCache[key].emplace_back(std::move(renderable.materialTextures));
+	}
+}
+
+void Renderer::ensureGltfModelInSceneList(const std::shared_ptr<RenderableComponent>& model)
+{
+	if (!model)
+		return;
+
+	const std::string key = normalizeModelAssetKey(model->sourceModelFile);
+	auto it = std::find_if(mSceneRenderableModels.begin(), mSceneRenderableModels.end(),
+		[&](const std::shared_ptr<RenderableComponent>& existing) {
+			if (!existing)
+				return false;
+			return normalizeModelAssetKey(existing->sourceModelFile) == key;
+		});
+
+	if (it == mSceneRenderableModels.end())
+		mSceneRenderableModels.emplace_back(model);
+}
+
+std::shared_ptr<RenderableComponent> Renderer::getRenderableModel(std::string modelFileName)
+{
+	const std::string key = normalizeModelAssetKey(modelFileName);
+	if (key.empty())
+		return nullptr;
+
+	auto it = std::find_if(mSceneRenderableModels.begin(), mSceneRenderableModels.end(),
+		[&](const std::shared_ptr<RenderableComponent>& model) {
+			if (!model)
+				return false;
+
+			const std::string fullPathKey = normalizeModelAssetKey(model->sourceModelFile);
+			const std::string fileNameKey = normalizeModelAssetKey(std::filesystem::path(model->sourceModelFile).filename().generic_string());
+			return fullPathKey == key || fileNameKey == key;
+		});
+
+	return (it != mSceneRenderableModels.end()) ? *it : nullptr;
+}
+
 bool Renderer::hasModel(std::string modelFileName) {
+ const std::string key = normalizeModelAssetKey(modelFileName);
+	if (key.empty())
+		return false;
+
 	auto modelIter = std::find_if(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(),
-		[modelFileName](const auto& model) {
-			return model->getModelFileNamePath() == modelFileName || model->getModelFileName() == modelFileName;
+        [&](const auto& model) {
+			if (!model)
+				return false;
+			return normalizeModelAssetKey(model->getModelFileNamePath()) == key ||
+				normalizeModelAssetKey(model->getModelFileName()) == key;
 		});
 	return modelIter != mModelInstData.miModelList.end();
 }
 
 std::shared_ptr<AssimpModel> Renderer::getModel(std::string modelFileName) {
+ const std::string key = normalizeModelAssetKey(modelFileName);
+	if (key.empty())
+		return nullptr;
+
 	auto modelIter = std::find_if(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(),
-		[modelFileName](const auto& model) {
-			return model->getModelFileNamePath() == modelFileName || model->getModelFileName() == modelFileName;
+        [&](const auto& model) {
+			if (!model)
+				return false;
+			return normalizeModelAssetKey(model->getModelFileNamePath()) == key ||
+				normalizeModelAssetKey(model->getModelFileName()) == key;
 		});
 	if (modelIter != mModelInstData.miModelList.end()) {
 		return *modelIter;
@@ -542,12 +750,10 @@ bool Renderer::addModel(std::string modelFileName) {
 		return false;
 	}
 
-	std::shared_ptr<AssimpModel> model = std::make_shared<AssimpModel>();
-	if (!model->loadModel(mRenderData, modelFileName)) {
+   std::shared_ptr<AssimpModel> model = getOrLoadModelAssimpAsset(modelFileName);
+	if (!model) {
 		return false;
 	}
-
-	mModelInstData.miModelList.emplace_back(model);
 
 	/* also add a new instance here to see the model */
 	auto newInstance = addInstance(model);
@@ -592,6 +798,7 @@ bool Renderer::addModel(std::string modelFileName) {
 }
 
 void Renderer::deleteModel(std::string modelFileName) {
+  const std::string key = normalizeModelAssetKey(modelFileName);
 	std::string shortModelFileName = std::filesystem::path(modelFileName).filename().generic_string();
 
 	if (!mModelInstData.miAssimpInstances.empty()) {
@@ -644,6 +851,11 @@ void Renderer::deleteModel(std::string modelFileName) {
 	);
 
 	updateTriangleCount();
+
+	if (!key.empty()) {
+		mModelAssetCache.erase(key);
+		mModelAssetCache.erase(normalizeModelAssetKey(shortModelFileName));
+	}
 }
 
 std::shared_ptr<AssimpInstance> Renderer::addInstance(std::shared_ptr<AssimpModel> model) {
@@ -2365,17 +2577,7 @@ std::shared_ptr<AssimpModel> Renderer::ensureModelLoadedForScene(const std::stri
 	if (modelFileName.empty())
 		return nullptr;
 
-	if (auto existing = getModel(modelFileName)) {
-		return existing;
-	}
-
-	std::shared_ptr<AssimpModel> model = std::make_shared<AssimpModel>();
-	if (!model->loadModel(mRenderData, modelFileName)) {
-		return nullptr;
-	}
-
-	mModelInstData.miModelList.emplace_back(model);
-	return model;
+	return getOrLoadModelAssimpAsset(modelFileName);
 }
 
 bool Renderer::deserializeEnttScene(const std::string& sceneJson)
@@ -2386,12 +2588,17 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 	}
 
 	auto& registry = mEnttScene.getRegistry();
+ captureGltfTexturesFromScene(registry);
+
 	std::vector<entt::entity> existingEntities;
 	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent&) {
 		existingEntities.push_back(entity);
 		});
 
 	for (auto entity : existingEntities) {
+       if (auto* renderable = registry.try_get<RenderableComponent>(entity)) {
+			renderable->materialDescriptorSets.clear();
+		}
 		mEnttScene.destroyEntity(entity);
 	}
 
@@ -2435,9 +2642,23 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			const auto& renderableNode = node["renderable"];
 			const std::string modelPath = renderableNode.value("modelPath", std::string());
 			if (!modelPath.empty()) {
+            auto model = getOrLoadModelGltfAsset(modelPath);
+			if (model) {
 				auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
-				Model::loadModel(modelPath, renderableComp);
-				renderableComp.sourceModelFile = modelPath;
+				renderableComp.vertices = model->vertices;
+				renderableComp.indices = model->indices;
+				renderableComp.meshes = model->meshes;
+				renderableComp.materials = model->materials;
+				renderableComp.sourceModelFile = model->sourceModelFile;
+                renderableComp.materialTextures.clear();
+				renderableComp.materialDescriptorSets.clear();
+
+				if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
+					renderableComp.materialTextures.resize(renderableComp.materials.size());
+					for (size_t i = 0; i < renderableComp.materials.size(); ++i)
+						loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
+				}
+			}
 			}
 		}
 

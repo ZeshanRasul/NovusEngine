@@ -9,6 +9,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <deque>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -365,6 +366,22 @@ private:
 	bool mHistoryMuted = false;
 	std::string mSceneFilePath = "scene.json";
 	std::string mEditorSceneFilePath = "editor_scene.json";
+
+	std::string normalizeModelAssetKey(const std::string& modelFileName) const;
+	std::shared_ptr<AssimpModel> getOrLoadModelAssimpAsset(const std::string& modelFileName);
+	void ensureModelInSceneList(const std::shared_ptr<AssimpModel>& model);
+
+	std::unordered_map<std::string, std::shared_ptr<AssimpModel>> mModelAssetCache;
+
+	std::shared_ptr<RenderableComponent> getOrLoadModelGltfAsset(const std::string& modelFileName);
+	void ensureGltfModelInSceneList(const std::shared_ptr<RenderableComponent>& model);
+	bool tryReuseCachedGltfTextures(const std::string& modelFileName, RenderableComponent& renderable);
+	void captureGltfTexturesFromScene(entt::registry& registry);
+
+	std::unordered_map<std::string, std::shared_ptr<RenderableComponent>> mGltfModelAssetCache;
+	std::vector<std::shared_ptr<RenderableComponent>> mSceneRenderableModels;
+ std::unordered_map<std::string, std::deque<std::vector<RenderableComponent::PBRTextures>>> mGltfModelTextureCache;
+	std::shared_ptr<RenderableComponent> getRenderableModel(std::string modelFileName);
 
 	bool hasModel(std::string modelFileName);
 	std::shared_ptr<AssimpModel> getModel(std::string modelFileName);

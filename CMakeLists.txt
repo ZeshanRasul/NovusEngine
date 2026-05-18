@@ -95,6 +95,7 @@ function(add_slang_shader_target TARGET)
         "fxaa.slang|fxaa.spv|vertMain|fragMain"
         "bloom_extract.slang|bloom_extract.spv|vertMain|fragMain"
         "bloom_blur.slang|bloom_blur.spv|vertMain|fragMain"
+        "debug_lines.slang|debug_lines.spv|vertMain|fragMain"
     )
 
     foreach(SHADER_ENTRY IN LISTS SLANG_SHADERS)

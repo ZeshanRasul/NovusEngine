@@ -461,6 +461,9 @@ void Renderer::initVulkan()
 	{
 		std::cerr << "Failed to create PBR pipeline" << std::endl;
 	}
+
+	createColliderDebugPipeline();
+
 	std::array<glm::vec4, 4> pointLightPositions = {
 	   glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
 	   glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
@@ -1268,6 +1271,13 @@ void Renderer::cleanup()
 		delete imGui;
 		imGui = nullptr;
 	}
+
+	colliderDebugPipeline = nullptr;
+	colliderDebugPipelineLayout = nullptr;
+	colliderDebugVertexBuffer = nullptr;
+	colliderDebugVertexBufferMemory = nullptr;
+	colliderDebugVertexCapacity = 0;
+	colliderDebugVertices.clear();
 
 	physicsSystem.shutdown();
 
@@ -3295,6 +3305,154 @@ bool Renderer::createPBRPipeline()
 	}
 }
 
+void Renderer::createColliderDebugPipeline()
+{
+	vk::PushConstantRange pushRange{
+		.stageFlags = vk::ShaderStageFlagBits::eVertex,
+		.offset = 0,
+		.size = sizeof(DebugLinePushConstants)
+	};
+
+	auto binding = DebugLineVertex::getBindingDescription();
+	auto attribs = DebugLineVertex::getAttributeDescriptions();
+
+	Pipeline::PipelineConfig config{};
+	config.shaderStages = {
+		{ "shaders\\debug_lines.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\debug_lines.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+	};
+	config.vertexBindings = { binding };
+	config.vertexAttributes = { attribs.begin(), attribs.end() };
+	config.pushConstantRanges = { pushRange };
+	config.colorAttachmentFormats = { vk::Format::eR16G16B16A16Sfloat };
+	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+	config.topology = vk::PrimitiveTopology::eLineList;
+	config.cullMode = vk::CullModeFlagBits::eNone;
+	config.depthTestEnable = true;
+	config.depthWriteEnable = false;
+	config.depthCompareOp = vk::CompareOp::eLessOrEqual;
+	config.blendEnable = false;
+
+	auto bundle = Pipeline::createPipeline(device, config);
+	colliderDebugPipelineLayout = std::move(bundle.layout);
+	colliderDebugPipeline = std::move(bundle.pipeline);
+}
+
+void Renderer::ensureColliderDebugVertexCapacity(size_t vertexCount)
+{
+	if (vertexCount <= colliderDebugVertexCapacity)
+		return;
+
+	size_t newCapacity = std::max<size_t>(1024, colliderDebugVertexCapacity);
+	while (newCapacity < vertexCount)
+		newCapacity *= 2;
+
+	vk::raii::Buffer newBuffer({ });
+	vk::raii::DeviceMemory newMemory({ });
+	Buffer::createBuffer(device, physicalDevice,
+		static_cast<vk::DeviceSize>(newCapacity * sizeof(DebugLineVertex)),
+		vk::BufferUsageFlagBits::eVertexBuffer,
+		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+		newBuffer, newMemory);
+
+	colliderDebugVertexBuffer = std::move(newBuffer);
+	colliderDebugVertexBufferMemory = std::move(newMemory);
+	colliderDebugVertexCapacity = newCapacity;
+}
+
+void Renderer::rebuildColliderDebugLines()
+{
+	colliderDebugVertices.clear();
+	auto& registry = mEnttScene.getRegistry();
+
+	constexpr std::array<std::pair<int, int>, 12> boxEdges = { {
+		{0,1},{1,2},{2,3},{3,0},
+		{4,5},{5,6},{6,7},{7,4},
+		{0,4},{1,5},{2,6},{3,7}
+	} };
+
+	for (auto [entity, tr, col] : registry.view<TransformComponent, ColliderComponent>().each())
+	{
+		(void)entity;
+		const glm::vec3 color = glm::vec3(0.15f, 1.0f, 0.15f);
+		const glm::mat4 M = tr.GetTransformMatrix();
+
+		if (col.shapeType == ColliderShapeType::Box)
+		{
+			const glm::vec3 e = glm::max(col.halfExtents, glm::vec3(0.001f));
+			std::array<glm::vec3, 8> p = {
+				glm::vec3(-e.x,-e.y,-e.z), glm::vec3(e.x,-e.y,-e.z),
+				glm::vec3(e.x, e.y,-e.z), glm::vec3(-e.x, e.y,-e.z),
+				glm::vec3(-e.x,-e.y, e.z), glm::vec3(e.x,-e.y, e.z),
+				glm::vec3(e.x, e.y, e.z), glm::vec3(-e.x, e.y, e.z)
+			};
+			for (auto& v : p)
+				v = glm::vec3(M * glm::vec4(v, 1.0f));
+
+			for (auto [a, b] : boxEdges)
+				appendLine(colliderDebugVertices, p[a], p[b], color);
+		}
+		else
+		{
+			// Sphere/Capsule fallback ring set (fast, good enough for debug)
+			const glm::vec3 center = tr.GetPosition();
+			const float r = std::max(col.radius, 0.001f);
+			constexpr int seg = 24;
+			for (int i = 0; i < seg; ++i)
+			{
+				const float a0 = (float(i) / float(seg)) * glm::two_pi<float>();
+				const float a1 = (float(i + 1) / float(seg)) * glm::two_pi<float>();
+
+				appendLine(colliderDebugVertices,
+					center + glm::vec3(std::cos(a0) * r, std::sin(a0) * r, 0.0f),
+					center + glm::vec3(std::cos(a1) * r, std::sin(a1) * r, 0.0f),
+					color);
+
+				appendLine(colliderDebugVertices,
+					center + glm::vec3(0.0f, std::cos(a0) * r, std::sin(a0) * r),
+					center + glm::vec3(0.0f, std::cos(a1) * r, std::sin(a1) * r),
+					color);
+
+				appendLine(colliderDebugVertices,
+					center + glm::vec3(std::cos(a0) * r, 0.0f, std::sin(a0) * r),
+					center + glm::vec3(std::cos(a1) * r, 0.0f, std::sin(a1) * r),
+					color);
+			}
+		}
+	}
+}
+
+void Renderer::recordColliderDebugPass(vk::raii::CommandBuffer& commandBuffer)
+{
+	if (!physicsDrawColliderDebug || *colliderDebugPipeline == VK_NULL_HANDLE)
+		return;
+
+	rebuildColliderDebugLines();
+	if (colliderDebugVertices.empty())
+		return;
+
+	ensureColliderDebugVertexCapacity(colliderDebugVertices.size());
+
+	void* mapped = colliderDebugVertexBufferMemory.mapMemory(
+		0, colliderDebugVertices.size() * sizeof(DebugLineVertex));
+	std::memcpy(mapped, colliderDebugVertices.data(),
+		colliderDebugVertices.size() * sizeof(DebugLineVertex));
+	colliderDebugVertexBufferMemory.unmapMemory();
+
+	const float aspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
+	DebugLinePushConstants pc{};
+	pc.viewProj = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f) * camera.getViewMatrix();
+
+	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *colliderDebugPipeline);
+	commandBuffer.pushConstants<DebugLinePushConstants>(
+		*colliderDebugPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, pc);
+
+	vk::Buffer vb = *colliderDebugVertexBuffer;
+	vk::DeviceSize off = 0;
+	commandBuffer.bindVertexBuffers(0, vb, off);
+	commandBuffer.draw(static_cast<uint32_t>(colliderDebugVertices.size()), 1, 0, 0);
+}
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -3337,6 +3495,7 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
 
 	beginMainPass(commandBuffer, imageIndex);
 	recordScenePass(commandBuffer);
+	recordColliderDebugPass(commandBuffer);
 	commandBuffer.endRendering();
 
 	if (renderEnablePostProcessing)
@@ -4283,6 +4442,7 @@ void Renderer::transition_image_layout(vk::Image               image,
 		.pImageMemoryBarriers = &barrier
 	};
 	commandBuffers[frameIndex].pipelineBarrier2(dependency_info);
+
 }
 
 // ---------------------------------------------------------------------------

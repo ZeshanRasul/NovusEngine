@@ -18,7 +18,6 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include "glm/glm.hpp"
 #include <glm/gtc/matrix_transform.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/hash.hpp>
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
@@ -388,7 +387,7 @@ private:
 
 	std::unordered_map<std::string, std::shared_ptr<RenderableComponent>> mGltfModelAssetCache;
 	std::vector<std::shared_ptr<RenderableComponent>> mSceneRenderableModels;
- std::unordered_map<std::string, std::deque<std::vector<RenderableComponent::PBRTextures>>> mGltfModelTextureCache;
+	std::unordered_map<std::string, std::deque<std::vector<RenderableComponent::PBRTextures>>> mGltfModelTextureCache;
 	std::unordered_map<std::string, std::deque<CachedTextureResource>> mTextureAssetCache;
 	std::shared_ptr<RenderableComponent> getRenderableModel(std::string modelFileName);
 
@@ -534,6 +533,51 @@ private:
 	BPLayerInterfaceImpl broad_phase_layer_interface;
 	ObjectVsBroadPhaseLayerFilterImpl object_vs_broadphase_layer_filter;
 	ObjectLayerPairFilterImpl object_vs_object_layer_filter;
+
+	void createColliderDebugPipeline();
+	void recordColliderDebugPass(vk::raii::CommandBuffer& commandBuffer);
+	void rebuildColliderDebugLines();
+	void ensureColliderDebugVertexCapacity(size_t vertexCount);
+
+	struct DebugLineVertex
+	{
+		glm::vec3 position;
+		glm::vec3 color;
+
+		static vk::VertexInputBindingDescription getBindingDescription()
+		{
+			return { .binding = 0, .stride = sizeof(DebugLineVertex), .inputRate = vk::VertexInputRate::eVertex };
+		}
+
+		static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
+		{
+			return {
+				vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(DebugLineVertex, position)),
+				vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(DebugLineVertex, color))
+			};
+		}
+	};
+
+
+	struct DebugLinePushConstants
+	{
+		glm::mat4 viewProj{ 1.0f };
+	};
+
+	static void appendLine(std::vector<Renderer::DebugLineVertex>& out,
+		const glm::vec3& a, const glm::vec3& b, const glm::vec3& color)
+	{
+		out.push_back({ a, color });
+		out.push_back({ b, color });
+	};
+
+	vk::raii::PipelineLayout colliderDebugPipelineLayout = nullptr;
+	vk::raii::Pipeline colliderDebugPipeline = nullptr;
+	vk::raii::Buffer colliderDebugVertexBuffer = nullptr;
+	vk::raii::DeviceMemory colliderDebugVertexBufferMemory = nullptr;
+	size_t colliderDebugVertexCapacity = 0;
+	std::vector<DebugLineVertex> colliderDebugVertices{};
+	bool physicsDrawColliderDebug = true;
 
 	SceneState sceneState = SceneState::EDIT;
 	int currentFrameIndex = 0;

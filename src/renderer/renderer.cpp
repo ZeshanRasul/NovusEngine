@@ -27,6 +27,7 @@
 #include "../model/AssimpModel.h"
 #include "../model/AssimpInstance.h"
 #include "../model/InstanceSettings.h"
+#include "../core/scene_serialization.h"
 #include "../../lib/ImGuiFileDialog.h"
 #include "../../include/imgui_internal.h"
 
@@ -583,8 +584,7 @@ void Renderer::initEnttDemoScene()
 		}
 		});
 
-	mUndoSnapshots.clear();
-	mRedoSnapshots.clear();
+ mSceneRuntimeService.clearHistory();
 	pushUndoSnapshot();
 }
 
@@ -1172,7 +1172,7 @@ void Renderer::mainLoop()
 
 		InputSystem::Update(deltaTime);
 
-		const bool allowEditorCameraInput = !(sceneState == SceneState::PLAY && mGameLayer != nullptr);
+		const bool allowEditorCameraInput = !(sceneState == SceneState::PLAY && mGameplayRuntime.hasActiveLayer());
 		if (allowEditorCameraInput)
 			camera.processInput(window, camera, deltaTime);
 		auto& reg = mEnttScene.getRegistry();
@@ -1180,15 +1180,13 @@ void Renderer::mainLoop()
 		if (sceneState == SceneState::PLAY)
 		{
 			accumulator += deltaTime;
-			mGameplayInput = sampleGameplayInput();
 			auto gameplayContext = buildGameplayRuntimeContext();
 
 			int substeps = 0;
 
 			while (accumulator >= fixedStep && substeps < maxSubsteps)
 			{
-				if (mGameLayer)
-					mGameLayer->onFixedUpdate(fixedStep, mGameplayInput, gameplayContext);
+				mGameplayRuntime.fixedUpdate(fixedStep, window, gameplayContext);
 				physicsSystem.step(fixedStep, reg);
 				updateAssimpAnimations(fixedStep);
 				accumulator -= fixedStep;
@@ -1390,10 +1388,11 @@ void Renderer::buildEditorDockspace()
 		ImGui::DockBuilderSetNodeSize(dockspaceId, mainViewport->Size);
 
 		ImGuiID dockMain = dockspaceId;
-		ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.20f, nullptr, &dockMain);
+     ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.20f, nullptr, &dockMain);
 		ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.28f, nullptr, &dockMain);
 		ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.30f, nullptr, &dockMain);
 		ImGuiID dockLeftBottom = ImGui::DockBuilderSplitNode(dockLeft, ImGuiDir_Down, 0.45f, nullptr, &dockLeft);
+		ImGuiID dockRightSecondary = ImGui::DockBuilderSplitNode(dockRight, ImGuiDir_Down, 0.48f, nullptr, &dockRight);
 
 		ImGui::DockBuilderDockWindow("Viewport", dockMain);
 		ImGui::DockBuilderDockWindow("ECS Scene", dockLeft);
@@ -1617,52 +1616,52 @@ void Renderer::renderImgui()
 				suggestedPrefabName = selectedTag->name;
 		}
 
-		mPrefabSaveFilePath = "prefabs/" + makePrefabSafeName(suggestedPrefabName) + ".prefab.json";
+        mSceneRuntimeService.state().prefabSaveFilePath() = "prefabs/" + makePrefabSafeName(suggestedPrefabName) + ".prefab.json";
 
-		if (mPrefabAssetsDirty)
+        if (mSceneRuntimeService.state().prefabAssetsDirty())
 			refreshPrefabAssetList();
 
 		ImGui::Begin("Prefabs");
 		if (ImGui::Button("Refresh"))
 		{
-			mPrefabAssetsDirty = true;
+           mSceneRuntimeService.state().markPrefabAssetsDirty();
 			refreshPrefabAssetList();
 		}
 
 		ImGui::SameLine();
 		if (ImGui::Button("Save Selected As Prefab"))
 		{
-			if (saveSelectedAsPrefab(mPrefabSaveFilePath))
+            if (saveSelectedAsPrefab(mSceneRuntimeService.state().prefabSaveFilePath()))
 			{
-				mPrefabAssetsDirty = true;
-				mPrefabFilePath = mPrefabSaveFilePath;
+               mSceneRuntimeService.state().markPrefabAssetsDirty();
+				mSceneRuntimeService.state().prefabFilePath() = mSceneRuntimeService.state().prefabSaveFilePath();
 				refreshPrefabAssetList();
 			}
 		}
 
-		ImGui::Text("Save Path: %s", mPrefabSaveFilePath.c_str());
+        ImGui::Text("Save Path: %s", mSceneRuntimeService.state().prefabSaveFilePath().c_str());
 
 		ImGui::Separator();
 		ImGui::Text("Available Prefabs");
-		for (int i = 0; i < static_cast<int>(mPrefabAssets.size()); ++i)
+        for (int i = 0; i < static_cast<int>(mSceneRuntimeService.state().prefabAssets().size()); ++i)
 		{
-			const bool selected = (mSelectedPrefabAsset == i);
-			if (ImGui::Selectable(mPrefabAssets[i].c_str(), selected))
+            const bool selected = (mSceneRuntimeService.state().selectedPrefabAsset() == i);
+			if (ImGui::Selectable(mSceneRuntimeService.state().prefabAssets()[i].c_str(), selected))
 			{
-				mSelectedPrefabAsset = i;
-				mPrefabFilePath = mPrefabAssets[i];
+                mSceneRuntimeService.state().setSelectedPrefabAsset(i);
+				mSceneRuntimeService.state().prefabFilePath() = mSceneRuntimeService.state().prefabAssets()[i];
 			}
 		}
 
 		ImGui::Separator();
-		ImGui::Text("Instantiate Path: %s", mPrefabFilePath.empty() ? "<none>" : mPrefabFilePath.c_str());
+        ImGui::Text("Instantiate Path: %s", mSceneRuntimeService.state().prefabFilePath().empty() ? "<none>" : mSceneRuntimeService.state().prefabFilePath().c_str());
 
-		ImGui::BeginDisabled(mSelectedPrefabAsset < 0 || mSelectedPrefabAsset >= static_cast<int>(mPrefabAssets.size()));
+        ImGui::BeginDisabled(mSceneRuntimeService.state().selectedPrefabAsset() < 0 || mSceneRuntimeService.state().selectedPrefabAsset() >= static_cast<int>(mSceneRuntimeService.state().prefabAssets().size()));
 		if (ImGui::Button("Instantiate Selected Prefab") &&
-			mSelectedPrefabAsset >= 0 &&
-			mSelectedPrefabAsset < static_cast<int>(mPrefabAssets.size()))
+            mSceneRuntimeService.state().selectedPrefabAsset() >= 0 &&
+			mSceneRuntimeService.state().selectedPrefabAsset() < static_cast<int>(mSceneRuntimeService.state().prefabAssets().size()))
 		{
-			instantiatePrefab(mPrefabAssets[mSelectedPrefabAsset]);
+            instantiatePrefab(mSceneRuntimeService.state().prefabAssets()[mSceneRuntimeService.state().selectedPrefabAsset()]);
 		}
 		ImGui::EndDisabled();
 		ImGui::End();
@@ -1952,9 +1951,7 @@ void Renderer::renderImgui()
 
 void Renderer::enterPlayMode()
 {
-	std::ofstream outFile(mEditorSceneFilePath, std::ios::out | std::ios::trunc);
-	if (outFile.is_open())
-		outFile << serializeEnttScene();
+    mSceneRuntimeService.saveEditorScene([this]() { return serializeEnttScene(); });
 
 	mLogPlayToEditCacheStats = false;
 
@@ -1962,32 +1959,24 @@ void Renderer::enterPlayMode()
 	currentFrameIndex = 0;
 	physicsSystem.setPaused(false);
 
-	if (mUseDefaultGameLayer)
-		mGameLayer = std::make_unique<Gameplay::DefaultGameLayer>();
-
-	if (mGameLayer) {
-		auto gameplayContext = buildGameplayRuntimeContext();
-		mGameLayer->onEnterPlay(gameplayContext);
-	}
+	auto gameplayContext = buildGameplayRuntimeContext();
+	mGameplayRuntime.enterPlay(gameplayContext);
 }
 
 void Renderer::exitPlayMode()
 {
 	mLogPlayToEditCacheStats = true;
 
-	std::ifstream inFile(mEditorSceneFilePath);
-	if (inFile.is_open()) {
-		std::string jsonContent((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+    if (mSceneRuntimeService.loadEditorScene([this](const std::string& jsonContent) {
 		pushUndoSnapshot();
-		deserializeEnttScene(jsonContent);
+		return deserializeEnttScene(jsonContent);
+		})) {
 	}
 
 	mLogPlayToEditCacheStats = false;
 
-	if (mGameLayer) {
-		auto gameplayContext = buildGameplayRuntimeContext();
-		mGameLayer->onExitPlay(gameplayContext);
-	}
+	auto gameplayContext = buildGameplayRuntimeContext();
+	mGameplayRuntime.exitPlay(gameplayContext);
 
 	sceneState = SceneState::EDIT;
 	currentFrameIndex = 0;
@@ -2168,19 +2157,14 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 		performRedo();
 	ImGui::SameLine();
 	if (ImGui::Button("Save Scene")) {
-		std::ofstream outFile(mSceneFilePath, std::ios::out | std::ios::trunc);
-		if (outFile.is_open()) {
-			outFile << serializeEnttScene();
-		}
+        mSceneRuntimeService.saveScene([this]() { return serializeEnttScene(); });
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("Load Scene")) {
-		std::ifstream inFile(mSceneFilePath);
-		if (inFile.is_open()) {
-			std::string jsonContent((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+        mSceneRuntimeService.loadScene([this](const std::string& jsonContent) {
 			pushUndoSnapshot();
-			deserializeEnttScene(jsonContent);
-		}
+			return deserializeEnttScene(jsonContent);
+			});
 	}
 
 	if (ImGui::Button("Create Entity"))
@@ -2627,11 +2611,13 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 
 		ImGui::Separator();
 		ImGui::TextUnformatted("Gameplay");
-		if (mGameLayer)
+		if (mGameplayRuntime.hasActiveLayer())
 			ImGui::TextUnformatted("Layer: DefaultGameLayer");
 		else
 			ImGui::TextUnformatted("Layer: None");
-		ImGui::Checkbox("Use Default Gameplay Layer", &mUseDefaultGameLayer);
+		bool useDefaultLayer = mGameplayRuntime.useDefaultLayer();
+		if (ImGui::Checkbox("Use Default Gameplay Layer", &useDefaultLayer))
+			mGameplayRuntime.setUseDefaultLayer(useDefaultLayer);
 
 		if (auto* controller = registry.try_get<PlayerControllerComponent>(mEnttSelectedEntity)) {
 			ImGui::Checkbox("Controller Enabled", &controller->enabled);
@@ -2795,21 +2781,6 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 	}
 }
 
-Gameplay::GameplayInputState Renderer::sampleGameplayInput() const
-{
-	Gameplay::GameplayInputState input{};
-	if (!window)
-		return input;
-
-	input.moveForward = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
-	input.moveBackward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
-	input.moveLeft = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
-	input.moveRight = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
-	input.jump = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
-	input.sprint = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-	return input;
-}
-
 Gameplay::RuntimeContext Renderer::buildGameplayRuntimeContext()
 {
 	auto& registry = mEnttScene.getRegistry();
@@ -2878,24 +2849,7 @@ std::string Renderer::serializeEnttScene() const
 		json node;
 		node["id"] = static_cast<uint32_t>(entt::to_integral(entity));
 		node["name"] = tag.name;
-
-		if (const auto* transform = registry.try_get<TransformComponent>(entity)) {
-			const auto& pos = transform->GetPosition();
-			const auto& rot = transform->GetRotation();
-			const auto& scale = transform->GetScale();
-			node["transform"] = {
-				{ "position", { pos.x, pos.y, pos.z } },
-				{ "rotation", { rot.x, rot.y, rot.z, rot.w } },
-				{ "scale", { scale.x, scale.y, scale.z } }
-			};
-		}
-
-		if (const auto* animation = registry.try_get<AnimationComponent>(entity)) {
-			node["animation"] = {
-				{ "clipIndex", animation->clipIndex },
-				{ "speed", animation->speed }
-			};
-		}
+		Core::SceneSerialization::serializeCommonComponents(registry, entity, node);
 
 		if (const auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity); assimpComp && assimpComp->instance) {
 			json assimp;
@@ -2921,55 +2875,6 @@ std::string Renderer::serializeEnttScene() const
 			json renderable;
 			renderable["modelPath"] = renderableComp->sourceModelFile;
 			node["renderable"] = renderable;
-		}
-
-		if (const auto* pointLight = registry.try_get<PointLightComponent>(entity)) {
-			node["pointLight"] = {
-				{ "color", { pointLight->color.x, pointLight->color.y, pointLight->color.z } },
-				{ "intensity", pointLight->intensity },
-				{ "range", pointLight->range },
-				{ "enabled", pointLight->enabled }
-			};
-		}
-
-		if (const auto* rigidBody = registry.try_get<RigidBodyComponent>(entity)) {
-			node["rigidBody"] = {
-				{ "bodyType", static_cast<int>(rigidBody->bodyType) },
-				{ "mass", rigidBody->mass },
-				{ "friction", rigidBody->friction },
-				{ "restitution", rigidBody->restitution },
-				{ "useGravity", rigidBody->useGravity },
-				{ "linearVelocity", { rigidBody->linearVelocity.x, rigidBody->linearVelocity.y, rigidBody->linearVelocity.z } }
-			};
-		}
-
-		if (const auto* collider = registry.try_get<ColliderComponent>(entity)) {
-			node["collider"] = {
-				{ "shapeType", static_cast<int>(collider->shapeType) },
-				{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
-				{ "radius", collider->radius },
-				{ "halfHeight", collider->halfHeight },
-				{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
-				{ "alignBottomToEntity", collider->alignBottomToEntity }
-			};
-		}
-
-		if (const auto* playerController = registry.try_get<PlayerControllerComponent>(entity)) {
-			node["playerController"] = {
-				{ "enabled", playerController->enabled },
-				{ "moveSpeed", playerController->moveSpeed },
-				{ "sprintSpeed", playerController->sprintSpeed },
-				{ "jumpImpulse", playerController->jumpImpulse }
-			};
-		}
-
-		if (const auto* playerController = registry.try_get<PlayerControllerComponent>(entity)) {
-			node["playerController"] = {
-				{ "enabled", playerController->enabled },
-				{ "moveSpeed", playerController->moveSpeed },
-				{ "sprintSpeed", playerController->sprintSpeed },
-				{ "jumpImpulse", playerController->jumpImpulse }
-			};
 		}
 
 		root["entities"].push_back(node);
@@ -3020,15 +2925,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 	mEnttMultiSelection.clear();
 
 	std::unordered_map<uint32_t, entt::entity> entityMap;
-	struct PendingHierarchy {
-		entt::entity child = entt::null;
-		int64_t parentId = -1;
-		glm::vec3 localPosition = glm::vec3(0.0f);
-		glm::quat localRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-		glm::vec3 localScale = glm::vec3(1.0f);
-		bool hasLocal = false;
-	};
-	std::vector<PendingHierarchy> pendingHierarchy;
+   std::vector<Core::SceneSerialization::PendingHierarchy> pendingHierarchy;
 	bool addedRenderable = false;
 
 	for (const auto& node : root["entities"]) {
@@ -3037,25 +2934,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 		entt::entity entity = mEnttScene.createEntity(name);
 		entityMap[sourceId] = entity;
 
-		if (node.contains("transform")) {
-			auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
-			const auto& t = node["transform"];
-			if (t.contains("position") && t["position"].is_array() && t["position"].size() == 3) {
-				transform.SetPosition(glm::vec3(t["position"][0].get<float>(), t["position"][1].get<float>(), t["position"][2].get<float>()));
-			}
-			if (t.contains("rotation") && t["rotation"].is_array() && t["rotation"].size() == 4) {
-				transform.SetRotation(glm::quat(t["rotation"][3].get<float>(), t["rotation"][0].get<float>(), t["rotation"][1].get<float>(), t["rotation"][2].get<float>()));
-			}
-			if (t.contains("scale") && t["scale"].is_array() && t["scale"].size() == 3) {
-				transform.SetScale(glm::vec3(t["scale"][0].get<float>(), t["scale"][1].get<float>(), t["scale"][2].get<float>()));
-			}
-		}
-
-		if (node.contains("animation")) {
-			auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
-			anim.clipIndex = node["animation"].value("clipIndex", 0u);
-			anim.speed = node["animation"].value("speed", 1.0f);
-		}
+       Core::SceneSerialization::deserializeCommonComponents(registry, entity, node);
 
 		if (node.contains("renderable") && node["renderable"].is_object()) {
 			const auto& renderableNode = node["renderable"];
@@ -3106,76 +2985,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			}
 		}
 
-		if (node.contains("pointLight") && node["pointLight"].is_object()) {
-			auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
-			const auto& pl = node["pointLight"];
-			if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3)
-				light.color = glm::vec3(pl["color"][0].get<float>(), pl["color"][1].get<float>(), pl["color"][2].get<float>());
-			light.intensity = pl.value("intensity", light.intensity);
-			light.range = pl.value("range", light.range);
-			light.enabled = pl.value("enabled", light.enabled);
-		}
-
-		if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
-			auto& rb = registry.emplace_or_replace<RigidBodyComponent>(entity);
-			const auto& rbNode = node["rigidBody"];
-			rb.bodyType = static_cast<RigidBodyType>(rbNode.value("bodyType", static_cast<int>(rb.bodyType)));
-			rb.mass = rbNode.value("mass", rb.mass);
-			rb.friction = rbNode.value("friction", rb.friction);
-			rb.restitution = rbNode.value("restitution", rb.restitution);
-			rb.useGravity = rbNode.value("useGravity", rb.useGravity);
-			if (rbNode.contains("linearVelocity") && rbNode["linearVelocity"].is_array() && rbNode["linearVelocity"].size() == 3) {
-				rb.linearVelocity = glm::vec3(rbNode["linearVelocity"][0].get<float>(), rbNode["linearVelocity"][1].get<float>(), rbNode["linearVelocity"][2].get<float>());
-			}
-			rb.registeredInWorld = false;
-			rb.bodyId = -1;
-		}
-
-		if (node.contains("collider") && node["collider"].is_object()) {
-			auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
-			const auto& colNode = node["collider"];
-			col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
-			if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3)
-				col.halfExtents = glm::vec3(colNode["halfExtents"][0].get<float>(), colNode["halfExtents"][1].get<float>(), colNode["halfExtents"][2].get<float>());
-			col.radius = colNode.value("radius", col.radius);
-			col.halfHeight = colNode.value("halfHeight", col.halfHeight);
-			if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3)
-				col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
-			col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
-		}
-
-		if (node.contains("playerController") && node["playerController"].is_object()) {
-			auto& playerController = registry.emplace_or_replace<PlayerControllerComponent>(entity);
-			const auto& pcNode = node["playerController"];
-			playerController.enabled = pcNode.value("enabled", playerController.enabled);
-			playerController.moveSpeed = pcNode.value("moveSpeed", playerController.moveSpeed);
-			playerController.sprintSpeed = pcNode.value("sprintSpeed", playerController.sprintSpeed);
-			playerController.jumpImpulse = pcNode.value("jumpImpulse", playerController.jumpImpulse);
-		}
-
-		PendingHierarchy pending{};
-		pending.child = entity;
-
-		if (node.contains("hierarchy") && node["hierarchy"].is_object()) {
-			const auto& hNode = node["hierarchy"];
-			pending.parentId = hNode.value("parent", -1ll);
-
-			if (hNode.contains("localPosition") && hNode["localPosition"].is_array() && hNode["localPosition"].size() == 3 &&
-				hNode.contains("localRotation") && hNode["localRotation"].is_array() && hNode["localRotation"].size() == 4 &&
-				hNode.contains("localScale") && hNode["localScale"].is_array() && hNode["localScale"].size() == 3) {
-				pending.localPosition = glm::vec3(hNode["localPosition"][0].get<float>(), hNode["localPosition"][1].get<float>(), hNode["localPosition"][2].get<float>());
-				pending.localRotation = glm::quat(hNode["localRotation"][3].get<float>(), hNode["localRotation"][0].get<float>(), hNode["localRotation"][1].get<float>(), hNode["localRotation"][2].get<float>());
-				pending.localScale = glm::vec3(hNode["localScale"][0].get<float>(), hNode["localScale"][1].get<float>(), hNode["localScale"][2].get<float>());
-				pending.hasLocal = true;
-			}
-		}
-		else if (const auto* t = registry.try_get<TransformComponent>(entity)) {
-			pending.localPosition = t->GetPosition();
-			pending.localRotation = t->GetRotation();
-			pending.localScale = t->GetScale();
-		}
-
-		pendingHierarchy.push_back(pending);
+        pendingHierarchy.push_back(Core::SceneSerialization::buildPendingHierarchy(registry, entity, node));
 	}
 
 	std::vector<entt::entity> createdEntities;
@@ -3185,59 +2995,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 		createdEntities.push_back(entity);
 	}
 
-	// Initialize hierarchy components.
-	for (const auto& entry : pendingHierarchy) {
-		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
-		childHierarchy.parent = entt::null;
-		childHierarchy.children.clear();
-		if (entry.hasLocal) {
-			childHierarchy.localPosition = entry.localPosition;
-			childHierarchy.localRotation = entry.localRotation;
-			childHierarchy.localScale = entry.localScale;
-		}
-	}
-
-	// Build parent-child links.
-	for (const auto& entry : pendingHierarchy) {
-		if (!registry.valid(entry.child))
-			continue;
-		if (entry.parentId < 0)
-			continue;
-
-		auto it = entityMap.find(static_cast<uint32_t>(entry.parentId));
-		if (it == entityMap.end())
-			continue;
-
-		entt::entity parent = it->second;
-		if (!registry.valid(parent) || parent == entry.child)
-			continue;
-
-		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
-		childHierarchy.parent = parent;
-
-		auto& parentHierarchy = registry.emplace_or_replace<HierarchyComponent>(parent);
-		if (std::find(parentHierarchy.children.begin(), parentHierarchy.children.end(), entry.child) == parentHierarchy.children.end())
-			parentHierarchy.children.push_back(entry.child);
-	}
-
-	// For entries without saved locals, derive local from current world transform.
-	for (const auto& entry : pendingHierarchy) {
-		if (!registry.valid(entry.child))
-			continue;
-		if (!entry.hasLocal)
-			TransformSystems::RecalculateLocalFromParent(registry, entry.child);
-	}
-
-	// Propagate world from roots to preserve local hierarchy transforms.
-	for (const auto& [prefabId, entity] : entityMap) {
-		(void)prefabId;
-		auto* h = registry.try_get<HierarchyComponent>(entity);
-		if (!h)
-			continue;
-		if (h->parent != entt::null && registry.valid(h->parent))
-			continue;
-		TransformSystems::ApplyWorldFromParent(registry, entity);
-	}
+ Core::SceneSerialization::applyPendingHierarchy(registry, pendingHierarchy, entityMap);
 
 	for (entt::entity entity : createdEntities) {
 		if (registry.any_of<RigidBodyComponent, ColliderComponent, TransformComponent>(entity)) {
@@ -3321,24 +3079,7 @@ bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 		else {
 			node["name"] = tag ? tag->name : "Entity";
 		}
-
-		if (const auto* transform = registry.try_get<TransformComponent>(entity)) {
-			const auto& pos = transform->GetPosition();
-			const auto& rot = transform->GetRotation();
-			const auto& scale = transform->GetScale();
-			node["transform"] = {
-				{ "position", { pos.x, pos.y, pos.z } },
-				{ "rotation", { rot.x, rot.y, rot.z, rot.w } },
-				{ "scale", { scale.x, scale.y, scale.z } }
-			};
-		}
-
-		if (const auto* animation = registry.try_get<AnimationComponent>(entity)) {
-			node["animation"] = {
-				{ "clipIndex", animation->clipIndex },
-				{ "speed", animation->speed }
-			};
-		}
+		Core::SceneSerialization::serializeCommonComponents(registry, entity, node);
 
 		if (const auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity); assimpComp && assimpComp->instance) {
 			json assimp;
@@ -3362,37 +3103,6 @@ bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 			json renderable;
 			renderable["modelPath"] = renderableComp->sourceModelFile;
 			node["renderable"] = renderable;
-		}
-
-		if (const auto* pointLight = registry.try_get<PointLightComponent>(entity)) {
-			node["pointLight"] = {
-				{ "color", { pointLight->color.x, pointLight->color.y, pointLight->color.z } },
-				{ "intensity", pointLight->intensity },
-				{ "range", pointLight->range },
-				{ "enabled", pointLight->enabled }
-			};
-		}
-
-		if (const auto* rigidBody = registry.try_get<RigidBodyComponent>(entity)) {
-			node["rigidBody"] = {
-				{ "bodyType", static_cast<int>(rigidBody->bodyType) },
-				{ "mass", rigidBody->mass },
-				{ "friction", rigidBody->friction },
-				{ "restitution", rigidBody->restitution },
-				{ "useGravity", rigidBody->useGravity },
-				{ "linearVelocity", { rigidBody->linearVelocity.x, rigidBody->linearVelocity.y, rigidBody->linearVelocity.z } }
-			};
-		}
-
-		if (const auto* collider = registry.try_get<ColliderComponent>(entity)) {
-			node["collider"] = {
-				{ "shapeType", static_cast<int>(collider->shapeType) },
-				{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
-				{ "radius", collider->radius },
-				{ "halfHeight", collider->halfHeight },
-				{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
-				{ "alignBottomToEntity", collider->alignBottomToEntity }
-			};
 		}
 
 		int64_t parentPrefabId = -1;
@@ -3438,45 +3148,13 @@ bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 		return false;
 
 	outFile << root.dump(2);
-	mPrefabAssetsDirty = true;
+   mSceneRuntimeService.state().markPrefabAssetsDirty();
 	return true;
 }
 
 void Renderer::refreshPrefabAssetList()
 {
-	mPrefabAssets.clear();
-	const std::filesystem::path prefabRoot("prefabs");
-	if (!std::filesystem::exists(prefabRoot) || !std::filesystem::is_directory(prefabRoot))
-	{
-		mSelectedPrefabAsset = -1;
-		mPrefabAssetsDirty = false;
-		return;
-	}
-
-	for (const auto& entry : std::filesystem::recursive_directory_iterator(prefabRoot))
-	{
-		if (!entry.is_regular_file())
-			continue;
-
-		const auto path = entry.path();
-		const std::string ext = path.extension().string();
-		if (ext != ".json")
-			continue;
-
-		const std::string pathStr = path.lexically_normal().generic_string();
-		if (pathStr.find(".prefab") == std::string::npos)
-			continue;
-
-		mPrefabAssets.push_back(pathStr);
-	}
-
-	std::sort(mPrefabAssets.begin(), mPrefabAssets.end());
-	if (mPrefabAssets.empty())
-		mSelectedPrefabAsset = -1;
-	else if (mSelectedPrefabAsset < 0 || mSelectedPrefabAsset >= static_cast<int>(mPrefabAssets.size()))
-		mSelectedPrefabAsset = 0;
-
-	mPrefabAssetsDirty = false;
+  mSceneRuntimeService.state().refreshPrefabAssetList();
 }
 
 bool Renderer::instantiatePrefab(const std::string& prefabPath)
@@ -3507,15 +3185,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		createdEntities.push_back(entity);
 	}
 
-	struct PendingHierarchy {
-		entt::entity child = entt::null;
-		int64_t parentId = -1;
-		glm::vec3 localPosition = glm::vec3(0.0f);
-		glm::quat localRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-		glm::vec3 localScale = glm::vec3(1.0f);
-		bool hasLocal = false;
-	};
-	std::vector<PendingHierarchy> pendingHierarchy;
+   std::vector<Core::SceneSerialization::PendingHierarchy> pendingHierarchy;
 	pendingHierarchy.reserve(root["entities"].size());
 
 	bool addedRenderable = false;
@@ -3530,25 +3200,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		}
 		entt::entity entity = entityIt->second;
 
-		if (node.contains("transform")) {
-			auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
-			const auto& t = node["transform"];
-			if (t.contains("position") && t["position"].is_array() && t["position"].size() == 3) {
-				transform.SetPosition(glm::vec3(t["position"][0].get<float>(), t["position"][1].get<float>(), t["position"][2].get<float>()));
-			}
-			if (t.contains("rotation") && t["rotation"].is_array() && t["rotation"].size() == 4) {
-				transform.SetRotation(glm::quat(t["rotation"][3].get<float>(), t["rotation"][0].get<float>(), t["rotation"][1].get<float>(), t["rotation"][2].get<float>()));
-			}
-			if (t.contains("scale") && t["scale"].is_array() && t["scale"].size() == 3) {
-				transform.SetScale(glm::vec3(t["scale"][0].get<float>(), t["scale"][1].get<float>(), t["scale"][2].get<float>()));
-			}
-		}
-
-		if (node.contains("animation")) {
-			auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
-			anim.clipIndex = node["animation"].value("clipIndex", 0u);
-			anim.speed = node["animation"].value("speed", 1.0f);
-		}
+       Core::SceneSerialization::deserializeCommonComponents(registry, entity, node);
 
 		if (node.contains("renderable") && node["renderable"].is_object()) {
 			const auto& renderableNode = node["renderable"];
@@ -3601,128 +3253,11 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 			}
 		}
 
-		if (node.contains("pointLight") && node["pointLight"].is_object()) {
-			auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
-			const auto& pl = node["pointLight"];
-			if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3) {
-				light.color = glm::vec3(pl["color"][0].get<float>(), pl["color"][1].get<float>(), pl["color"][2].get<float>());
-			}
-			light.intensity = pl.value("intensity", light.intensity);
-			light.range = pl.value("range", light.range);
-			light.enabled = pl.value("enabled", light.enabled);
-		}
-
-		if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
-			auto& rb = registry.emplace_or_replace<RigidBodyComponent>(entity);
-			const auto& rbNode = node["rigidBody"];
-			rb.bodyType = static_cast<RigidBodyType>(rbNode.value("bodyType", static_cast<int>(rb.bodyType)));
-			rb.mass = rbNode.value("mass", rb.mass);
-			rb.friction = rbNode.value("friction", rb.friction);
-			rb.restitution = rbNode.value("restitution", rb.restitution);
-			rb.useGravity = rbNode.value("useGravity", rb.useGravity);
-			if (rbNode.contains("linearVelocity") && rbNode["linearVelocity"].is_array() && rbNode["linearVelocity"].size() == 3) {
-				rb.linearVelocity = glm::vec3(rbNode["linearVelocity"][0].get<float>(), rbNode["linearVelocity"][1].get<float>(), rbNode["linearVelocity"][2].get<float>());
-			}
-			rb.registeredInWorld = false;
-			rb.bodyId = -1;
-		}
-
-		if (node.contains("collider") && node["collider"].is_object()) {
-			auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
-			const auto& colNode = node["collider"];
-			col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
-			if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3) {
-				col.halfExtents = glm::vec3(colNode["halfExtents"][0].get<float>(), colNode["halfExtents"][1].get<float>(), colNode["halfExtents"][2].get<float>());
-			}
-			col.radius = colNode.value("radius", col.radius);
-			col.halfHeight = colNode.value("halfHeight", col.halfHeight);
-			if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
-				col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
-			}
-			col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
-		}
-
-		if (node.contains("playerController") && node["playerController"].is_object()) {
-			auto& playerController = registry.emplace_or_replace<PlayerControllerComponent>(entity);
-			const auto& pcNode = node["playerController"];
-			playerController.enabled = pcNode.value("enabled", playerController.enabled);
-			playerController.moveSpeed = pcNode.value("moveSpeed", playerController.moveSpeed);
-			playerController.sprintSpeed = pcNode.value("sprintSpeed", playerController.sprintSpeed);
-			playerController.jumpImpulse = pcNode.value("jumpImpulse", playerController.jumpImpulse);
-		}
-
-		PendingHierarchy pending{};
-		pending.child = entity;
-		if (node.contains("hierarchy") && node["hierarchy"].is_object()) {
-			const auto& hNode = node["hierarchy"];
-			pending.parentId = hNode.value("parent", -1ll);
-			if (hNode.contains("localPosition") && hNode["localPosition"].is_array() && hNode["localPosition"].size() == 3 &&
-				hNode.contains("localRotation") && hNode["localRotation"].is_array() && hNode["localRotation"].size() == 4 &&
-				hNode.contains("localScale") && hNode["localScale"].is_array() && hNode["localScale"].size() == 3) {
-				pending.localPosition = glm::vec3(hNode["localPosition"][0].get<float>(), hNode["localPosition"][1].get<float>(), hNode["localPosition"][2].get<float>());
-				pending.localRotation = glm::quat(hNode["localRotation"][3].get<float>(), hNode["localRotation"][0].get<float>(), hNode["localRotation"][1].get<float>(), hNode["localRotation"][2].get<float>());
-				pending.localScale = glm::vec3(hNode["localScale"][0].get<float>(), hNode["localScale"][1].get<float>(), hNode["localScale"][2].get<float>());
-				pending.hasLocal = true;
-			}
-		}
-		else if (nodeIndex == 0) {
-			pending.parentId = -1;
-		}
-
-		pendingHierarchy.push_back(pending);
+        pendingHierarchy.push_back(Core::SceneSerialization::buildPendingHierarchy(registry, entity, node, nodeIndex == 0));
 		++nodeIndex;
 	}
 
-	for (const auto& entry : pendingHierarchy) {
-		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
-		childHierarchy.parent = entt::null;
-		childHierarchy.children.clear();
-		if (entry.hasLocal) {
-			childHierarchy.localPosition = entry.localPosition;
-			childHierarchy.localRotation = entry.localRotation;
-			childHierarchy.localScale = entry.localScale;
-		}
-	}
-
-	for (const auto& entry : pendingHierarchy) {
-		if (!registry.valid(entry.child))
-			continue;
-		if (entry.parentId < 0)
-			continue;
-
-		auto it = entityMap.find(static_cast<uint32_t>(entry.parentId));
-		if (it == entityMap.end())
-			continue;
-
-		entt::entity parent = it->second;
-		if (!registry.valid(parent) || parent == entry.child)
-			continue;
-
-		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
-		childHierarchy.parent = parent;
-
-		auto& parentHierarchy = registry.emplace_or_replace<HierarchyComponent>(parent);
-		if (std::find(parentHierarchy.children.begin(), parentHierarchy.children.end(), entry.child) == parentHierarchy.children.end()) {
-			parentHierarchy.children.push_back(entry.child);
-		}
-	}
-
-	for (const auto& entry : pendingHierarchy) {
-		if (!registry.valid(entry.child))
-			continue;
-		if (!entry.hasLocal)
-			TransformSystems::RecalculateLocalFromParent(registry, entry.child);
-	}
-
-	for (const auto& [id, entity] : entityMap) {
-		(void)id;
-		auto* hierarchy = registry.try_get<HierarchyComponent>(entity);
-		if (!hierarchy)
-			continue;
-		if (hierarchy->parent != entt::null && registry.valid(hierarchy->parent))
-			continue;
-		TransformSystems::ApplyWorldFromParent(registry, entity);
-	}
+	Core::SceneSerialization::applyPendingHierarchy(registry, pendingHierarchy, entityMap);
 
 	for (entt::entity entity : createdEntities) {
 		if (registry.any_of<RigidBodyComponent, ColliderComponent, TransformComponent>(entity)) {
@@ -3746,44 +3281,21 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 
 void Renderer::pushUndoSnapshot()
 {
-	if (mHistoryMuted)
-		return;
-
-	mUndoSnapshots.push_back(serializeEnttScene());
-	if (mUndoSnapshots.size() > 100) {
-		mUndoSnapshots.erase(mUndoSnapshots.begin());
-	}
-	mRedoSnapshots.clear();
+    mSceneRuntimeService.pushUndoSnapshot([this]() { return serializeEnttScene(); });
 }
 
 void Renderer::performUndo()
 {
-	if (mUndoSnapshots.empty())
-		return;
-
-	mRedoSnapshots.push_back(serializeEnttScene());
-	std::string targetSnapshot = mUndoSnapshots.back();
-	mUndoSnapshots.pop_back();
-
-	const bool prevMute = mHistoryMuted;
-	mHistoryMuted = true;
-	deserializeEnttScene(targetSnapshot);
-	mHistoryMuted = prevMute;
+  mSceneRuntimeService.undo(
+		[this]() { return serializeEnttScene(); },
+		[this](const std::string& snapshot) { return deserializeEnttScene(snapshot); });
 }
 
 void Renderer::performRedo()
 {
-	if (mRedoSnapshots.empty())
-		return;
-
-	mUndoSnapshots.push_back(serializeEnttScene());
-	std::string targetSnapshot = mRedoSnapshots.back();
-	mRedoSnapshots.pop_back();
-
-	const bool prevMute = mHistoryMuted;
-	mHistoryMuted = true;
-	deserializeEnttScene(targetSnapshot);
-	mHistoryMuted = prevMute;
+  mSceneRuntimeService.redo(
+		[this]() { return serializeEnttScene(); },
+		[this](const std::string& snapshot) { return deserializeEnttScene(snapshot); });
 }
 
 // ---------------------------------------------------------------------------

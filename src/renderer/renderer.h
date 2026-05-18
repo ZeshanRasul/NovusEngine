@@ -52,6 +52,8 @@ import vulkan_hpp;
 #include "ECS/entt/assimp_systems.h"
 #include "ECS/entt/transform_systems.h"
 #include "../gameplay/gameplay_layer.h"
+#include "../gameplay/gameplay_runtime.h"
+#include "../core/scene_runtime_service.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/RegisterTypes.h>
@@ -266,7 +268,6 @@ private:
 	void performRedo();
 	void enterPlayMode();
 	void exitPlayMode();
-	Gameplay::GameplayInputState sampleGameplayInput() const;
 	Gameplay::RuntimeContext buildGameplayRuntimeContext();
 
 	// -------------------------------------------------------------------------
@@ -367,16 +368,7 @@ private:
 	EnttScene mEnttScene{};
 	entt::entity mEnttSelectedEntity = entt::null;
 	std::vector<entt::entity> mEnttMultiSelection{};
-	std::vector<std::string> mUndoSnapshots{};
-	std::vector<std::string> mRedoSnapshots{};
-	bool mHistoryMuted = false;
-	std::string mSceneFilePath = "scene.json";
-	std::string mEditorSceneFilePath = "editor_scene.json";
-	std::string mPrefabFilePath = "prefabs/default.prefab.json";
-	std::string mPrefabSaveFilePath = "prefabs/default.prefab.json";
-	std::vector<std::string> mPrefabAssets{};
-	int mSelectedPrefabAsset = -1;
-	bool mPrefabAssetsDirty = true;
+   SceneRuntimeService mSceneRuntimeService{};
 	bool mLogPlayToEditCacheStats = false;
 
 	std::string normalizeModelAssetKey(const std::string& modelFileName) const;
@@ -608,7 +600,5 @@ private:
 	bool renderEnableFxaa = true;
 	bool renderEnableBloom = true;
 
-	std::unique_ptr<Gameplay::IGameLayer> mGameLayer = nullptr;
-	bool mUseDefaultGameLayer = true;
-	Gameplay::GameplayInputState mGameplayInput{};
+ Gameplay::GameplayRuntime mGameplayRuntime{};
 };

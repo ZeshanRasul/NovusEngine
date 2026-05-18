@@ -11,9 +11,9 @@
           "clipIndex": 0,
           "playTime": 0.0,
           "position": [
-            0.0,
-            0.0,
-            0.0
+            -1.638701860429137e-06,
+            -70.77510070800781,
+            -131.29949951171875
           ],
           "rotation": [
             180.0,
@@ -41,16 +41,16 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 2097165,
+      "id": 4194317,
       "name": "Assimp: Knight.glb",
       "playerController": {
         "enabled": true,
-        "jumpImpulse": 17.299999237060547,
-        "moveSpeed": 34.5,
-        "sprintSpeed": 38.400001525878906
+        "jumpImpulse": 22.950000762939453,
+        "moveSpeed": 88.0,
+        "sprintSpeed": 87.3499984741211
       },
       "rigidBody": {
-        "bodyType": 2,
+        "bodyType": 1,
         "friction": 0.5,
         "linearVelocity": [
           0.0,
@@ -63,9 +63,9 @@
       },
       "transform": {
         "position": [
-          0.0,
-          0.0,
-          0.0
+          -1.638701860429137e-06,
+          -70.77510070800781,
+          -131.29949951171875
         ],
         "rotation": [
           0.7071067690849304,
@@ -97,7 +97,7 @@
         "radius": 46.0,
         "shapeType": 1
       },
-      "id": 2097164,
+      "id": 4194316,
       "name": "Flight Helmet 2",
       "renderable": {
         "modelPath": "models/FlightHelmet.gltf"
@@ -150,7 +150,7 @@
         "radius": 18.0,
         "shapeType": 1
       },
-      "id": 2097163,
+      "id": 4194315,
       "name": "Damaged Helmet 1",
       "renderable": {
         "modelPath": "models/DamagedHelmet.gltf"
@@ -203,7 +203,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 2097162,
+      "id": 4194314,
       "name": "Physics Arena Wall -Z",
       "rigidBody": {
         "bodyType": 0,
@@ -253,7 +253,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 2097161,
+      "id": 4194313,
       "name": "Physics Arena Wall +Z",
       "rigidBody": {
         "bodyType": 0,
@@ -303,7 +303,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 2097160,
+      "id": 4194312,
       "name": "Physics Arena Wall -X",
       "rigidBody": {
         "bodyType": 0,
@@ -353,7 +353,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 2097159,
+      "id": 4194311,
       "name": "Physics Arena Wall +X",
       "rigidBody": {
         "bodyType": 0,
@@ -403,7 +403,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 2097158,
+      "id": 4194310,
       "name": "Physics Arena Floor",
       "rigidBody": {
         "bodyType": 0,
@@ -453,7 +453,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 2097157,
+      "id": 4194309,
       "name": "Sponza",
       "renderable": {
         "modelPath": "models/Sponza.gltf"
@@ -506,7 +506,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 2097156,
+      "id": 4194308,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -566,7 +566,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 2097155,
+      "id": 4194307,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -626,7 +626,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 2097154,
+      "id": 4194306,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -686,7 +686,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 2097153,
+      "id": 4194305,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -746,7 +746,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 2097152,
+      "id": 4194304,
       "name": "Main Camera",
       "rigidBody": {
         "bodyType": 1,
@@ -780,5 +780,5 @@
       }
     }
   ],
-  "selected": 2097165
+  "selected": 4194317
 }

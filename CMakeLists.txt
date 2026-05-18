@@ -40,6 +40,14 @@ set(assimp_dir  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/FindAssimp.cmake)
 
 add_executable(NovusEngine
     src/main.cpp
+    src/core/engine_app.cpp
+    src/core/engine_app.h
+    src/core/scene_runtime_state.cpp
+    src/core/scene_runtime_state.h
+    src/core/scene_runtime_service.cpp
+    src/core/scene_runtime_service.h
+    src/core/scene_serialization.cpp
+    src/core/scene_serialization.h
     src/vma_impl.cpp
     src/renderer/renderer.cpp
     "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h"  "src/ECS/components/camera_component.h" "src/ECS/components/animation_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/player_controller_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h" "src/renderer/shadow_pass.h" "src/renderer/shadow_pass.cpp"
@@ -59,6 +67,8 @@ add_executable(NovusEngine
     "src/ECS/entt/assimp_instance_component.h"
     "src/ECS/entt/assimp_systems.h"
     "src/gameplay/gameplay_layer.h"
+    "src/gameplay/gameplay_runtime.h"
+    "src/gameplay/gameplay_runtime.cpp"
     "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp" "include/IconsFontAwesome7.h")
 
 find_package(glfw3 CONFIG REQUIRED)

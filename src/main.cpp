@@ -2,13 +2,13 @@
 #include <cstdlib>
 #include <stdexcept>
 
-#include "renderer/renderer.h"
+#include "core/engine_app.h"
 
 int main()
 {
 	try
 	{
-		Renderer app;
+       EngineApp app;
 		app.run();
 	}
 	catch (const std::exception& e)

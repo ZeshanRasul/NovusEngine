@@ -244,3 +244,11 @@ void PhysicsSystem::step(float deltaTime, entt::registry& registry)
     applyContextSettings();
     PhysicsSystems::Update(context, registry, deltaTime);
 }
+
+void PhysicsSystem::setLinearVelocity(entt::entity entity, const glm::vec3& velocity)
+{
+    if (!initialized || !boundRegistry || entity == entt::null)
+        return;
+
+    PhysicsSystems::SetLinearVelocity(context, *boundRegistry, entity, velocity);
+}

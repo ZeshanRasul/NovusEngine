@@ -42,7 +42,7 @@ add_executable(NovusEngine
     src/main.cpp
     src/vma_impl.cpp
     src/renderer/renderer.cpp
-    "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h"  "src/ECS/components/camera_component.h" "src/ECS/components/animation_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h" "src/renderer/shadow_pass.h" "src/renderer/shadow_pass.cpp"
+    "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h"  "src/ECS/components/camera_component.h" "src/ECS/components/animation_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/player_controller_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h" "src/renderer/shadow_pass.h" "src/renderer/shadow_pass.cpp"
     ${IMGUI_SOURCES}
     ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h" "src/input/input_system.h" "src/input/input_system.cpp" "src/vulkan/command_pool.h" 
     "src/vulkan/command_pool.cpp" "src/vulkan/command_buffer.h" "src/vulkan/command_buffer.cpp" "src/vulkan/texture.h" "src/vulkan/texture.cpp" 
@@ -58,6 +58,7 @@ add_executable(NovusEngine
     "src/ECS/entt/scene.h"
     "src/ECS/entt/assimp_instance_component.h"
     "src/ECS/entt/assimp_systems.h"
+    "src/gameplay/gameplay_layer.h"
     "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp" "include/IconsFontAwesome7.h")
 
 find_package(glfw3 CONFIG REQUIRED)

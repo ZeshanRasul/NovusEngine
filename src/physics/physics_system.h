@@ -36,6 +36,8 @@ public:
     void step(float deltaTime, entt::registry& registry);
     void bindRegistry(entt::registry& registry);
 
+    void setLinearVelocity(entt::entity entity, const glm::vec3& velocity);
+
 private:
     struct ObjectLayerPairFilterImpl final : public JPH::ObjectLayerPairFilter
     {

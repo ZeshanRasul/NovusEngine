@@ -357,4 +357,21 @@ namespace PhysicsSystems
         context.entityToBody.clear();
         context.bodyToEntity.clear();
     }
+
+    inline bool SetLinearVelocity(Context& context, entt::registry& registry, entt::entity entity, const glm::vec3& velocity)
+    {
+        if (!context.bodyInterface || !registry.valid(entity))
+            return false;
+
+        auto bodyIt = context.entityToBody.find(entity);
+        if (bodyIt == context.entityToBody.end())
+            return false;
+
+        context.bodyInterface->SetLinearVelocity(bodyIt->second, ToJoltVec3(velocity));
+
+        if (auto* rb = registry.try_get<RigidBodyComponent>(entity))
+            rb->linearVelocity = velocity;
+
+        return true;
+    }
 }

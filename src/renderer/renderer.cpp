@@ -1172,17 +1172,23 @@ void Renderer::mainLoop()
 
 		InputSystem::Update(deltaTime);
 
-		camera.processInput(window, camera, deltaTime);
+		const bool allowEditorCameraInput = !(sceneState == SceneState::PLAY && mGameLayer != nullptr);
+		if (allowEditorCameraInput)
+			camera.processInput(window, camera, deltaTime);
 		auto& reg = mEnttScene.getRegistry();
 
 		if (sceneState == SceneState::PLAY)
 		{
 			accumulator += deltaTime;
+			mGameplayInput = sampleGameplayInput();
+			auto gameplayContext = buildGameplayRuntimeContext();
 
 			int substeps = 0;
 
 			while (accumulator >= fixedStep && substeps < maxSubsteps)
 			{
+				if (mGameLayer)
+					mGameLayer->onFixedUpdate(fixedStep, mGameplayInput, gameplayContext);
 				physicsSystem.step(fixedStep, reg);
 				updateAssimpAnimations(fixedStep);
 				accumulator -= fixedStep;
@@ -1392,8 +1398,8 @@ void Renderer::buildEditorDockspace()
 		ImGui::DockBuilderDockWindow("Viewport", dockMain);
 		ImGui::DockBuilderDockWindow("ECS Scene", dockLeft);
 		ImGui::DockBuilderDockWindow("ECS Lights", dockLeftBottom);
-		ImGui::DockBuilderDockWindow("ECS Inspector", dockRight);
 		ImGui::DockBuilderDockWindow("Camera Controls", dockRight);
+		ImGui::DockBuilderDockWindow("ECS Inspector", dockRight);
 		ImGui::DockBuilderDockWindow("Shadow Tuning", dockBottom);
 		ImGui::DockBuilderDockWindow("Animation Controls", dockBottom);
 		ImGui::DockBuilderDockWindow("Post Processing", dockBottom);
@@ -1592,7 +1598,7 @@ void Renderer::renderImgui()
 
 	if ((isEditMode || playShowDebugUI) && uiShowPrefabWindow)
 	{
-       auto makePrefabSafeName = [](std::string name) {
+		auto makePrefabSafeName = [](std::string name) {
 			for (char& c : name)
 			{
 				const unsigned char uc = static_cast<unsigned char>(c);
@@ -1602,7 +1608,7 @@ void Renderer::renderImgui()
 			if (name.empty())
 				name = "default";
 			return name;
-		};
+			};
 
 		std::string suggestedPrefabName = "default";
 		if (mEnttScene.isValid(mEnttSelectedEntity))
@@ -1634,7 +1640,7 @@ void Renderer::renderImgui()
 			}
 		}
 
-      ImGui::Text("Save Path: %s", mPrefabSaveFilePath.c_str());
+		ImGui::Text("Save Path: %s", mPrefabSaveFilePath.c_str());
 
 		ImGui::Separator();
 		ImGui::Text("Available Prefabs");
@@ -1955,6 +1961,14 @@ void Renderer::enterPlayMode()
 	sceneState = SceneState::PLAY;
 	currentFrameIndex = 0;
 	physicsSystem.setPaused(false);
+
+	if (mUseDefaultGameLayer)
+		mGameLayer = std::make_unique<Gameplay::DefaultGameLayer>();
+
+	if (mGameLayer) {
+		auto gameplayContext = buildGameplayRuntimeContext();
+		mGameLayer->onEnterPlay(gameplayContext);
+	}
 }
 
 void Renderer::exitPlayMode()
@@ -1969,6 +1983,11 @@ void Renderer::exitPlayMode()
 	}
 
 	mLogPlayToEditCacheStats = false;
+
+	if (mGameLayer) {
+		auto gameplayContext = buildGameplayRuntimeContext();
+		mGameLayer->onExitPlay(gameplayContext);
+	}
 
 	sceneState = SceneState::EDIT;
 	currentFrameIndex = 0;
@@ -2258,11 +2277,12 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 				std::snprintf(sNameEditBuffer, sizeof(sNameEditBuffer), "%s", tag->name.c_str());
 			}
 
-			if (ImGui::InputText("Name", sNameEditBuffer, sizeof(sNameEditBuffer))) {
-				if (ImGui::IsItemActivated()) {
-					pushUndoSnapshot();
-				}
+			const bool nameEdited = ImGui::InputText("Name", sNameEditBuffer, sizeof(sNameEditBuffer));
+			if (nameEdited) {
 				tag->name = sNameEditBuffer;
+			}
+			if (ImGui::IsItemDeactivatedAfterEdit()) {
+				pushUndoSnapshot();
 			}
 		}
 
@@ -2455,7 +2475,20 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			}
 		}
 
-       if (auto* hierarchy = registry.try_get<HierarchyComponent>(mEnttSelectedEntity)) {
+		if (!registry.any_of<PlayerControllerComponent>(mEnttSelectedEntity)) {
+			if (ImGui::Button("Add PlayerControllerComponent")) {
+				pushUndoSnapshot();
+				registry.emplace_or_replace<PlayerControllerComponent>(mEnttSelectedEntity);
+			}
+		}
+		else {
+			if (ImGui::Button("Remove PlayerControllerComponent")) {
+				pushUndoSnapshot();
+				registry.remove<PlayerControllerComponent>(mEnttSelectedEntity);
+			}
+		}
+
+		if (auto* hierarchy = registry.try_get<HierarchyComponent>(mEnttSelectedEntity)) {
 			ImGui::Separator();
 			ImGui::TextUnformatted("Hierarchy");
 
@@ -2592,6 +2625,21 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			}
 		}
 
+		ImGui::Separator();
+		ImGui::TextUnformatted("Gameplay");
+		if (mGameLayer)
+			ImGui::TextUnformatted("Layer: DefaultGameLayer");
+		else
+			ImGui::TextUnformatted("Layer: None");
+		ImGui::Checkbox("Use Default Gameplay Layer", &mUseDefaultGameLayer);
+
+		if (auto* controller = registry.try_get<PlayerControllerComponent>(mEnttSelectedEntity)) {
+			ImGui::Checkbox("Controller Enabled", &controller->enabled);
+			ImGui::DragFloat("Move Speed", &controller->moveSpeed, 0.05f, 0.0f, 1000.0f, "%.3f");
+			ImGui::DragFloat("Sprint Speed", &controller->sprintSpeed, 0.05f, 0.0f, 1000.0f, "%.3f");
+			ImGui::DragFloat("Jump Impulse", &controller->jumpImpulse, 0.05f, 0.0f, 1000.0f, "%.3f");
+		}
+
 		// Assimp instance controls (add/remove instance for this entity)
 		if (!registry.any_of<AssimpInstanceComponent>(mEnttSelectedEntity)) {
 			ImGui::Separator();
@@ -2677,11 +2725,145 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			}
 		}
 
-		ImGui::Button("Duplicate Entity");
+		const bool duplicatePressed = ImGui::Button("Duplicate Entity");
 		ImGui::SameLine();
-		ImGui::Button("Delete Entity");
+		const bool deletePressed = ImGui::Button("Delete Entity");
+
+		if (duplicatePressed) {
+			std::vector<entt::entity> sources = mEnttMultiSelection;
+			if (sources.empty() && mEnttScene.isValid(mEnttSelectedEntity)) {
+				sources.push_back(mEnttSelectedEntity);
+			}
+
+			if (!sources.empty()) {
+				pushUndoSnapshot();
+				std::vector<entt::entity> duplicatedEntities;
+				duplicatedEntities.reserve(sources.size());
+				for (entt::entity source : sources) {
+					entt::entity duplicated = duplicateEntity(source);
+					if (duplicated != entt::null && mEnttScene.isValid(duplicated)) {
+						duplicatedEntities.push_back(duplicated);
+					}
+				}
+
+				if (!duplicatedEntities.empty()) {
+					mEnttSelectedEntity = duplicatedEntities.back();
+					mEnttMultiSelection = std::move(duplicatedEntities);
+					sNameEditEntity = entt::null;
+				}
+			}
+		}
+
+		if (deletePressed) {
+			std::vector<entt::entity> toDelete = mEnttMultiSelection;
+			if (toDelete.empty() && mEnttScene.isValid(mEnttSelectedEntity)) {
+				toDelete.push_back(mEnttSelectedEntity);
+			}
+
+			if (!toDelete.empty()) {
+				pushUndoSnapshot();
+				for (entt::entity entity : toDelete) {
+					if (!mEnttScene.isValid(entity))
+						continue;
+
+					detachHierarchy(entity);
+
+					if (registry.any_of<RigidBodyComponent>(entity)) {
+						physicsSystem.unregisterEntity(entity, registry);
+					}
+
+					if (registry.any_of<AssimpInstanceComponent>(entity)) {
+						removeInstanceFromEntity(entity);
+					}
+
+					if (mEnttScene.isValid(entity)) {
+						mEnttScene.destroyEntity(entity);
+					}
+				}
+
+				mEnttMultiSelection.erase(
+					std::remove_if(mEnttMultiSelection.begin(), mEnttMultiSelection.end(), [&](entt::entity e) {
+						return !mEnttScene.isValid(e);
+						}),
+					mEnttMultiSelection.end());
+
+				mEnttSelectedEntity = mEnttMultiSelection.empty() ? entt::null : mEnttMultiSelection.back();
+				sNameEditEntity = entt::null;
+			}
+		}
 		ImGui::End();
 	}
+}
+
+Gameplay::GameplayInputState Renderer::sampleGameplayInput() const
+{
+	Gameplay::GameplayInputState input{};
+	if (!window)
+		return input;
+
+	input.moveForward = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+	input.moveBackward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+	input.moveLeft = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+	input.moveRight = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+	input.jump = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+	input.sprint = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+	return input;
+}
+
+Gameplay::RuntimeContext Renderer::buildGameplayRuntimeContext()
+{
+	auto& registry = mEnttScene.getRegistry();
+
+	Gameplay::RuntimeContext ctx{};
+	ctx.registry = &registry;
+	ctx.physicsSystem = &physicsSystem;
+
+	ctx.destroyEntity = [this](entt::entity entity)
+		{
+			auto& reg = mEnttScene.getRegistry();
+			if (!reg.valid(entity))
+				return;
+
+			if (reg.any_of<RigidBodyComponent>(entity))
+				physicsSystem.unregisterEntity(entity, reg);
+
+			if (auto* hc = reg.try_get<HierarchyComponent>(entity)) {
+				if (hc->parent != entt::null && reg.valid(hc->parent)) {
+					if (auto* parent = reg.try_get<HierarchyComponent>(hc->parent)) {
+						auto it = std::remove(parent->children.begin(), parent->children.end(), entity);
+						parent->children.erase(it, parent->children.end());
+					}
+				}
+				for (entt::entity child : hc->children) {
+					if (reg.valid(child)) {
+						auto& ch = reg.emplace_or_replace<HierarchyComponent>(child);
+						ch.parent = entt::null;
+					}
+				}
+			}
+
+			if (reg.any_of<AssimpInstanceComponent>(entity))
+				removeInstanceFromEntity(entity);
+
+			if (mEnttScene.isValid(entity))
+				mEnttScene.destroyEntity(entity);
+		};
+
+	ctx.spawnPrefab = [this](const std::string& prefabPath, const glm::vec3& spawnOffset) -> entt::entity
+		{
+			if (!instantiatePrefab(prefabPath))
+				return entt::null;
+
+			entt::entity spawned = mEnttSelectedEntity;
+			auto& reg = mEnttScene.getRegistry();
+			if (reg.valid(spawned)) {
+				if (auto* tr = reg.try_get<TransformComponent>(spawned))
+					tr->SetPosition(tr->GetPosition() + spawnOffset);
+			}
+			return spawned;
+		};
+
+	return ctx;
 }
 
 std::string Renderer::serializeEnttScene() const
@@ -2769,6 +2951,24 @@ std::string Renderer::serializeEnttScene() const
 				{ "halfHeight", collider->halfHeight },
 				{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
 				{ "alignBottomToEntity", collider->alignBottomToEntity }
+			};
+		}
+
+		if (const auto* playerController = registry.try_get<PlayerControllerComponent>(entity)) {
+			node["playerController"] = {
+				{ "enabled", playerController->enabled },
+				{ "moveSpeed", playerController->moveSpeed },
+				{ "sprintSpeed", playerController->sprintSpeed },
+				{ "jumpImpulse", playerController->jumpImpulse }
+			};
+		}
+
+		if (const auto* playerController = registry.try_get<PlayerControllerComponent>(entity)) {
+			node["playerController"] = {
+				{ "enabled", playerController->enabled },
+				{ "moveSpeed", playerController->moveSpeed },
+				{ "sprintSpeed", playerController->sprintSpeed },
+				{ "jumpImpulse", playerController->jumpImpulse }
 			};
 		}
 
@@ -2944,6 +3144,15 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
 		}
 
+		if (node.contains("playerController") && node["playerController"].is_object()) {
+			auto& playerController = registry.emplace_or_replace<PlayerControllerComponent>(entity);
+			const auto& pcNode = node["playerController"];
+			playerController.enabled = pcNode.value("enabled", playerController.enabled);
+			playerController.moveSpeed = pcNode.value("moveSpeed", playerController.moveSpeed);
+			playerController.sprintSpeed = pcNode.value("sprintSpeed", playerController.sprintSpeed);
+			playerController.jumpImpulse = pcNode.value("jumpImpulse", playerController.jumpImpulse);
+		}
+
 		PendingHierarchy pending{};
 		pending.child = entity;
 
@@ -2960,7 +3169,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 				pending.hasLocal = true;
 			}
 		}
-     else if (const auto* t = registry.try_get<TransformComponent>(entity)) {
+		else if (const auto* t = registry.try_get<TransformComponent>(entity)) {
 			pending.localPosition = t->GetPosition();
 			pending.localRotation = t->GetRotation();
 			pending.localScale = t->GetScale();
@@ -3057,7 +3266,7 @@ bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 		return false;
 
 	auto& registry = mEnttScene.getRegistry();
-  const auto* selectedTag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
+	const auto* selectedTag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
 	if (!selectedTag)
 		return false;
 
@@ -3065,7 +3274,7 @@ bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 	json root;
 	root["entities"] = json::array();
 
- std::vector<entt::entity> subtree;
+	std::vector<entt::entity> subtree;
 	std::unordered_set<entt::entity> subtreeSet;
 	subtree.push_back(mEnttSelectedEntity);
 	subtreeSet.insert(mEnttSelectedEntity);
@@ -3286,7 +3495,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		return false;
 
 	auto& registry = mEnttScene.getRegistry();
- std::unordered_map<uint32_t, entt::entity> entityMap;
+	std::unordered_map<uint32_t, entt::entity> entityMap;
 	std::vector<entt::entity> createdEntities;
 	createdEntities.reserve(root["entities"].size());
 
@@ -3321,7 +3530,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		}
 		entt::entity entity = entityIt->second;
 
-       if (node.contains("transform")) {
+		if (node.contains("transform")) {
 			auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
 			const auto& t = node["transform"];
 			if (t.contains("position") && t["position"].is_array() && t["position"].size() == 3) {
@@ -3335,105 +3544,114 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 			}
 		}
 
-       if (node.contains("animation")) {
+		if (node.contains("animation")) {
 			auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
 			anim.clipIndex = node["animation"].value("clipIndex", 0u);
 			anim.speed = node["animation"].value("speed", 1.0f);
 		}
 
-        if (node.contains("renderable") && node["renderable"].is_object()) {
-		const auto& renderableNode = node["renderable"];
-		const std::string modelPath = renderableNode.value("modelPath", std::string());
-		if (!modelPath.empty()) {
-			auto model = getOrLoadModelGltfAsset(modelPath);
+		if (node.contains("renderable") && node["renderable"].is_object()) {
+			const auto& renderableNode = node["renderable"];
+			const std::string modelPath = renderableNode.value("modelPath", std::string());
+			if (!modelPath.empty()) {
+				auto model = getOrLoadModelGltfAsset(modelPath);
+				if (model) {
+					addedRenderable = true;
+					auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
+					renderableComp.vertices = model->vertices;
+					renderableComp.indices = model->indices;
+					renderableComp.meshes = model->meshes;
+					renderableComp.materials = model->materials;
+					renderableComp.sourceModelFile = model->sourceModelFile;
+					renderableComp.materialTextures.clear();
+					renderableComp.materialDescriptorSets.clear();
+
+					if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
+						renderableComp.materialTextures.resize(renderableComp.materials.size());
+						for (size_t i = 0; i < renderableComp.materials.size(); ++i)
+							loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
+					}
+				}
+			}
+		}
+
+		if (node.contains("assimp") && node["assimp"].is_object()) {
+			const auto& assimpNode = node["assimp"];
+			const std::string modelName = assimpNode.value("model", std::string());
+			auto model = ensureModelLoadedForScene(modelName);
 			if (model) {
-             addedRenderable = true;
-				auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
-				renderableComp.vertices = model->vertices;
-				renderableComp.indices = model->indices;
-				renderableComp.meshes = model->meshes;
-				renderableComp.materials = model->materials;
-				renderableComp.sourceModelFile = model->sourceModelFile;
-				renderableComp.materialTextures.clear();
-				renderableComp.materialDescriptorSets.clear();
-
-				if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
-					renderableComp.materialTextures.resize(renderableComp.materials.size());
-					for (size_t i = 0; i < renderableComp.materials.size(); ++i)
-						loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
+				createAssimpInstanceForEntity(model, entity);
+				auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity);
+				if (assimpComp && assimpComp->instance && assimpNode.contains("settings")) {
+					InstanceSettings settings = assimpComp->instance->getInstanceSettings();
+					const auto& s = assimpNode["settings"];
+					if (s.contains("position") && s["position"].is_array() && s["position"].size() == 3) {
+						settings.isWorldPosition = glm::vec3(s["position"][0].get<float>(), s["position"][1].get<float>(), s["position"][2].get<float>());
+					}
+					if (s.contains("rotation") && s["rotation"].is_array() && s["rotation"].size() == 3) {
+						settings.isWorldRotation = glm::vec3(s["rotation"][0].get<float>(), s["rotation"][1].get<float>(), s["rotation"][2].get<float>());
+					}
+					settings.isScale = s.value("scale", settings.isScale);
+					settings.isSwapYZAxis = s.value("swapYZ", settings.isSwapYZAxis);
+					settings.isAnimClipNr = s.value("clipIndex", settings.isAnimClipNr);
+					settings.isAnimPlayTimePos = s.value("playTime", settings.isAnimPlayTimePos);
+					settings.isAnimSpeedFactor = s.value("speed", settings.isAnimSpeedFactor);
+					assimpComp->instance->setInstanceSettings(settings);
 				}
 			}
 		}
-	}
 
-        if (node.contains("assimp") && node["assimp"].is_object()) {
-		const auto& assimpNode = node["assimp"];
-		const std::string modelName = assimpNode.value("model", std::string());
-		auto model = ensureModelLoadedForScene(modelName);
-		if (model) {
-			createAssimpInstanceForEntity(model, entity);
-			auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity);
-			if (assimpComp && assimpComp->instance && assimpNode.contains("settings")) {
-				InstanceSettings settings = assimpComp->instance->getInstanceSettings();
-				const auto& s = assimpNode["settings"];
-				if (s.contains("position") && s["position"].is_array() && s["position"].size() == 3) {
-					settings.isWorldPosition = glm::vec3(s["position"][0].get<float>(), s["position"][1].get<float>(), s["position"][2].get<float>());
-				}
-				if (s.contains("rotation") && s["rotation"].is_array() && s["rotation"].size() == 3) {
-					settings.isWorldRotation = glm::vec3(s["rotation"][0].get<float>(), s["rotation"][1].get<float>(), s["rotation"][2].get<float>());
-				}
-				settings.isScale = s.value("scale", settings.isScale);
-				settings.isSwapYZAxis = s.value("swapYZ", settings.isSwapYZAxis);
-				settings.isAnimClipNr = s.value("clipIndex", settings.isAnimClipNr);
-				settings.isAnimPlayTimePos = s.value("playTime", settings.isAnimPlayTimePos);
-				settings.isAnimSpeedFactor = s.value("speed", settings.isAnimSpeedFactor);
-				assimpComp->instance->setInstanceSettings(settings);
+		if (node.contains("pointLight") && node["pointLight"].is_object()) {
+			auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
+			const auto& pl = node["pointLight"];
+			if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3) {
+				light.color = glm::vec3(pl["color"][0].get<float>(), pl["color"][1].get<float>(), pl["color"][2].get<float>());
 			}
+			light.intensity = pl.value("intensity", light.intensity);
+			light.range = pl.value("range", light.range);
+			light.enabled = pl.value("enabled", light.enabled);
 		}
-	}
 
-        if (node.contains("pointLight") && node["pointLight"].is_object()) {
-		auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
-		const auto& pl = node["pointLight"];
-		if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3) {
-			light.color = glm::vec3(pl["color"][0].get<float>(), pl["color"][1].get<float>(), pl["color"][2].get<float>());
+		if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
+			auto& rb = registry.emplace_or_replace<RigidBodyComponent>(entity);
+			const auto& rbNode = node["rigidBody"];
+			rb.bodyType = static_cast<RigidBodyType>(rbNode.value("bodyType", static_cast<int>(rb.bodyType)));
+			rb.mass = rbNode.value("mass", rb.mass);
+			rb.friction = rbNode.value("friction", rb.friction);
+			rb.restitution = rbNode.value("restitution", rb.restitution);
+			rb.useGravity = rbNode.value("useGravity", rb.useGravity);
+			if (rbNode.contains("linearVelocity") && rbNode["linearVelocity"].is_array() && rbNode["linearVelocity"].size() == 3) {
+				rb.linearVelocity = glm::vec3(rbNode["linearVelocity"][0].get<float>(), rbNode["linearVelocity"][1].get<float>(), rbNode["linearVelocity"][2].get<float>());
+			}
+			rb.registeredInWorld = false;
+			rb.bodyId = -1;
 		}
-		light.intensity = pl.value("intensity", light.intensity);
-		light.range = pl.value("range", light.range);
-		light.enabled = pl.value("enabled", light.enabled);
-	}
 
-      if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
-		auto& rb = registry.emplace_or_replace<RigidBodyComponent>(entity);
-		const auto& rbNode = node["rigidBody"];
-		rb.bodyType = static_cast<RigidBodyType>(rbNode.value("bodyType", static_cast<int>(rb.bodyType)));
-		rb.mass = rbNode.value("mass", rb.mass);
-		rb.friction = rbNode.value("friction", rb.friction);
-		rb.restitution = rbNode.value("restitution", rb.restitution);
-		rb.useGravity = rbNode.value("useGravity", rb.useGravity);
-		if (rbNode.contains("linearVelocity") && rbNode["linearVelocity"].is_array() && rbNode["linearVelocity"].size() == 3) {
-			rb.linearVelocity = glm::vec3(rbNode["linearVelocity"][0].get<float>(), rbNode["linearVelocity"][1].get<float>(), rbNode["linearVelocity"][2].get<float>());
+		if (node.contains("collider") && node["collider"].is_object()) {
+			auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
+			const auto& colNode = node["collider"];
+			col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
+			if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3) {
+				col.halfExtents = glm::vec3(colNode["halfExtents"][0].get<float>(), colNode["halfExtents"][1].get<float>(), colNode["halfExtents"][2].get<float>());
+			}
+			col.radius = colNode.value("radius", col.radius);
+			col.halfHeight = colNode.value("halfHeight", col.halfHeight);
+			if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
+				col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
+			}
+			col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
 		}
-		rb.registeredInWorld = false;
-		rb.bodyId = -1;
-	}
 
-        if (node.contains("collider") && node["collider"].is_object()) {
-		auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
-		const auto& colNode = node["collider"];
-		col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
-		if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3) {
-			col.halfExtents = glm::vec3(colNode["halfExtents"][0].get<float>(), colNode["halfExtents"][1].get<float>(), colNode["halfExtents"][2].get<float>());
+		if (node.contains("playerController") && node["playerController"].is_object()) {
+			auto& playerController = registry.emplace_or_replace<PlayerControllerComponent>(entity);
+			const auto& pcNode = node["playerController"];
+			playerController.enabled = pcNode.value("enabled", playerController.enabled);
+			playerController.moveSpeed = pcNode.value("moveSpeed", playerController.moveSpeed);
+			playerController.sprintSpeed = pcNode.value("sprintSpeed", playerController.sprintSpeed);
+			playerController.jumpImpulse = pcNode.value("jumpImpulse", playerController.jumpImpulse);
 		}
-		col.radius = colNode.value("radius", col.radius);
-		col.halfHeight = colNode.value("halfHeight", col.halfHeight);
-		if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
-			col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
-		}
-		col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
-	}
 
-       PendingHierarchy pending{};
+		PendingHierarchy pending{};
 		pending.child = entity;
 		if (node.contains("hierarchy") && node["hierarchy"].is_object()) {
 			const auto& hNode = node["hierarchy"];
@@ -3516,13 +3734,13 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 	if (addedRenderable)
 		rebuildRenderableRuntimeResources();
 
-   const uint32_t selectedId = root.value("selected", 0u);
+	const uint32_t selectedId = root.value("selected", 0u);
 	auto selectedIt = entityMap.find(selectedId);
 	entt::entity selectedEntity = (selectedIt != entityMap.end()) ? selectedIt->second : createdEntities.front();
 
 	mEnttSelectedEntity = selectedEntity;
 	mEnttMultiSelection.clear();
-  mEnttMultiSelection.push_back(selectedEntity);
+	mEnttMultiSelection.push_back(selectedEntity);
 	return true;
 }
 
@@ -4244,7 +4462,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
 
 	auto& registry = mEnttScene.getRegistry();
-    std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
+	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
 	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
 	pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
 	pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
@@ -4258,7 +4476,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
 	{
 		(void)lightEntity;
-    if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
+		if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
 			break;
 		if (!light.enabled)
 			continue;
@@ -4267,7 +4485,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 		pointLightColors[lightIndex] = glm::vec4(light.color * light.intensity, 1.0f);
 		++lightIndex;
 	}
-  for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
+	for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
 		pointLightColors[lightIndex] = glm::vec4(0.0f);
 	}
 
@@ -4718,7 +4936,7 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		vk::PipelineStageFlagBits2::eFragmentShader,
 		vk::ImageAspectFlagBits::eDepth);
 
-	// Transition swapchain image: undefined GåÆ color attachment for FXAA output
+	// Transition swapchain image: undefined Gs¦ color attachment for FXAA output
 	transition_image_layout(swapChainImages[imageIndex],
 		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eColorAttachmentOptimal,
@@ -4773,7 +4991,7 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		pc
 	);
 
-	// 3 vertices, no vertex buffer GÇö the VS generates the fullscreen triangle
+	// 3 vertices, no vertex buffer G¦÷ the VS generates the fullscreen triangle
 	commandBuffer.draw(3, 1, 0, 0);
 	commandBuffer.endRendering();
 
@@ -4905,7 +5123,7 @@ void Renderer::recordSceneCopyPass(vk::raii::CommandBuffer& commandBuffer, uint3
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
 	auto& registry = mEnttScene.getRegistry();
-    std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
+	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
 	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
 	pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
 	pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
@@ -4920,7 +5138,7 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
 	{
 		(void)lightEntity;
-        if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
+		if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
 			break;
 		if (!light.enabled)
 			continue;
@@ -4930,7 +5148,7 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 		++lightIndex;
 	}
 
-  for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
+	for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
 		pointLightColors[lightIndex] = glm::vec4(0.0f);
 	}
 
@@ -5350,7 +5568,7 @@ void Renderer::initAssimpRenderData()
 	skinningDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	mRenderData.rdDescriptorPool = *skinningDescriptorPool;
 
-	// ---- 1+ù1 white fallback texture ----
+	// ---- 1+·1 white fallback texture ----
 	{
 		const uint32_t white = 0xFFFFFFFF;
 		vk::raii::Buffer       stagingBuf({});

@@ -33,6 +33,7 @@ import vulkan_hpp;
 #include "ECS/components/animation_component.h"
 #include "ECS/components/hierarchy_component.h"
 #include "ECS/components/light_component.h"
+#include "ECS/components/player_controller_component.h"
 #include "ECS/components/transform_component.h"
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"
@@ -50,6 +51,7 @@ import vulkan_hpp;
 #include "ECS/entt/assimp_instance_component.h"
 #include "ECS/entt/assimp_systems.h"
 #include "ECS/entt/transform_systems.h"
+#include "../gameplay/gameplay_layer.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/RegisterTypes.h>
@@ -264,6 +266,8 @@ private:
 	void performRedo();
 	void enterPlayMode();
 	void exitPlayMode();
+	Gameplay::GameplayInputState sampleGameplayInput() const;
+	Gameplay::RuntimeContext buildGameplayRuntimeContext();
 
 	// -------------------------------------------------------------------------
 	// Members
@@ -603,4 +607,8 @@ private:
 	bool renderEnablePostProcessing = true;
 	bool renderEnableFxaa = true;
 	bool renderEnableBloom = true;
+
+	std::unique_ptr<Gameplay::IGameLayer> mGameLayer = nullptr;
+	bool mUseDefaultGameLayer = true;
+	Gameplay::GameplayInputState mGameplayInput{};
 };

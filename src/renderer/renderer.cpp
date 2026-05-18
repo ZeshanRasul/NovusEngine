@@ -224,7 +224,9 @@ void Renderer::setupGameObjects()
 		const glm::vec3& halfExtents,
 		float radius,
 		float halfHeight,
-		const glm::vec3& linearVelocity) {
+      const glm::vec3& linearVelocity,
+		bool alignBottomToEntity = false,
+		const glm::vec3& centerOffset = glm::vec3(0.0f)) {
 			auto& rigidBody = registry.emplace_or_replace<RigidBodyComponent>(entity);
 			rigidBody.bodyType = bodyType;
 			rigidBody.mass = mass;
@@ -238,6 +240,8 @@ void Renderer::setupGameObjects()
 			collider.halfExtents = halfExtents;
 			collider.radius = radius;
 			collider.halfHeight = halfHeight;
+			collider.centerOffset = centerOffset;
+			collider.alignBottomToEntity = alignBottomToEntity;
 
 			physicsSystem.registerEntity(entity, registry);
 		};
@@ -256,27 +260,27 @@ void Renderer::setupGameObjects()
 		"");
 	addPhysics(floor, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.9f, 0.15f, false,
-		{ 860.0f, 18.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+       { 860.0f, 18.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, true);
 
 	const entt::entity wallPosX = makeEntity("Physics Arena Wall +X", { 860.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallPosX, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+       { 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const entt::entity wallNegX = makeEntity("Physics Arena Wall -X", { -860.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallNegX, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+       { 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const entt::entity wallPosZ = makeEntity("Physics Arena Wall +Z", { 0.0f, -260.0f, 860.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallPosZ, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+       { 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const entt::entity wallNegZ = makeEntity("Physics Arena Wall -Z", { 0.0f, -260.0f, -860.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallNegZ, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f });
+       { 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const int spawnCount = std::max(2, physicsSpawnCount);
 	const float spawnBaseHeight = physicsSpawnHeight;
@@ -296,6 +300,8 @@ void Renderer::setupGameObjects()
 		const std::string modelPath = damagedHelmet ? "models/DamagedHelmet.gltf" : "models/FlightHelmet.gltf";
 		const glm::vec3 scale = damagedHelmet ? glm::vec3(35.0f) : glm::vec3(100.0f);
 		const glm::vec3 rotation = damagedHelmet ? glm::vec3(0.0f, angle, 0.0f) : glm::vec3(0.0f, angle + glm::radians(90.0f), 0.0f);
+		const bool alignBottom = damagedHelmet;
+			
 
 		entt::entity helmet = makeEntity(namePrefix + std::to_string(i + 1), position, rotation, scale, modelPath);
 		addPhysics(helmet,
@@ -308,7 +314,8 @@ void Renderer::setupGameObjects()
 			glm::vec3(0.5f),
 			damagedHelmet ? 18.0f : 46.0f,
 			0.5f,
-			startVelocity);
+         startVelocity,
+			alignBottom);
 	}
 }
 
@@ -2354,6 +2361,8 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 				col.halfExtents = glm::vec3(0.5f);
 				col.radius = 0.5f;
 				col.halfHeight = 0.5f;
+				col.centerOffset = glm::vec3(0.0f);
+				col.alignBottomToEntity = false;
 
 				if (registry.any_of<RigidBodyComponent>(mEnttSelectedEntity)) {
 					entt::entity entity = mEnttSelectedEntity;
@@ -2493,6 +2502,14 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 					collider->halfHeight = std::max(0.001f, collider->halfHeight);
 					rebuildBody = true;
 				}
+			}
+
+			if (ImGui::DragFloat3("Center Offset", &collider->centerOffset.x, 0.05f, -10000.0f, 10000.0f, "%.3f")) {
+				rebuildBody = true;
+			}
+
+			if (ImGui::Checkbox("Align Bottom To Entity", &collider->alignBottomToEntity)) {
+				rebuildBody = true;
 			}
 
 			if (rebuildBody && registry.any_of<RigidBodyComponent>(mEnttSelectedEntity) && registry.any_of<TransformComponent>(mEnttSelectedEntity)) {
@@ -2722,7 +2739,9 @@ std::string Renderer::serializeEnttScene() const
 				{ "shapeType", static_cast<int>(collider->shapeType) },
 				{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
 				{ "radius", collider->radius },
-				{ "halfHeight", collider->halfHeight }
+              { "halfHeight", collider->halfHeight },
+				{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
+				{ "alignBottomToEntity", collider->alignBottomToEntity }
 			};
 		}
 
@@ -2917,6 +2936,10 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			}
 			col.radius = colNode.value("radius", col.radius);
 			col.halfHeight = colNode.value("halfHeight", col.halfHeight);
+           if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
+				col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
+			}
+			col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
 		}
 	}
 
@@ -3375,48 +3398,124 @@ void Renderer::rebuildColliderDebugLines()
 	{
 		(void)entity;
 		const glm::vec3 color = glm::vec3(0.15f, 1.0f, 0.15f);
-		const glm::mat4 M = tr.GetTransformMatrix();
+        const glm::mat4 M = glm::translate(glm::mat4(1.0f), tr.GetPosition()) * glm::mat4_cast(tr.GetRotation());
+		auto transformPoint = [&M](const glm::vec3& p) {
+			return glm::vec3(M * glm::vec4(p, 1.0f));
+		};
 
 		if (col.shapeType == ColliderShapeType::Box)
 		{
 			const glm::vec3 e = glm::max(col.halfExtents, glm::vec3(0.001f));
+          glm::vec3 localCenter = col.centerOffset;
+			if (col.alignBottomToEntity)
+				localCenter.y += e.y;
 			std::array<glm::vec3, 8> p = {
-				glm::vec3(-e.x,-e.y,-e.z), glm::vec3(e.x,-e.y,-e.z),
-				glm::vec3(e.x, e.y,-e.z), glm::vec3(-e.x, e.y,-e.z),
-				glm::vec3(-e.x,-e.y, e.z), glm::vec3(e.x,-e.y, e.z),
-				glm::vec3(e.x, e.y, e.z), glm::vec3(-e.x, e.y, e.z)
+                localCenter + glm::vec3(-e.x,-e.y,-e.z), localCenter + glm::vec3(e.x,-e.y,-e.z),
+				localCenter + glm::vec3(e.x, e.y,-e.z), localCenter + glm::vec3(-e.x, e.y,-e.z),
+				localCenter + glm::vec3(-e.x,-e.y, e.z), localCenter + glm::vec3(e.x,-e.y, e.z),
+				localCenter + glm::vec3(e.x, e.y, e.z), localCenter + glm::vec3(-e.x, e.y, e.z)
 			};
 			for (auto& v : p)
-				v = glm::vec3(M * glm::vec4(v, 1.0f));
+              v = transformPoint(v);
 
 			for (auto [a, b] : boxEdges)
 				appendLine(colliderDebugVertices, p[a], p[b], color);
 		}
-		else
+        else if (col.shapeType == ColliderShapeType::Sphere)
 		{
-			// Sphere/Capsule fallback ring set (fast, good enough for debug)
-			const glm::vec3 center = tr.GetPosition();
-			const float r = std::max(col.radius, 0.001f);
+           const float r = std::max(col.radius, 0.001f);
+			glm::vec3 localCenter = col.centerOffset;
+			if (col.alignBottomToEntity)
+				localCenter.y += r;
 			constexpr int seg = 24;
+			constexpr float twoPi = 6.28318530718f;
 			for (int i = 0; i < seg; ++i)
 			{
-				const float a0 = (float(i) / float(seg)) * glm::two_pi<float>();
-				const float a1 = (float(i + 1) / float(seg)) * glm::two_pi<float>();
+				const float a0 = (static_cast<float>(i) / static_cast<float>(seg)) * twoPi;
+				const float a1 = (static_cast<float>(i + 1) / static_cast<float>(seg)) * twoPi;
 
 				appendLine(colliderDebugVertices,
-					center + glm::vec3(std::cos(a0) * r, std::sin(a0) * r, 0.0f),
-					center + glm::vec3(std::cos(a1) * r, std::sin(a1) * r, 0.0f),
+                    transformPoint(localCenter + glm::vec3(std::cos(a0) * r, std::sin(a0) * r, 0.0f)),
+					transformPoint(localCenter + glm::vec3(std::cos(a1) * r, std::sin(a1) * r, 0.0f)),
 					color);
 
 				appendLine(colliderDebugVertices,
-					center + glm::vec3(0.0f, std::cos(a0) * r, std::sin(a0) * r),
-					center + glm::vec3(0.0f, std::cos(a1) * r, std::sin(a1) * r),
+                    transformPoint(localCenter + glm::vec3(0.0f, std::cos(a0) * r, std::sin(a0) * r)),
+					transformPoint(localCenter + glm::vec3(0.0f, std::cos(a1) * r, std::sin(a1) * r)),
 					color);
 
 				appendLine(colliderDebugVertices,
-					center + glm::vec3(std::cos(a0) * r, 0.0f, std::sin(a0) * r),
-					center + glm::vec3(std::cos(a1) * r, 0.0f, std::sin(a1) * r),
+                    transformPoint(localCenter + glm::vec3(std::cos(a0) * r, 0.0f, std::sin(a0) * r)),
+					transformPoint(localCenter + glm::vec3(std::cos(a1) * r, 0.0f, std::sin(a1) * r)),
 					color);
+			}
+		}
+		else
+		{
+           // Capsule aligned to local Y (matching Jolt's CapsuleShape axis).
+			const float r = std::max(col.radius, 0.001f);
+         const float h = std::max(col.halfHeight, 0.001f);
+         glm::vec3 localCenter = col.centerOffset;
+			if (col.alignBottomToEntity)
+				localCenter.y += (h + r);
+			constexpr int seg = 24;
+			constexpr int hemiStacks = 6;
+			constexpr float twoPi = 6.28318530718f;
+			constexpr float halfPi = 1.57079632679f;
+
+			auto drawRing = [&](float y, float ringRadius) {
+				for (int i = 0; i < seg; ++i)
+				{
+					const float a0 = (static_cast<float>(i) / static_cast<float>(seg)) * twoPi;
+					const float a1 = (static_cast<float>(i + 1) / static_cast<float>(seg)) * twoPi;
+					appendLine(colliderDebugVertices,
+                     transformPoint(localCenter + glm::vec3(std::cos(a0) * ringRadius, y, std::sin(a0) * ringRadius)),
+						transformPoint(localCenter + glm::vec3(std::cos(a1) * ringRadius, y, std::sin(a1) * ringRadius)),
+						color);
+				}
+			};
+
+			drawRing(+h, r);
+			drawRing(-h, r);
+
+			for (int i = 0; i < 4; ++i)
+			{
+                const float a = static_cast<float>(i) * (halfPi);
+				appendLine(colliderDebugVertices,
+                 transformPoint(localCenter + glm::vec3(std::cos(a) * r, +h, std::sin(a) * r)),
+					transformPoint(localCenter + glm::vec3(std::cos(a) * r, -h, std::sin(a) * r)),
+					color);
+			}
+
+			for (int stack = 0; stack < hemiStacks; ++stack)
+			{
+				const float t0 = (static_cast<float>(stack) / static_cast<float>(hemiStacks)) * halfPi;
+				const float t1 = (static_cast<float>(stack + 1) / static_cast<float>(hemiStacks)) * halfPi;
+
+				const float ringR0 = r * std::cos(t0);
+				const float ringR1 = r * std::cos(t1);
+				const float topY0 = h + r * std::sin(t0);
+				const float topY1 = h + r * std::sin(t1);
+				const float botY0 = -h - r * std::sin(t0);
+				const float botY1 = -h - r * std::sin(t1);
+
+				drawRing(topY0, ringR0);
+				drawRing(botY0, ringR0);
+
+				for (int i = 0; i < seg; i += 4)
+				{
+					const float a = (static_cast<float>(i) / static_cast<float>(seg)) * twoPi;
+
+					appendLine(colliderDebugVertices,
+                       transformPoint(localCenter + glm::vec3(std::cos(a) * ringR0, topY0, std::sin(a) * ringR0)),
+						transformPoint(localCenter + glm::vec3(std::cos(a) * ringR1, topY1, std::sin(a) * ringR1)),
+						color);
+
+					appendLine(colliderDebugVertices,
+                       transformPoint(localCenter + glm::vec3(std::cos(a) * ringR0, botY0, std::sin(a) * ringR0)),
+						transformPoint(localCenter + glm::vec3(std::cos(a) * ringR1, botY1, std::sin(a) * ringR1)),
+						color);
+				}
 			}
 		}
 	}

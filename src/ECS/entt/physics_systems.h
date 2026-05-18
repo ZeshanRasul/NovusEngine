@@ -65,6 +65,28 @@ namespace PhysicsSystems
         }
     }
 
+    inline float GetBottomOffsetY(const ColliderComponent& collider)
+    {
+        switch (collider.shapeType)
+        {
+        case ColliderShapeType::Sphere:
+            return std::max(collider.radius, 0.001f);
+        case ColliderShapeType::Capsule:
+            return std::max(collider.halfHeight, 0.001f) + std::max(collider.radius, 0.001f);
+        case ColliderShapeType::Box:
+        default:
+            return std::max(collider.halfExtents.y, 0.001f);
+        }
+    }
+
+    inline glm::vec3 GetColliderCenterOffset(const ColliderComponent& collider)
+    {
+        glm::vec3 offset = collider.centerOffset;
+        if (collider.alignBottomToEntity)
+            offset.y += GetBottomOffsetY(collider);
+        return offset;
+    }
+
     inline JPH::ObjectLayer ToObjectLayer(const LayerConfig& layers, RigidBodyType bodyType)
     {
         return bodyType == RigidBodyType::Static ? layers.nonMoving : layers.moving;
@@ -152,9 +174,10 @@ namespace PhysicsSystems
             return;
 
         JPH::ShapeRefC shape = CreateShape(*collider);
+        const glm::vec3 centerOffsetWorld = transform->GetRotation() * GetColliderCenterOffset(*collider);
         JPH::BodyCreationSettings settings(
             shape,
-            ToJoltRVec3(transform->GetPosition()),
+            ToJoltRVec3(transform->GetPosition() + centerOffsetWorld),
             ToJoltQuat(transform->GetRotation()),
             ToMotionType(rigidBody->bodyType),
             ToObjectLayer(context.layers, rigidBody->bodyType));
@@ -216,7 +239,7 @@ namespace PhysicsSystems
         if (!context.bodyInterface)
             return;
 
-        for (auto [entity, rigidBody, transform] : registry.view<RigidBodyComponent, TransformComponent>().each())
+        for (auto [entity, rigidBody, collider, transform] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each())
         {
             if (rigidBody.bodyType != RigidBodyType::Kinematic)
                 continue;
@@ -227,7 +250,7 @@ namespace PhysicsSystems
 
             context.bodyInterface->SetPositionAndRotation(
                 bodyIt->second,
-                ToJoltRVec3(transform.GetPosition()),
+                ToJoltRVec3(transform.GetPosition() + (transform.GetRotation() * GetColliderCenterOffset(collider))),
                 ToJoltQuat(transform.GetRotation()),
                 JPH::EActivation::Activate);
 
@@ -262,14 +285,16 @@ namespace PhysicsSystems
                 continue;
             }
 
-            auto [transform, rigidBody] = registry.try_get<TransformComponent, RigidBodyComponent>(entity);
-            if (!transform || !rigidBody)
+            auto [transform, rigidBody, collider] = registry.try_get<TransformComponent, RigidBodyComponent, ColliderComponent>(entity);
+            if (!transform || !rigidBody || !collider)
             {
                 staleEntities.push_back(entity);
                 continue;
             }
 
-            transform->SetPosition(ToGlmFromRVec3(context.bodyInterface->GetCenterOfMassPosition(bodyId)));
+            const glm::vec3 bodyPos = ToGlmFromRVec3(context.bodyInterface->GetCenterOfMassPosition(bodyId));
+            const glm::quat bodyRot = ToGlmQuat(context.bodyInterface->GetRotation(bodyId));
+            transform->SetPosition(bodyPos - (bodyRot * GetColliderCenterOffset(*collider)));
             transform->SetRotation(ToGlmQuat(context.bodyInterface->GetRotation(bodyId)));
             rigidBody->linearVelocity = ToGlmVec3(context.bodyInterface->GetLinearVelocity(bodyId));
         }
@@ -291,7 +316,7 @@ namespace PhysicsSystems
         if (!context.bodyInterface)
             return;
 
-        for (auto [entity, rigidBody, transform] : registry.view<RigidBodyComponent, TransformComponent>().each())
+        for (auto [entity, rigidBody, collider, transform] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each())
         {
             if (rigidBody.bodyType != RigidBodyType::Dynamic)
                 continue;
@@ -307,7 +332,7 @@ namespace PhysicsSystems
 
             context.bodyInterface->SetPositionAndRotation(
                 bodyId,
-                ToJoltRVec3(transform.GetPosition()),
+                ToJoltRVec3(transform.GetPosition() + (transform.GetRotation() * GetColliderCenterOffset(collider))),
                 ToJoltQuat(transform.GetRotation()),
                 JPH::EActivation::Activate);
         }

@@ -38,6 +38,8 @@ struct ColliderComponent
     glm::vec3 halfExtents = glm::vec3(0.5f);
     float radius = 0.5f;
     float halfHeight = 0.5f;
+    glm::vec3 centerOffset = glm::vec3(0.0f);
+    bool alignBottomToEntity = false;
 };
 
 using PhysicsBodyType = RigidBodyType;

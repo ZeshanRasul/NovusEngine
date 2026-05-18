@@ -11,9 +11,9 @@
           "clipIndex": 0,
           "playTime": 0.0,
           "position": [
-            0.0,
-            0.0,
-            0.0
+            -1.638701860429137e-06,
+            -70.77510070800781,
+            -131.29949951171875
           ],
           "rotation": [
             180.0,
@@ -25,13 +25,41 @@
           "swapYZ": false
         }
       },
-      "id": 13,
-      "name": "Assimp: Knight.glb",
-      "transform": {
-        "position": [
+      "collider": {
+        "alignBottomToEntity": true,
+        "centerOffset": [
           0.0,
           0.0,
           0.0
+        ],
+        "halfExtents": [
+          0.5,
+          29.450000762939453,
+          0.5
+        ],
+        "halfHeight": 23.450000762939453,
+        "radius": 21.049999237060547,
+        "shapeType": 2
+      },
+      "id": 13,
+      "name": "Assimp: Knight.glb",
+      "rigidBody": {
+        "bodyType": 1,
+        "friction": 0.5,
+        "linearVelocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mass": 1.0,
+        "restitution": 0.20000000298023224,
+        "useGravity": true
+      },
+      "transform": {
+        "position": [
+          -1.638701860429137e-06,
+          -70.77510070800781,
+          -131.29949951171875
         ],
         "rotation": [
           0.7071067690849304,
@@ -48,6 +76,12 @@
     },
     {
       "collider": {
+        "alignBottomToEntity": false,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "halfExtents": [
           0.5,
           0.5,
@@ -77,8 +111,8 @@
       "transform": {
         "position": [
           -355.0,
-          -890.0,
-          152.3000030517578
+          -490.0,
+          -3.10350842482876e-05
         ],
         "rotation": [
           -0.0,
@@ -95,6 +129,12 @@
     },
     {
       "collider": {
+        "alignBottomToEntity": true,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "halfExtents": [
           0.5,
           0.5,
@@ -124,7 +164,7 @@
       "transform": {
         "position": [
           260.0,
-          -800.0,
+          -400.0,
           0.0
         ],
         "rotation": [
@@ -142,6 +182,12 @@
     },
     {
       "collider": {
+        "alignBottomToEntity": false,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "halfExtents": [
           860.0,
           300.0,
@@ -186,6 +232,12 @@
     },
     {
       "collider": {
+        "alignBottomToEntity": false,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "halfExtents": [
           860.0,
           300.0,
@@ -230,6 +282,12 @@
     },
     {
       "collider": {
+        "alignBottomToEntity": false,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "halfExtents": [
           18.0,
           300.0,
@@ -274,6 +332,12 @@
     },
     {
       "collider": {
+        "alignBottomToEntity": false,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "halfExtents": [
           18.0,
           300.0,
@@ -318,6 +382,12 @@
     },
     {
       "collider": {
+        "alignBottomToEntity": true,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
         "halfExtents": [
           860.0,
           18.0,
@@ -400,9 +470,9 @@
       },
       "transform": {
         "position": [
-          -1315.690673828125,
-          -137.99444580078125,
-          -38.97813415527344
+          20.0,
+          40.0,
+          -10.0
         ],
         "rotation": [
           0.0,
@@ -432,9 +502,9 @@
       },
       "transform": {
         "position": [
-          -793.021240234375,
+          10.0,
           -50.0,
-          62.710052490234375
+          -75.0
         ],
         "rotation": [
           0.0,
@@ -464,9 +534,9 @@
       },
       "transform": {
         "position": [
-          -713.9718627929688,
+          -70.0,
           -80.0,
-          -135.052978515625
+          5.0
         ],
         "rotation": [
           0.0,
@@ -496,9 +566,9 @@
       },
       "transform": {
         "position": [
-          -1035.1124267578125,
+          0.0,
           -45.0,
-          -28.61212158203125
+          0.0
         ],
         "rotation": [
           0.0,
@@ -536,5 +606,5 @@
       }
     }
   ],
-  "selected": 11
+  "selected": 13
 }

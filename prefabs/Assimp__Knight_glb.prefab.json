@@ -1,0 +1,79 @@
+{
+  "entities": [
+    {
+      "animation": {
+        "clipIndex": 0,
+        "speed": 1.0
+      },
+      "assimp": {
+        "model": "models\\Knight.glb",
+        "settings": {
+          "clipIndex": 0,
+          "playTime": 0.0,
+          "position": [
+            -1.638701860429137e-06,
+            -70.77510070800781,
+            -131.29949951171875
+          ],
+          "rotation": [
+            -180.0,
+            -89.98021697998047,
+            0.0
+          ],
+          "scale": 5000.0,
+          "speed": 1.0,
+          "swapYZ": false
+        }
+      },
+      "collider": {
+        "alignBottomToEntity": true,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "halfExtents": [
+          0.5,
+          29.450000762939453,
+          0.5
+        ],
+        "halfHeight": 23.450000762939453,
+        "radius": 21.049999237060547,
+        "shapeType": 2
+      },
+      "id": 1,
+      "name": "Assimp__Knight_glb.prefab",
+      "rigidBody": {
+        "bodyType": 1,
+        "friction": 0.5,
+        "linearVelocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mass": 1.0,
+        "restitution": 0.20000000298023224,
+        "useGravity": true
+      },
+      "transform": {
+        "position": [
+          -1.638701860429137e-06,
+          -70.77510070800781,
+          -131.29949951171875
+        ],
+        "rotation": [
+          0.7072288393974304,
+          3.0903283487759836e-08,
+          0.7069846987724304,
+          -3.091395583965095e-08
+        ],
+        "scale": [
+          5000.0,
+          5000.0,
+          5000.0
+        ]
+      }
+    }
+  ],
+  "selected": 1
+}

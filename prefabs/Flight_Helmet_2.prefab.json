@@ -1,0 +1,58 @@
+{
+  "entities": [
+    {
+      "collider": {
+        "alignBottomToEntity": false,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "halfExtents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "halfHeight": 0.5,
+        "radius": 46.0,
+        "shapeType": 1
+      },
+      "id": 1,
+      "name": "Flight_Helmet_2.prefab",
+      "renderable": {
+        "modelPath": "models/FlightHelmet.gltf"
+      },
+      "rigidBody": {
+        "bodyType": 1,
+        "friction": 0.44999998807907104,
+        "linearVelocity": [
+          40.0000114440918,
+          -8.0,
+          -125.0
+        ],
+        "mass": 2.799999952316284,
+        "restitution": 0.6000000238418579,
+        "useGravity": true
+      },
+      "transform": {
+        "position": [
+          -355.0,
+          -490.0,
+          -3.10350842482876e-05
+        ],
+        "rotation": [
+          -0.0,
+          0.7071067690849304,
+          -0.0,
+          -0.7071067690849304
+        ],
+        "scale": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      }
+    }
+  ],
+  "selected": 1
+}

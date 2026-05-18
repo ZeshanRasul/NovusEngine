@@ -192,7 +192,7 @@ void Renderer::setupGameObjects()
 
 			if (!modelPath.empty())
 			{
-             auto model = getOrLoadModelGltfAsset(modelPath);
+				auto model = getOrLoadModelGltfAsset(modelPath);
 				if (model)
 				{
 					auto& renderable = registry.emplace_or_replace<RenderableComponent>(ecsEntity);
@@ -224,7 +224,7 @@ void Renderer::setupGameObjects()
 		const glm::vec3& halfExtents,
 		float radius,
 		float halfHeight,
-      const glm::vec3& linearVelocity,
+		const glm::vec3& linearVelocity,
 		bool alignBottomToEntity = false,
 		const glm::vec3& centerOffset = glm::vec3(0.0f)) {
 			auto& rigidBody = registry.emplace_or_replace<RigidBodyComponent>(entity);
@@ -260,27 +260,27 @@ void Renderer::setupGameObjects()
 		"");
 	addPhysics(floor, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.9f, 0.15f, false,
-       { 860.0f, 18.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, true);
+		{ 860.0f, 18.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, true);
 
 	const entt::entity wallPosX = makeEntity("Physics Arena Wall +X", { 860.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallPosX, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-       { 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
+		{ 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const entt::entity wallNegX = makeEntity("Physics Arena Wall -X", { -860.0f, -260.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallNegX, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-       { 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
+		{ 18.0f, 300.0f, 860.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const entt::entity wallPosZ = makeEntity("Physics Arena Wall +Z", { 0.0f, -260.0f, 860.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallPosZ, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-       { 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
+		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const entt::entity wallNegZ = makeEntity("Physics Arena Wall -Z", { 0.0f, -260.0f, -860.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, "");
 	addPhysics(wallNegZ, RigidBodyType::Static, ColliderShapeType::Box,
 		1.0f, 0.8f, 0.1f, false,
-       { 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
+		{ 860.0f, 300.0f, 18.0f }, 1.0f, 1.0f, { 0.0f, 0.0f, 0.0f }, false);
 
 	const int spawnCount = std::max(2, physicsSpawnCount);
 	const float spawnBaseHeight = physicsSpawnHeight;
@@ -301,7 +301,7 @@ void Renderer::setupGameObjects()
 		const glm::vec3 scale = damagedHelmet ? glm::vec3(35.0f) : glm::vec3(100.0f);
 		const glm::vec3 rotation = damagedHelmet ? glm::vec3(0.0f, angle, 0.0f) : glm::vec3(0.0f, angle + glm::radians(90.0f), 0.0f);
 		const bool alignBottom = damagedHelmet;
-			
+
 
 		entt::entity helmet = makeEntity(namePrefix + std::to_string(i + 1), position, rotation, scale, modelPath);
 		addPhysics(helmet,
@@ -314,7 +314,7 @@ void Renderer::setupGameObjects()
 			glm::vec3(0.5f),
 			damagedHelmet ? 18.0f : 46.0f,
 			0.5f,
-         startVelocity,
+			startVelocity,
 			alignBottom);
 	}
 }
@@ -335,14 +335,14 @@ void Renderer::rebuildRenderableRuntimeResources()
 		}
 
 		if (!renderable.sourceModelFile.empty()) {
-         if (!hasAnyLoadedTextureViews(renderable.materialTextures)) {
+			if (!hasAnyLoadedTextureViews(renderable.materialTextures)) {
 				tryReuseCachedGltfTextures(renderable.sourceModelFile, renderable);
 			}
 		}
 
 		createVertexBuffer(renderable);
 		createIndexBuffer(renderable);
-      for (size_t i = 0; i < renderable.materials.size(); ++i) {
+		for (size_t i = 0; i < renderable.materials.size(); ++i) {
 			if (hasLoadedTextureViews(renderable.materialTextures[i]))
 				continue;
 
@@ -351,7 +351,7 @@ void Renderer::rebuildRenderableRuntimeResources()
 
 			{
 				loadPBRTextures(renderable.materials[i], renderable.materialTextures[i]);
-           }
+			}
 		}
 	}
 
@@ -817,9 +817,9 @@ void Renderer::captureGltfTexturesFromScene(entt::registry& registry)
 		if (!hasAnyLoadedTextureViews(renderable.materialTextures))
 			continue;
 
-      for (size_t materialIndex = 0; materialIndex < renderable.materialTextures.size(); ++materialIndex)
+		for (size_t materialIndex = 0; materialIndex < renderable.materialTextures.size(); ++materialIndex)
 		{
-            auto& material = renderable.materials[materialIndex];
+			auto& material = renderable.materials[materialIndex];
 			auto& materialTextures = renderable.materialTextures[materialIndex];
 
 			cacheTextureResource(material.albedoTexturePath,
@@ -873,12 +873,12 @@ std::shared_ptr<RenderableComponent> Renderer::getRenderableModel(std::string mo
 }
 
 bool Renderer::hasModel(std::string modelFileName) {
- const std::string key = normalizeModelAssetKey(modelFileName);
+	const std::string key = normalizeModelAssetKey(modelFileName);
 	if (key.empty())
 		return false;
 
 	auto modelIter = std::find_if(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(),
-        [&](const auto& model) {
+		[&](const auto& model) {
 			if (!model)
 				return false;
 			return normalizeModelAssetKey(model->getModelFileNamePath()) == key ||
@@ -888,12 +888,12 @@ bool Renderer::hasModel(std::string modelFileName) {
 }
 
 std::shared_ptr<AssimpModel> Renderer::getModel(std::string modelFileName) {
- const std::string key = normalizeModelAssetKey(modelFileName);
+	const std::string key = normalizeModelAssetKey(modelFileName);
 	if (key.empty())
 		return nullptr;
 
 	auto modelIter = std::find_if(mModelInstData.miModelList.begin(), mModelInstData.miModelList.end(),
-        [&](const auto& model) {
+		[&](const auto& model) {
 			if (!model)
 				return false;
 			return normalizeModelAssetKey(model->getModelFileNamePath()) == key ||
@@ -910,7 +910,7 @@ bool Renderer::addModel(std::string modelFileName) {
 		return false;
 	}
 
-   std::shared_ptr<AssimpModel> model = getOrLoadModelAssimpAsset(modelFileName);
+	std::shared_ptr<AssimpModel> model = getOrLoadModelAssimpAsset(modelFileName);
 	if (!model) {
 		return false;
 	}
@@ -1478,6 +1478,8 @@ void Renderer::renderImgui()
 	ImGui::Checkbox("Shadow UI", &uiShowShadowTuningWindow);
 	ImGui::SameLine();
 	ImGui::Checkbox("Physics UI", &uiShowPhysicsWindow);
+	ImGui::SameLine();
+	ImGui::Checkbox("Prefab UI", &uiShowPrefabWindow);
 
 	ImGui::Checkbox("Render Shadows", &renderEnableShadows);
 	ImGui::SameLine();
@@ -1583,6 +1585,78 @@ void Renderer::renderImgui()
 		const float frameMs = fps > 0.0f ? (1000.0f / fps) : 0.0f;
 		ImGui::Text("FPS: %.1f (%.2f ms)", fps, frameMs);
 
+		ImGui::End();
+	}
+
+	if ((isEditMode || playShowDebugUI) && uiShowPrefabWindow)
+	{
+       auto makePrefabSafeName = [](std::string name) {
+			for (char& c : name)
+			{
+				const unsigned char uc = static_cast<unsigned char>(c);
+				if (!(std::isalnum(uc) || c == '_' || c == '-'))
+					c = '_';
+			}
+			if (name.empty())
+				name = "default";
+			return name;
+		};
+
+		std::string suggestedPrefabName = "default";
+		if (mEnttScene.isValid(mEnttSelectedEntity))
+		{
+			if (const auto* selectedTag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity); selectedTag && !selectedTag->name.empty())
+				suggestedPrefabName = selectedTag->name;
+		}
+
+		mPrefabSaveFilePath = "prefabs/" + makePrefabSafeName(suggestedPrefabName) + ".prefab.json";
+
+		if (mPrefabAssetsDirty)
+			refreshPrefabAssetList();
+
+		ImGui::Begin("Prefabs");
+		if (ImGui::Button("Refresh"))
+		{
+			mPrefabAssetsDirty = true;
+			refreshPrefabAssetList();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Save Selected As Prefab"))
+		{
+			if (saveSelectedAsPrefab(mPrefabSaveFilePath))
+			{
+				mPrefabAssetsDirty = true;
+				mPrefabFilePath = mPrefabSaveFilePath;
+				refreshPrefabAssetList();
+			}
+		}
+
+      ImGui::Text("Save Path: %s", mPrefabSaveFilePath.c_str());
+
+		ImGui::Separator();
+		ImGui::Text("Available Prefabs");
+		for (int i = 0; i < static_cast<int>(mPrefabAssets.size()); ++i)
+		{
+			const bool selected = (mSelectedPrefabAsset == i);
+			if (ImGui::Selectable(mPrefabAssets[i].c_str(), selected))
+			{
+				mSelectedPrefabAsset = i;
+				mPrefabFilePath = mPrefabAssets[i];
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Instantiate Path: %s", mPrefabFilePath.empty() ? "<none>" : mPrefabFilePath.c_str());
+
+		ImGui::BeginDisabled(mSelectedPrefabAsset < 0 || mSelectedPrefabAsset >= static_cast<int>(mPrefabAssets.size()));
+		if (ImGui::Button("Instantiate Selected Prefab") &&
+			mSelectedPrefabAsset >= 0 &&
+			mSelectedPrefabAsset < static_cast<int>(mPrefabAssets.size()))
+		{
+			instantiatePrefab(mPrefabAssets[mSelectedPrefabAsset]);
+		}
+		ImGui::EndDisabled();
 		ImGui::End();
 	}
 
@@ -1883,7 +1957,7 @@ void Renderer::enterPlayMode()
 
 void Renderer::exitPlayMode()
 {
- mLogPlayToEditCacheStats = true;
+	mLogPlayToEditCacheStats = true;
 
 	std::ifstream inFile(mEditorSceneFilePath);
 	if (inFile.is_open()) {
@@ -2739,7 +2813,7 @@ std::string Renderer::serializeEnttScene() const
 				{ "shapeType", static_cast<int>(collider->shapeType) },
 				{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
 				{ "radius", collider->radius },
-              { "halfHeight", collider->halfHeight },
+			  { "halfHeight", collider->halfHeight },
 				{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
 				{ "alignBottomToEntity", collider->alignBottomToEntity }
 			};
@@ -2775,7 +2849,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 	CacheReloadStats cacheStats{};
 
 	auto& registry = mEnttScene.getRegistry();
- captureGltfTexturesFromScene(registry);
+	captureGltfTexturesFromScene(registry);
 
 	std::vector<entt::entity> existingEntities;
 	registry.view<EnttTagComponent>().each([&](entt::entity entity, EnttTagComponent&) {
@@ -2783,7 +2857,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 		});
 
 	for (auto entity : existingEntities) {
-       if (auto* renderable = registry.try_get<RenderableComponent>(entity)) {
+		if (auto* renderable = registry.try_get<RenderableComponent>(entity)) {
 			renderable->materialDescriptorSets.clear();
 		}
 		mEnttScene.destroyEntity(entity);
@@ -2829,11 +2903,11 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			const auto& renderableNode = node["renderable"];
 			const std::string modelPath = renderableNode.value("modelPath", std::string());
 			if (!modelPath.empty()) {
-                const std::string modelKey = normalizeModelAssetKey(modelPath);
+				const std::string modelKey = normalizeModelAssetKey(modelPath);
 				const bool hadModelAssetInCache = (!modelKey.empty() && mGltfModelAssetCache.contains(modelKey));
-                auto model = getOrLoadModelGltfAsset(modelPath);
+				auto model = getOrLoadModelGltfAsset(modelPath);
 				if (model) {
-                    if (hadModelAssetInCache)
+					if (hadModelAssetInCache)
 						++cacheStats.gltfModelCacheHits;
 					else
 						++cacheStats.gltfModelReloads;
@@ -2847,7 +2921,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 					renderableComp.materialTextures.clear();
 					renderableComp.materialDescriptorSets.clear();
 
-                   if (tryReuseCachedGltfTextures(modelPath, renderableComp)) {
+					if (tryReuseCachedGltfTextures(modelPath, renderableComp)) {
 						++cacheStats.gltfTextureCacheHits;
 					}
 					else {
@@ -2936,7 +3010,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			}
 			col.radius = colNode.value("radius", col.radius);
 			col.halfHeight = colNode.value("halfHeight", col.halfHeight);
-           if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
+			if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
 				col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
 			}
 			col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
@@ -2981,6 +3055,300 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 
 	rebuildRenderableRuntimeResources();
 
+	return true;
+}
+
+bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
+{
+	if (!mEnttScene.isValid(mEnttSelectedEntity))
+		return false;
+
+	auto& registry = mEnttScene.getRegistry();
+	const auto* tag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
+	if (!tag)
+		return false;
+
+	using json = nlohmann::json;
+	json root;
+	root["entities"] = json::array();
+
+	const std::string prefabEntityName = std::filesystem::path(prefabPath).stem().string();
+	const std::string outlinerName = prefabEntityName.empty() ? tag->name : prefabEntityName;
+
+	json node;
+	node["id"] = 1u;
+	node["name"] = outlinerName;
+
+	if (const auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity)) {
+		const auto& pos = transform->GetPosition();
+		const auto& rot = transform->GetRotation();
+		const auto& scale = transform->GetScale();
+		node["transform"] = {
+			{ "position", { pos.x, pos.y, pos.z } },
+			{ "rotation", { rot.x, rot.y, rot.z, rot.w } },
+			{ "scale", { scale.x, scale.y, scale.z } }
+		};
+	}
+
+	if (const auto* animation = registry.try_get<AnimationComponent>(mEnttSelectedEntity)) {
+		node["animation"] = {
+			{ "clipIndex", animation->clipIndex },
+			{ "speed", animation->speed }
+		};
+	}
+
+	if (const auto* assimpComp = registry.try_get<AssimpInstanceComponent>(mEnttSelectedEntity); assimpComp && assimpComp->instance) {
+		json assimp;
+		auto model = assimpComp->instance->getModel();
+		assimp["model"] = model ? model->getModelFileNamePath() : "";
+
+		InstanceSettings settings = assimpComp->instance->getInstanceSettings();
+		assimp["settings"] = {
+			{ "position", { settings.isWorldPosition.x, settings.isWorldPosition.y, settings.isWorldPosition.z } },
+			{ "rotation", { settings.isWorldRotation.x, settings.isWorldRotation.y, settings.isWorldRotation.z } },
+			{ "scale", settings.isScale },
+			{ "swapYZ", settings.isSwapYZAxis },
+			{ "clipIndex", settings.isAnimClipNr },
+			{ "playTime", settings.isAnimPlayTimePos },
+			{ "speed", settings.isAnimSpeedFactor }
+		};
+		node["assimp"] = assimp;
+	}
+
+	if (const auto* renderableComp = registry.try_get<RenderableComponent>(mEnttSelectedEntity)) {
+		json renderable;
+		renderable["modelPath"] = renderableComp->sourceModelFile;
+		node["renderable"] = renderable;
+	}
+
+	if (const auto* pointLight = registry.try_get<PointLightComponent>(mEnttSelectedEntity)) {
+		node["pointLight"] = {
+			{ "color", { pointLight->color.x, pointLight->color.y, pointLight->color.z } },
+			{ "intensity", pointLight->intensity },
+			{ "range", pointLight->range },
+			{ "enabled", pointLight->enabled }
+		};
+	}
+
+	if (const auto* rigidBody = registry.try_get<RigidBodyComponent>(mEnttSelectedEntity)) {
+		node["rigidBody"] = {
+			{ "bodyType", static_cast<int>(rigidBody->bodyType) },
+			{ "mass", rigidBody->mass },
+			{ "friction", rigidBody->friction },
+			{ "restitution", rigidBody->restitution },
+			{ "useGravity", rigidBody->useGravity },
+			{ "linearVelocity", { rigidBody->linearVelocity.x, rigidBody->linearVelocity.y, rigidBody->linearVelocity.z } }
+		};
+	}
+
+	if (const auto* collider = registry.try_get<ColliderComponent>(mEnttSelectedEntity)) {
+		node["collider"] = {
+			{ "shapeType", static_cast<int>(collider->shapeType) },
+			{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
+			{ "radius", collider->radius },
+			{ "halfHeight", collider->halfHeight },
+			{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
+			{ "alignBottomToEntity", collider->alignBottomToEntity }
+		};
+	}
+
+	root["entities"].push_back(node);
+	root["selected"] = 1u;
+
+	std::filesystem::path outPath(prefabPath);
+	if (outPath.has_parent_path())
+		std::filesystem::create_directories(outPath.parent_path());
+
+	std::ofstream outFile(prefabPath, std::ios::out | std::ios::trunc);
+	if (!outFile.is_open())
+		return false;
+
+	outFile << root.dump(2);
+	mPrefabAssetsDirty = true;
+	return true;
+}
+
+void Renderer::refreshPrefabAssetList()
+{
+	mPrefabAssets.clear();
+	const std::filesystem::path prefabRoot("prefabs");
+	if (!std::filesystem::exists(prefabRoot) || !std::filesystem::is_directory(prefabRoot))
+	{
+		mSelectedPrefabAsset = -1;
+		mPrefabAssetsDirty = false;
+		return;
+	}
+
+	for (const auto& entry : std::filesystem::recursive_directory_iterator(prefabRoot))
+	{
+		if (!entry.is_regular_file())
+			continue;
+
+		const auto path = entry.path();
+		const std::string ext = path.extension().string();
+		if (ext != ".json")
+			continue;
+
+		const std::string pathStr = path.lexically_normal().generic_string();
+		if (pathStr.find(".prefab") == std::string::npos)
+			continue;
+
+		mPrefabAssets.push_back(pathStr);
+	}
+
+	std::sort(mPrefabAssets.begin(), mPrefabAssets.end());
+	if (mPrefabAssets.empty())
+		mSelectedPrefabAsset = -1;
+	else if (mSelectedPrefabAsset < 0 || mSelectedPrefabAsset >= static_cast<int>(mPrefabAssets.size()))
+		mSelectedPrefabAsset = 0;
+
+	mPrefabAssetsDirty = false;
+}
+
+bool Renderer::instantiatePrefab(const std::string& prefabPath)
+{
+	std::ifstream inFile(prefabPath);
+	if (!inFile.is_open())
+		return false;
+
+	std::string jsonContent((std::istreambuf_iterator<char>(inFile)), std::istreambuf_iterator<char>());
+	if (jsonContent.empty())
+		return false;
+
+	using json = nlohmann::json;
+	json root = json::parse(jsonContent, nullptr, false);
+	if (root.is_discarded() || !root.contains("entities") || !root["entities"].is_array() || root["entities"].empty())
+		return false;
+
+	auto& registry = mEnttScene.getRegistry();
+	const json& node = root["entities"][0];
+	const std::string baseName = node.value("name", std::string("Prefab Entity"));
+	entt::entity entity = mEnttScene.createEntity(makeUniqueEntityName(registry, baseName));
+	bool addedRenderable = false;
+
+	if (node.contains("transform")) {
+		auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
+		const auto& t = node["transform"];
+		if (t.contains("position") && t["position"].is_array() && t["position"].size() == 3) {
+			transform.SetPosition(glm::vec3(t["position"][0].get<float>(), t["position"][1].get<float>(), t["position"][2].get<float>()));
+		}
+		if (t.contains("rotation") && t["rotation"].is_array() && t["rotation"].size() == 4) {
+			transform.SetRotation(glm::quat(t["rotation"][3].get<float>(), t["rotation"][0].get<float>(), t["rotation"][1].get<float>(), t["rotation"][2].get<float>()));
+		}
+		if (t.contains("scale") && t["scale"].is_array() && t["scale"].size() == 3) {
+			transform.SetScale(glm::vec3(t["scale"][0].get<float>(), t["scale"][1].get<float>(), t["scale"][2].get<float>()));
+		}
+	}
+
+	if (node.contains("animation")) {
+		auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
+		anim.clipIndex = node["animation"].value("clipIndex", 0u);
+		anim.speed = node["animation"].value("speed", 1.0f);
+	}
+
+	if (node.contains("renderable") && node["renderable"].is_object()) {
+		const auto& renderableNode = node["renderable"];
+		const std::string modelPath = renderableNode.value("modelPath", std::string());
+		if (!modelPath.empty()) {
+			auto model = getOrLoadModelGltfAsset(modelPath);
+			if (model) {
+                addedRenderable = true;
+				auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
+				renderableComp.vertices = model->vertices;
+				renderableComp.indices = model->indices;
+				renderableComp.meshes = model->meshes;
+				renderableComp.materials = model->materials;
+				renderableComp.sourceModelFile = model->sourceModelFile;
+				renderableComp.materialTextures.clear();
+				renderableComp.materialDescriptorSets.clear();
+
+				if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
+					renderableComp.materialTextures.resize(renderableComp.materials.size());
+					for (size_t i = 0; i < renderableComp.materials.size(); ++i)
+						loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
+				}
+			}
+		}
+	}
+
+	if (node.contains("assimp") && node["assimp"].is_object()) {
+		const auto& assimpNode = node["assimp"];
+		const std::string modelName = assimpNode.value("model", std::string());
+		auto model = ensureModelLoadedForScene(modelName);
+		if (model) {
+			createAssimpInstanceForEntity(model, entity);
+			auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity);
+			if (assimpComp && assimpComp->instance && assimpNode.contains("settings")) {
+				InstanceSettings settings = assimpComp->instance->getInstanceSettings();
+				const auto& s = assimpNode["settings"];
+				if (s.contains("position") && s["position"].is_array() && s["position"].size() == 3) {
+					settings.isWorldPosition = glm::vec3(s["position"][0].get<float>(), s["position"][1].get<float>(), s["position"][2].get<float>());
+				}
+				if (s.contains("rotation") && s["rotation"].is_array() && s["rotation"].size() == 3) {
+					settings.isWorldRotation = glm::vec3(s["rotation"][0].get<float>(), s["rotation"][1].get<float>(), s["rotation"][2].get<float>());
+				}
+				settings.isScale = s.value("scale", settings.isScale);
+				settings.isSwapYZAxis = s.value("swapYZ", settings.isSwapYZAxis);
+				settings.isAnimClipNr = s.value("clipIndex", settings.isAnimClipNr);
+				settings.isAnimPlayTimePos = s.value("playTime", settings.isAnimPlayTimePos);
+				settings.isAnimSpeedFactor = s.value("speed", settings.isAnimSpeedFactor);
+				assimpComp->instance->setInstanceSettings(settings);
+			}
+		}
+	}
+
+	if (node.contains("pointLight") && node["pointLight"].is_object()) {
+		auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
+		const auto& pl = node["pointLight"];
+		if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3) {
+			light.color = glm::vec3(pl["color"][0].get<float>(), pl["color"][1].get<float>(), pl["color"][2].get<float>());
+		}
+		light.intensity = pl.value("intensity", light.intensity);
+		light.range = pl.value("range", light.range);
+		light.enabled = pl.value("enabled", light.enabled);
+	}
+
+	if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
+		auto& rb = registry.emplace_or_replace<RigidBodyComponent>(entity);
+		const auto& rbNode = node["rigidBody"];
+		rb.bodyType = static_cast<RigidBodyType>(rbNode.value("bodyType", static_cast<int>(rb.bodyType)));
+		rb.mass = rbNode.value("mass", rb.mass);
+		rb.friction = rbNode.value("friction", rb.friction);
+		rb.restitution = rbNode.value("restitution", rb.restitution);
+		rb.useGravity = rbNode.value("useGravity", rb.useGravity);
+		if (rbNode.contains("linearVelocity") && rbNode["linearVelocity"].is_array() && rbNode["linearVelocity"].size() == 3) {
+			rb.linearVelocity = glm::vec3(rbNode["linearVelocity"][0].get<float>(), rbNode["linearVelocity"][1].get<float>(), rbNode["linearVelocity"][2].get<float>());
+		}
+		rb.registeredInWorld = false;
+		rb.bodyId = -1;
+	}
+
+	if (node.contains("collider") && node["collider"].is_object()) {
+		auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
+		const auto& colNode = node["collider"];
+		col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
+		if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3) {
+			col.halfExtents = glm::vec3(colNode["halfExtents"][0].get<float>(), colNode["halfExtents"][1].get<float>(), colNode["halfExtents"][2].get<float>());
+		}
+		col.radius = colNode.value("radius", col.radius);
+		col.halfHeight = colNode.value("halfHeight", col.halfHeight);
+		if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
+			col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
+		}
+		col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
+	}
+
+	if (registry.any_of<RigidBodyComponent, ColliderComponent, TransformComponent>(entity)) {
+		entt::entity e = entity;
+		physicsSystem.registerEntity(e, registry);
+	}
+
+	if (addedRenderable)
+		rebuildRenderableRuntimeResources();
+
+	mEnttSelectedEntity = entity;
+	mEnttMultiSelection.clear();
+	mEnttMultiSelection.push_back(entity);
 	return true;
 }
 
@@ -3398,32 +3766,32 @@ void Renderer::rebuildColliderDebugLines()
 	{
 		(void)entity;
 		const glm::vec3 color = glm::vec3(0.15f, 1.0f, 0.15f);
-        const glm::mat4 M = glm::translate(glm::mat4(1.0f), tr.GetPosition()) * glm::mat4_cast(tr.GetRotation());
+		const glm::mat4 M = glm::translate(glm::mat4(1.0f), tr.GetPosition()) * glm::mat4_cast(tr.GetRotation());
 		auto transformPoint = [&M](const glm::vec3& p) {
 			return glm::vec3(M * glm::vec4(p, 1.0f));
-		};
+			};
 
 		if (col.shapeType == ColliderShapeType::Box)
 		{
 			const glm::vec3 e = glm::max(col.halfExtents, glm::vec3(0.001f));
-          glm::vec3 localCenter = col.centerOffset;
+			glm::vec3 localCenter = col.centerOffset;
 			if (col.alignBottomToEntity)
 				localCenter.y += e.y;
 			std::array<glm::vec3, 8> p = {
-                localCenter + glm::vec3(-e.x,-e.y,-e.z), localCenter + glm::vec3(e.x,-e.y,-e.z),
+				localCenter + glm::vec3(-e.x,-e.y,-e.z), localCenter + glm::vec3(e.x,-e.y,-e.z),
 				localCenter + glm::vec3(e.x, e.y,-e.z), localCenter + glm::vec3(-e.x, e.y,-e.z),
 				localCenter + glm::vec3(-e.x,-e.y, e.z), localCenter + glm::vec3(e.x,-e.y, e.z),
 				localCenter + glm::vec3(e.x, e.y, e.z), localCenter + glm::vec3(-e.x, e.y, e.z)
 			};
 			for (auto& v : p)
-              v = transformPoint(v);
+				v = transformPoint(v);
 
 			for (auto [a, b] : boxEdges)
 				appendLine(colliderDebugVertices, p[a], p[b], color);
 		}
-        else if (col.shapeType == ColliderShapeType::Sphere)
+		else if (col.shapeType == ColliderShapeType::Sphere)
 		{
-           const float r = std::max(col.radius, 0.001f);
+			const float r = std::max(col.radius, 0.001f);
 			glm::vec3 localCenter = col.centerOffset;
 			if (col.alignBottomToEntity)
 				localCenter.y += r;
@@ -3435,27 +3803,27 @@ void Renderer::rebuildColliderDebugLines()
 				const float a1 = (static_cast<float>(i + 1) / static_cast<float>(seg)) * twoPi;
 
 				appendLine(colliderDebugVertices,
-                    transformPoint(localCenter + glm::vec3(std::cos(a0) * r, std::sin(a0) * r, 0.0f)),
+					transformPoint(localCenter + glm::vec3(std::cos(a0) * r, std::sin(a0) * r, 0.0f)),
 					transformPoint(localCenter + glm::vec3(std::cos(a1) * r, std::sin(a1) * r, 0.0f)),
 					color);
 
 				appendLine(colliderDebugVertices,
-                    transformPoint(localCenter + glm::vec3(0.0f, std::cos(a0) * r, std::sin(a0) * r)),
+					transformPoint(localCenter + glm::vec3(0.0f, std::cos(a0) * r, std::sin(a0) * r)),
 					transformPoint(localCenter + glm::vec3(0.0f, std::cos(a1) * r, std::sin(a1) * r)),
 					color);
 
 				appendLine(colliderDebugVertices,
-                    transformPoint(localCenter + glm::vec3(std::cos(a0) * r, 0.0f, std::sin(a0) * r)),
+					transformPoint(localCenter + glm::vec3(std::cos(a0) * r, 0.0f, std::sin(a0) * r)),
 					transformPoint(localCenter + glm::vec3(std::cos(a1) * r, 0.0f, std::sin(a1) * r)),
 					color);
 			}
 		}
 		else
 		{
-           // Capsule aligned to local Y (matching Jolt's CapsuleShape axis).
+			// Capsule aligned to local Y (matching Jolt's CapsuleShape axis).
 			const float r = std::max(col.radius, 0.001f);
-         const float h = std::max(col.halfHeight, 0.001f);
-         glm::vec3 localCenter = col.centerOffset;
+			const float h = std::max(col.halfHeight, 0.001f);
+			glm::vec3 localCenter = col.centerOffset;
 			if (col.alignBottomToEntity)
 				localCenter.y += (h + r);
 			constexpr int seg = 24;
@@ -3469,20 +3837,20 @@ void Renderer::rebuildColliderDebugLines()
 					const float a0 = (static_cast<float>(i) / static_cast<float>(seg)) * twoPi;
 					const float a1 = (static_cast<float>(i + 1) / static_cast<float>(seg)) * twoPi;
 					appendLine(colliderDebugVertices,
-                     transformPoint(localCenter + glm::vec3(std::cos(a0) * ringRadius, y, std::sin(a0) * ringRadius)),
+						transformPoint(localCenter + glm::vec3(std::cos(a0) * ringRadius, y, std::sin(a0) * ringRadius)),
 						transformPoint(localCenter + glm::vec3(std::cos(a1) * ringRadius, y, std::sin(a1) * ringRadius)),
 						color);
 				}
-			};
+				};
 
 			drawRing(+h, r);
 			drawRing(-h, r);
 
 			for (int i = 0; i < 4; ++i)
 			{
-                const float a = static_cast<float>(i) * (halfPi);
+				const float a = static_cast<float>(i) * (halfPi);
 				appendLine(colliderDebugVertices,
-                 transformPoint(localCenter + glm::vec3(std::cos(a) * r, +h, std::sin(a) * r)),
+					transformPoint(localCenter + glm::vec3(std::cos(a) * r, +h, std::sin(a) * r)),
 					transformPoint(localCenter + glm::vec3(std::cos(a) * r, -h, std::sin(a) * r)),
 					color);
 			}
@@ -3507,12 +3875,12 @@ void Renderer::rebuildColliderDebugLines()
 					const float a = (static_cast<float>(i) / static_cast<float>(seg)) * twoPi;
 
 					appendLine(colliderDebugVertices,
-                       transformPoint(localCenter + glm::vec3(std::cos(a) * ringR0, topY0, std::sin(a) * ringR0)),
+						transformPoint(localCenter + glm::vec3(std::cos(a) * ringR0, topY0, std::sin(a) * ringR0)),
 						transformPoint(localCenter + glm::vec3(std::cos(a) * ringR1, topY1, std::sin(a) * ringR1)),
 						color);
 
 					appendLine(colliderDebugVertices,
-                       transformPoint(localCenter + glm::vec3(std::cos(a) * ringR0, botY0, std::sin(a) * ringR0)),
+						transformPoint(localCenter + glm::vec3(std::cos(a) * ringR0, botY0, std::sin(a) * ringR0)),
 						transformPoint(localCenter + glm::vec3(std::cos(a) * ringR1, botY1, std::sin(a) * ringR1)),
 						color);
 				}
@@ -4550,29 +4918,29 @@ void Renderer::transition_image_layout(vk::Image               image,
 
 void Renderer::loadPBRTextures(const Material& material, RenderableComponent::PBRTextures& textures)
 {
-  bool loadedAnyFromDisk = false;
+	bool loadedAnyFromDisk = false;
 
- auto assignOrLoad = [&](const std::string& texturePath,
+	auto assignOrLoad = [&](const std::string& texturePath,
 		vk::raii::Image& image,
 		vk::raii::DeviceMemory& memory,
 		vk::raii::ImageView& view,
 		bool isSRGB) {
-		if (texturePath.empty())
-			return;
+			if (texturePath.empty())
+				return;
 
-		if (*view != VK_NULL_HANDLE)
-			return;
+			if (*view != VK_NULL_HANDLE)
+				return;
 
-		if (tryAssignCachedTextureResource(texturePath, image, memory, view))
-			return;
+			if (tryAssignCachedTextureResource(texturePath, image, memory, view))
+				return;
 
-     if (!loadedAnyFromDisk) {
-			std::cout << "Loading PBR textures for material: " << material.GetName() << std::endl;
-			loadedAnyFromDisk = true;
-		}
+			if (!loadedAnyFromDisk) {
+				std::cout << "Loading PBR textures for material: " << material.GetName() << std::endl;
+				loadedAnyFromDisk = true;
+			}
 
-		Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, texturePath, image, memory, view, isSRGB);
-	};
+			Texture::loadTextureFromFile(device, physicalDevice, queue, commandPool, texturePath, image, memory, view, isSRGB);
+		};
 
 	assignOrLoad(material.albedoTexturePath,
 		textures.baseColorImage,

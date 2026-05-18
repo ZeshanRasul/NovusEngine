@@ -255,6 +255,9 @@ private:
 	void renderEnttEditor(glm::mat4 view, glm::mat4 projection);
 	std::string serializeEnttScene() const;
 	bool deserializeEnttScene(const std::string& sceneJson);
+	bool saveSelectedAsPrefab(const std::string& prefabPath);
+	bool instantiatePrefab(const std::string& prefabPath);
+	void refreshPrefabAssetList();
 	std::shared_ptr<AssimpModel> ensureModelLoadedForScene(const std::string& modelFileName);
 	void pushUndoSnapshot();
 	void performUndo();
@@ -344,7 +347,7 @@ private:
 	ShadowSettings shadowSettings;
 	PhysicsSystem physicsSystem;
 	bool physicsPaused = false;
-	int physicsSpawnCount = 22;
+	int physicsSpawnCount = 2;
 	float physicsSpawnHeight = -400.0f;
 	float  lastFrameTime = 0.0f;
 
@@ -365,6 +368,11 @@ private:
 	bool mHistoryMuted = false;
 	std::string mSceneFilePath = "scene.json";
 	std::string mEditorSceneFilePath = "editor_scene.json";
+	std::string mPrefabFilePath = "prefabs/default.prefab.json";
+	std::string mPrefabSaveFilePath = "prefabs/default.prefab.json";
+	std::vector<std::string> mPrefabAssets{};
+	int mSelectedPrefabAsset = -1;
+	bool mPrefabAssetsDirty = true;
 	bool mLogPlayToEditCacheStats = false;
 
 	std::string normalizeModelAssetKey(const std::string& modelFileName) const;
@@ -589,6 +597,7 @@ private:
 	bool uiShowPostProcessingWindow = true;
 	bool uiShowShadowTuningWindow = true;
 	bool uiShowPhysicsWindow = true;
+	bool uiShowPrefabWindow = true;
 
 	bool renderEnableShadows = true;
 	bool renderEnablePostProcessing = true;

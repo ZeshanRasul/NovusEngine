@@ -13,6 +13,7 @@ import vulkan_hpp;
 #include "buffer.h"
 
 static constexpr uint32_t SHADOW_CASCADE_COUNT = 5;
+static constexpr uint32_t MAX_POINT_LIGHTS = 16;
 
 struct ShadowSettings
 {
@@ -41,8 +42,8 @@ struct UniformBufferObject
 
 	glm::vec4 directionalLightDirection;
 	glm::vec4 directionalLightColor;
-	glm::vec4 lightPositions[4];
-	glm::vec4 lightColors[4];
+    glm::vec4 lightPositions[MAX_POINT_LIGHTS];
+	glm::vec4 lightColors[MAX_POINT_LIGHTS];
 	glm::vec4 camPos;
 	glm::vec4 cascadeSplits; // xyz = split distances, w unused
 	float     exposure;
@@ -60,6 +61,6 @@ public:
 
 	static void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
 		TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings,
-		const std::array<glm::vec4, 4>& pointLightPositions,
-		const std::array<glm::vec4, 4>& pointLightColors);
+        const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightPositions,
+		const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightColors);
 };

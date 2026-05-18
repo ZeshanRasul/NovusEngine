@@ -31,8 +31,8 @@ void UniformBuffer::createUniformBuffers(entt::registry& registry, vk::raii::Dev
 }
 
 void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable, TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings,
-	const std::array<glm::vec4, 4>& pointLightPositions,
-	const std::array<glm::vec4, 4>& pointLightColors)
+    const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightPositions,
+	const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightColors)
 {
 	UniformBufferObject ubo{};
 
@@ -163,7 +163,7 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 		ubo.lightSpaceMatrices[cascade] = lightProj * lightView;
 	}
 
-    for (size_t i = 0; i < 4; ++i)
+  for (size_t i = 0; i < MAX_POINT_LIGHTS; ++i)
 	{
 		ubo.lightPositions[i] = pointLightPositions[i];
 		ubo.lightColors[i] = pointLightColors[i];

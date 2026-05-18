@@ -26,8 +26,8 @@ struct UniformBufferObject {
     float4x4 lightSpaceMatrices[5];     // One per shadow cascade
     float4 directionalLightDirection;
     float4 directionalLightColor;
-    float4 lightPositions[4];
-    float4 lightColors[4];
+    float4 lightPositions[16];
+    float4 lightColors[16];
     float4 camPos;
     float4 cascadeSplits;               // xyz = split distances, w unused (float4 avoids std140 padding issues)
     float exposure;
@@ -283,7 +283,7 @@ float4 fragMain(VSOutput input) : SV_TARGET
     float3 Lo = float3(0.0, 0.0, 0.0);
     // === DIRECT LIGHTING LOOP ===
     // Calculate contribution from each light source
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 16; i++) {
         float3 lightPos = ubo.lightPositions[i].xyz;
         float3 lightColor = ubo.lightColors[i].rgb;
 

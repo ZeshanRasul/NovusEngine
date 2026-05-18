@@ -14,8 +14,8 @@ struct UniformBufferObject {
     float4x4 lightSpaceMatrices[5];
     float4 directionalLightDirection;
     float4 directionalLightColor;
-    float4 lightPositions[4];
-    float4 lightColors[4];
+    float4 lightPositions[16];
+    float4 lightColors[16];
     float4 camPos;
     float4 cascadeSplits;
     float exposure;

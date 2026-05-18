@@ -4244,23 +4244,21 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
 
 	auto& registry = mEnttScene.getRegistry();
-	std::array<glm::vec4, 4> pointLightPositions = {
-		glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
-		glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
-		glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
-		glm::vec4(20.0f, 40.0f, -10.0f, 1.0f)
-	};
-	std::array<glm::vec4, 4> pointLightColors = {
-		glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f),
-		glm::vec4(800.0f, 200.0f, 200.0f, 1.0f),
-		glm::vec4(200.0f, 200.0f, 800.0f, 1.0f),
-		glm::vec4(200.0f, 800.0f, 200.0f, 1.0f)
-	};
+    std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
+	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
+	pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
+	pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
+	pointLightPositions[2] = glm::vec4(10.0f, -50.0f, -75.0f, 1.0f);
+	pointLightPositions[3] = glm::vec4(20.0f, 40.0f, -10.0f, 1.0f);
+	pointLightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
+	pointLightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
+	pointLightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
+	pointLightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
 	int lightIndex = 0;
 	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
 	{
 		(void)lightEntity;
-		if (lightIndex >= 4)
+    if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
 			break;
 		if (!light.enabled)
 			continue;
@@ -4269,7 +4267,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
 		pointLightColors[lightIndex] = glm::vec4(light.color * light.intensity, 1.0f);
 		++lightIndex;
 	}
-	for (; lightIndex < 4; ++lightIndex) {
+  for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
 		pointLightColors[lightIndex] = glm::vec4(0.0f);
 	}
 
@@ -4907,24 +4905,22 @@ void Renderer::recordSceneCopyPass(vk::raii::CommandBuffer& commandBuffer, uint3
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
 	auto& registry = mEnttScene.getRegistry();
-	std::array<glm::vec4, 4> pointLightPositions = {
-		   glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
-		   glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f),
-		   glm::vec4(10.0f, -50.0f, -75.0f, 1.0f),
-		   glm::vec4(20.0f, 40.0f, -10.0f, 1.0f)
-	};
-	std::array<glm::vec4, 4> pointLightColors = {
-		glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f),
-		glm::vec4(800.0f, 200.0f, 200.0f, 1.0f),
-		glm::vec4(200.0f, 200.0f, 800.0f, 1.0f),
-		glm::vec4(200.0f, 800.0f, 200.0f, 1.0f)
-	};
+    std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
+	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
+	pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
+	pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
+	pointLightPositions[2] = glm::vec4(10.0f, -50.0f, -75.0f, 1.0f);
+	pointLightPositions[3] = glm::vec4(20.0f, 40.0f, -10.0f, 1.0f);
+	pointLightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
+	pointLightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
+	pointLightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
+	pointLightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
 
 	int lightIndex = 0;
 	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
 	{
 		(void)lightEntity;
-		if (lightIndex >= 4)
+        if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
 			break;
 		if (!light.enabled)
 			continue;
@@ -4934,7 +4930,7 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 		++lightIndex;
 	}
 
-	for (; lightIndex < 4; ++lightIndex) {
+  for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
 		pointLightColors[lightIndex] = glm::vec4(0.0f);
 	}
 

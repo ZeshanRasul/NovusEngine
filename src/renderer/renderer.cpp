@@ -4,6 +4,8 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
@@ -1933,12 +1935,12 @@ void Renderer::renderImgui()
 	// Render to generate draw data
 	ImGui::Render();
 	//ImDrawData* drawData = ImGui::GetDrawData();
-//if (drawData && drawData->CmdListsCount > 0) {
-//	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
-//		needsUpdateBuffers = true;
-//		return true;
-//	}
-//}
+///if (drawData && drawData->CmdListsCount > 0) {
+///	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
+///		needsUpdateBuffers = true;
+///		return true;
+///	}
+///}
 	imGui->updateBuffers();
 }
 
@@ -2453,66 +2455,63 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			}
 		}
 
-		if (registry.any_of<HierarchyComponent>(mEnttSelectedEntity)) {
-			auto& hc = registry.get<HierarchyComponent>(mEnttSelectedEntity);
-			std::vector<entt::entity> candidates{};
-			std::vector<std::string> candidateLabels{};
-			std::vector<const char*> candidateCStr{};
-			candidates.push_back(entt::null);
-			candidateLabels.emplace_back("<None>");
-			for (auto [entity, entityTag] : registry.view<EnttTagComponent>().each()) {
-				if (entity == mEnttSelectedEntity)
-					continue;
-				if (isDescendantOf(entity, mEnttSelectedEntity))
-					continue;
-				candidates.push_back(entity);
-				candidateLabels.push_back(entityTag.name);
-			}
-			for (auto& label : candidateLabels)
-				candidateCStr.push_back(label.c_str());
+       if (auto* hierarchy = registry.try_get<HierarchyComponent>(mEnttSelectedEntity)) {
+			ImGui::Separator();
+			ImGui::TextUnformatted("Hierarchy");
 
-			int selectedParentIdx = 0;
-			for (int i = 0; i < static_cast<int>(candidates.size()); ++i) {
-				if (candidates[i] == hc.parent) {
-					selectedParentIdx = i;
-					break;
+			const char* currentParentName = "None";
+			if (hierarchy->parent != entt::null && registry.valid(hierarchy->parent)) {
+				if (auto* parentTag = registry.try_get<EnttTagComponent>(hierarchy->parent)) {
+					currentParentName = parentTag->name.c_str();
 				}
 			}
+			ImGui::Text("Parent: %s", currentParentName);
 
-			if (ImGui::Combo("Parent", &selectedParentIdx, candidateCStr.data(), static_cast<int>(candidateCStr.size()))) {
+			if (ImGui::Button("Detach Parent")) {
 				pushUndoSnapshot();
-				setParent(mEnttSelectedEntity, candidates[selectedParentIdx]);
+				setParent(mEnttSelectedEntity, entt::null);
 			}
 
-			ImGui::Text("Children: %d", static_cast<int>(hc.children.size()));
-			for (auto child : hc.children) {
-				if (!registry.valid(child))
-					continue;
-				auto* childTag = registry.try_get<EnttTagComponent>(child);
-				if (childTag) {
-					ImGui::BulletText("%s", childTag->name.c_str());
+			if (ImGui::BeginCombo("Set Parent", currentParentName)) {
+				if (ImGui::Selectable("None", hierarchy->parent == entt::null)) {
+					pushUndoSnapshot();
+					setParent(mEnttSelectedEntity, entt::null);
 				}
+
+				for (auto [candidate, candidateTag] : registry.view<EnttTagComponent>().each()) {
+					if (candidate == mEnttSelectedEntity)
+						continue;
+					const bool isSelectedParent = (candidate == hierarchy->parent);
+					if (ImGui::Selectable(candidateTag.name.c_str(), isSelectedParent)) {
+						pushUndoSnapshot();
+						setParent(mEnttSelectedEntity, candidate);
+					}
+				}
+				ImGui::EndCombo();
 			}
+
+			ImGui::Text("Children: %d", static_cast<int>(hierarchy->children.size()));
 		}
 
 		if (auto* pointLight = registry.try_get<PointLightComponent>(mEnttSelectedEntity)) {
 			ImGui::Separator();
 			ImGui::TextUnformatted("Point Light");
-			ImGui::Checkbox("Enabled", &pointLight->enabled);
-			ImGui::DragFloat3("Light Color", &pointLight->color.x, 0.01f, 0.0f, 1000.0f, "%.2f");
-			ImGui::DragFloat("Intensity", &pointLight->intensity, 1.0f, 0.0f, 50000.0f, "%.1f");
-			ImGui::DragFloat("Range", &pointLight->range, 0.5f, 0.0f, 1000.0f, "%.1f");
+			ImGui::Checkbox("Light Enabled", &pointLight->enabled);
+			ImGui::ColorEdit3("Light Color", &pointLight->color.x);
+			ImGui::DragFloat("Light Intensity", &pointLight->intensity, 1.0f, 0.0f, 100000.0f, "%.1f");
+			ImGui::DragFloat("Light Range", &pointLight->range, 0.1f, 0.0f, 100000.0f, "%.2f");
 		}
 
 		if (auto* rigidBody = registry.try_get<RigidBodyComponent>(mEnttSelectedEntity)) {
 			ImGui::Separator();
 			ImGui::TextUnformatted("Rigid Body");
 
+			static const char* bodyTypeLabels[] = { "Static", "Dynamic", "Kinematic" };
+			int bodyType = static_cast<int>(rigidBody->bodyType);
 			bool rebuildBody = false;
-			int bodyTypeIndex = static_cast<int>(rigidBody->bodyType);
-			const char* bodyTypes[] = { "Static", "Dynamic", "Kinematic" };
-			if (ImGui::Combo("Body Type", &bodyTypeIndex, bodyTypes, IM_ARRAYSIZE(bodyTypes))) {
-				rigidBody->bodyType = static_cast<RigidBodyType>(bodyTypeIndex);
+
+			if (ImGui::Combo("Body Type", &bodyType, bodyTypeLabels, IM_ARRAYSIZE(bodyTypeLabels))) {
+				rigidBody->bodyType = static_cast<RigidBodyType>(std::clamp(bodyType, 0, 2));
 				rebuildBody = true;
 			}
 
@@ -2520,21 +2519,20 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 				rigidBody->mass = std::max(0.001f, rigidBody->mass);
 				rebuildBody = true;
 			}
-			if (ImGui::SliderFloat("Friction", &rigidBody->friction, 0.0f, 1.0f, "%.3f")) {
+			if (ImGui::DragFloat("Friction", &rigidBody->friction, 0.01f, 0.0f, 10.0f, "%.3f")) {
+				rigidBody->friction = std::clamp(rigidBody->friction, 0.0f, 10.0f);
 				rebuildBody = true;
 			}
-			if (ImGui::SliderFloat("Restitution", &rigidBody->restitution, 0.0f, 1.0f, "%.3f")) {
+			if (ImGui::DragFloat("Restitution", &rigidBody->restitution, 0.01f, 0.0f, 1.0f, "%.3f")) {
+				rigidBody->restitution = std::clamp(rigidBody->restitution, 0.0f, 1.0f);
 				rebuildBody = true;
 			}
 			if (ImGui::Checkbox("Use Gravity", &rigidBody->useGravity)) {
 				rebuildBody = true;
 			}
-			if (ImGui::DragFloat3("Linear Velocity", &rigidBody->linearVelocity.x, 0.05f, -500.0f, 500.0f, "%.3f")) {
+			if (ImGui::DragFloat3("Linear Velocity", &rigidBody->linearVelocity.x, 0.05f, -10000.0f, 10000.0f, "%.3f")) {
 				rebuildBody = true;
 			}
-
-			ImGui::Text("Body ID: %d", rigidBody->bodyId);
-			ImGui::Text("Registered: %s", rigidBody->registeredInWorld ? "Yes" : "No");
 
 			if (rebuildBody && registry.any_of<ColliderComponent>(mEnttSelectedEntity) && registry.any_of<TransformComponent>(mEnttSelectedEntity)) {
 				entt::entity entity = mEnttSelectedEntity;
@@ -2547,11 +2545,12 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			ImGui::Separator();
 			ImGui::TextUnformatted("Collider");
 
+			static const char* shapeTypeLabels[] = { "Box", "Sphere", "Capsule" };
+			int shapeType = static_cast<int>(collider->shapeType);
 			bool rebuildBody = false;
-			int shapeIndex = static_cast<int>(collider->shapeType);
-			const char* shapeTypes[] = { "Box", "Sphere", "Capsule" };
-			if (ImGui::Combo("Shape", &shapeIndex, shapeTypes, IM_ARRAYSIZE(shapeTypes))) {
-				collider->shapeType = static_cast<ColliderShapeType>(shapeIndex);
+
+			if (ImGui::Combo("Shape", &shapeType, shapeTypeLabels, IM_ARRAYSIZE(shapeTypeLabels))) {
+				collider->shapeType = static_cast<ColliderShapeType>(std::clamp(shapeType, 0, 2));
 				rebuildBody = true;
 			}
 
@@ -2678,51 +2677,11 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			}
 		}
 
-		if (ImGui::Button("Duplicate Entity"))
-		{
-			pushUndoSnapshot();
-			std::vector<entt::entity> sources = mEnttMultiSelection.empty() ? std::vector<entt::entity>{mEnttSelectedEntity} : mEnttMultiSelection;
-			mEnttMultiSelection.clear();
-			for (auto src : sources) {
-				entt::entity duplicatedEntity = duplicateEntity(src);
-				if (duplicatedEntity != entt::null) {
-					mEnttMultiSelection.push_back(duplicatedEntity);
-					mEnttSelectedEntity = duplicatedEntity;
-				}
-			}
-			if (!mEnttMultiSelection.empty()) {
-				selectEntityAndSync(mEnttMultiSelection.back());
-			}
-		}
+		ImGui::Button("Duplicate Entity");
 		ImGui::SameLine();
-		if (ImGui::Button("Delete Entity"))
-		{
-			pushUndoSnapshot();
-			std::vector<entt::entity> targets;
-			if (!mEnttMultiSelection.empty() && isInMultiSelection(mEnttSelectedEntity)) {
-				targets = mEnttMultiSelection;
-			}
-			else if (mEnttScene.isValid(mEnttSelectedEntity)) {
-				targets.push_back(mEnttSelectedEntity);
-			}
-
-			for (auto entity : targets) {
-				if (!mEnttScene.isValid(entity))
-					continue;
-				physicsSystem.unregisterEntity(entity, registry);
-				detachHierarchy(entity);
-				mEnttScene.destroyEntity(entity);
-				removeFromMultiSelection(entity);
-			}
-			mEnttSelectedEntity = entt::null;
-			mEnttMultiSelection.clear();
-		}
+		ImGui::Button("Delete Entity");
+		ImGui::End();
 	}
-	else
-	{
-		ImGui::TextUnformatted("Select an entity from ECS Scene.");
-	}
-	ImGui::End();
 }
 
 std::string Renderer::serializeEnttScene() const
@@ -2782,12 +2741,6 @@ std::string Renderer::serializeEnttScene() const
 			node["renderable"] = renderable;
 		}
 
-		if (const auto* hierarchy = registry.try_get<HierarchyComponent>(entity)) {
-			node["hierarchy"] = {
-				{ "parent", hierarchy->parent == entt::null ? -1 : static_cast<int64_t>(entt::to_integral(hierarchy->parent)) }
-			};
-		}
-
 		if (const auto* pointLight = registry.try_get<PointLightComponent>(entity)) {
 			node["pointLight"] = {
 				{ "color", { pointLight->color.x, pointLight->color.y, pointLight->color.z } },
@@ -2813,7 +2766,7 @@ std::string Renderer::serializeEnttScene() const
 				{ "shapeType", static_cast<int>(collider->shapeType) },
 				{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
 				{ "radius", collider->radius },
-			  { "halfHeight", collider->halfHeight },
+				{ "halfHeight", collider->halfHeight },
 				{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
 				{ "alignBottomToEntity", collider->alignBottomToEntity }
 			};
@@ -2870,8 +2823,13 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 	struct PendingHierarchy {
 		entt::entity child = entt::null;
 		int64_t parentId = -1;
+		glm::vec3 localPosition = glm::vec3(0.0f);
+		glm::quat localRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+		glm::vec3 localScale = glm::vec3(1.0f);
+		bool hasLocal = false;
 	};
 	std::vector<PendingHierarchy> pendingHierarchy;
+	bool addedRenderable = false;
 
 	for (const auto& node : root["entities"]) {
 		const uint32_t sourceId = node.value("id", 0u);
@@ -2903,15 +2861,9 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			const auto& renderableNode = node["renderable"];
 			const std::string modelPath = renderableNode.value("modelPath", std::string());
 			if (!modelPath.empty()) {
-				const std::string modelKey = normalizeModelAssetKey(modelPath);
-				const bool hadModelAssetInCache = (!modelKey.empty() && mGltfModelAssetCache.contains(modelKey));
 				auto model = getOrLoadModelGltfAsset(modelPath);
 				if (model) {
-					if (hadModelAssetInCache)
-						++cacheStats.gltfModelCacheHits;
-					else
-						++cacheStats.gltfModelReloads;
-
+					addedRenderable = true;
 					auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
 					renderableComp.vertices = model->vertices;
 					renderableComp.indices = model->indices;
@@ -2921,11 +2873,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 					renderableComp.materialTextures.clear();
 					renderableComp.materialDescriptorSets.clear();
 
-					if (tryReuseCachedGltfTextures(modelPath, renderableComp)) {
-						++cacheStats.gltfTextureCacheHits;
-					}
-					else {
-						++cacheStats.gltfTextureReloads;
+					if (!tryReuseCachedGltfTextures(modelPath, renderableComp)) {
 						renderableComp.materialTextures.resize(renderableComp.materials.size());
 						for (size_t i = 0; i < renderableComp.materials.size(); ++i)
 							loadPBRTextures(renderableComp.materials[i], renderableComp.materialTextures[i]);
@@ -2944,43 +2892,25 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 				if (assimpComp && assimpComp->instance && assimpNode.contains("settings")) {
 					InstanceSettings settings = assimpComp->instance->getInstanceSettings();
 					const auto& s = assimpNode["settings"];
-					if (s.contains("position") && s["position"].is_array() && s["position"].size() == 3) {
+					if (s.contains("position") && s["position"].is_array() && s["position"].size() == 3)
 						settings.isWorldPosition = glm::vec3(s["position"][0].get<float>(), s["position"][1].get<float>(), s["position"][2].get<float>());
-					}
-					if (s.contains("rotation") && s["rotation"].is_array() && s["rotation"].size() == 3) {
+					if (s.contains("rotation") && s["rotation"].is_array() && s["rotation"].size() == 3)
 						settings.isWorldRotation = glm::vec3(s["rotation"][0].get<float>(), s["rotation"][1].get<float>(), s["rotation"][2].get<float>());
-					}
 					settings.isScale = s.value("scale", settings.isScale);
 					settings.isSwapYZAxis = s.value("swapYZ", settings.isSwapYZAxis);
 					settings.isAnimClipNr = s.value("clipIndex", settings.isAnimClipNr);
 					settings.isAnimPlayTimePos = s.value("playTime", settings.isAnimPlayTimePos);
 					settings.isAnimSpeedFactor = s.value("speed", settings.isAnimSpeedFactor);
 					assimpComp->instance->setInstanceSettings(settings);
-
-					auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
-					anim.clipIndex = settings.isAnimClipNr;
-					anim.speed = settings.isAnimSpeedFactor;
-
-					auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
-					transform.SetPosition(settings.isWorldPosition);
-					transform.SetRotation(glm::quat(glm::radians(settings.isWorldRotation)));
-					transform.SetScale(glm::vec3(settings.isScale));
 				}
 			}
-		}
-
-		if (node.contains("hierarchy") && node["hierarchy"].is_object()) {
-			const int64_t parentId = node["hierarchy"].value("parent", -1ll);
-			registry.emplace_or_replace<HierarchyComponent>(entity);
-			pendingHierarchy.push_back({ entity, parentId });
 		}
 
 		if (node.contains("pointLight") && node["pointLight"].is_object()) {
 			auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
 			const auto& pl = node["pointLight"];
-			if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3) {
+			if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3)
 				light.color = glm::vec3(pl["color"][0].get<float>(), pl["color"][1].get<float>(), pl["color"][2].get<float>());
-			}
 			light.intensity = pl.value("intensity", light.intensity);
 			light.range = pl.value("range", light.range);
 			light.enabled = pl.value("enabled", light.enabled);
@@ -3005,58 +2935,121 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
 			const auto& colNode = node["collider"];
 			col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
-			if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3) {
+			if (colNode.contains("halfExtents") && colNode["halfExtents"].is_array() && colNode["halfExtents"].size() == 3)
 				col.halfExtents = glm::vec3(colNode["halfExtents"][0].get<float>(), colNode["halfExtents"][1].get<float>(), colNode["halfExtents"][2].get<float>());
-			}
 			col.radius = colNode.value("radius", col.radius);
 			col.halfHeight = colNode.value("halfHeight", col.halfHeight);
-			if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3) {
+			if (colNode.contains("centerOffset") && colNode["centerOffset"].is_array() && colNode["centerOffset"].size() == 3)
 				col.centerOffset = glm::vec3(colNode["centerOffset"][0].get<float>(), colNode["centerOffset"][1].get<float>(), colNode["centerOffset"][2].get<float>());
-			}
 			col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
+		}
+
+		PendingHierarchy pending{};
+		pending.child = entity;
+
+		if (node.contains("hierarchy") && node["hierarchy"].is_object()) {
+			const auto& hNode = node["hierarchy"];
+			pending.parentId = hNode.value("parent", -1ll);
+
+			if (hNode.contains("localPosition") && hNode["localPosition"].is_array() && hNode["localPosition"].size() == 3 &&
+				hNode.contains("localRotation") && hNode["localRotation"].is_array() && hNode["localRotation"].size() == 4 &&
+				hNode.contains("localScale") && hNode["localScale"].is_array() && hNode["localScale"].size() == 3) {
+				pending.localPosition = glm::vec3(hNode["localPosition"][0].get<float>(), hNode["localPosition"][1].get<float>(), hNode["localPosition"][2].get<float>());
+				pending.localRotation = glm::quat(hNode["localRotation"][3].get<float>(), hNode["localRotation"][0].get<float>(), hNode["localRotation"][1].get<float>(), hNode["localRotation"][2].get<float>());
+				pending.localScale = glm::vec3(hNode["localScale"][0].get<float>(), hNode["localScale"][1].get<float>(), hNode["localScale"][2].get<float>());
+				pending.hasLocal = true;
+			}
+		}
+     else if (const auto* t = registry.try_get<TransformComponent>(entity)) {
+			pending.localPosition = t->GetPosition();
+			pending.localRotation = t->GetRotation();
+			pending.localScale = t->GetScale();
+		}
+
+		pendingHierarchy.push_back(pending);
+	}
+
+	std::vector<entt::entity> createdEntities;
+	for (const auto& [id, entity] : entityMap) {
+		if (!registry.valid(entity))
+			continue;
+		createdEntities.push_back(entity);
+	}
+
+	// Initialize hierarchy components.
+	for (const auto& entry : pendingHierarchy) {
+		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
+		childHierarchy.parent = entt::null;
+		childHierarchy.children.clear();
+		if (entry.hasLocal) {
+			childHierarchy.localPosition = entry.localPosition;
+			childHierarchy.localRotation = entry.localRotation;
+			childHierarchy.localScale = entry.localScale;
 		}
 	}
 
+	// Build parent-child links.
 	for (const auto& entry : pendingHierarchy) {
 		if (!registry.valid(entry.child))
 			continue;
-		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
-		childHierarchy.parent = entt::null;
 		if (entry.parentId < 0)
 			continue;
+
 		auto it = entityMap.find(static_cast<uint32_t>(entry.parentId));
 		if (it == entityMap.end())
 			continue;
+
 		entt::entity parent = it->second;
 		if (!registry.valid(parent) || parent == entry.child)
 			continue;
 
+		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
 		childHierarchy.parent = parent;
+
 		auto& parentHierarchy = registry.emplace_or_replace<HierarchyComponent>(parent);
-		if (std::find(parentHierarchy.children.begin(), parentHierarchy.children.end(), entry.child) == parentHierarchy.children.end()) {
+		if (std::find(parentHierarchy.children.begin(), parentHierarchy.children.end(), entry.child) == parentHierarchy.children.end())
 			parentHierarchy.children.push_back(entry.child);
+	}
+
+	// For entries without saved locals, derive local from current world transform.
+	for (const auto& entry : pendingHierarchy) {
+		if (!registry.valid(entry.child))
+			continue;
+		if (!entry.hasLocal)
+			TransformSystems::RecalculateLocalFromParent(registry, entry.child);
+	}
+
+	// Propagate world from roots to preserve local hierarchy transforms.
+	for (const auto& [prefabId, entity] : entityMap) {
+		(void)prefabId;
+		auto* h = registry.try_get<HierarchyComponent>(entity);
+		if (!h)
+			continue;
+		if (h->parent != entt::null && registry.valid(h->parent))
+			continue;
+		TransformSystems::ApplyWorldFromParent(registry, entity);
+	}
+
+	for (entt::entity entity : createdEntities) {
+		if (registry.any_of<RigidBodyComponent, ColliderComponent, TransformComponent>(entity)) {
+			entt::entity e = entity;
+			physicsSystem.registerEntity(e, registry);
 		}
 	}
 
+	if (addedRenderable)
+		rebuildRenderableRuntimeResources();
+
 	const uint32_t selectedId = root.value("selected", 0u);
 	auto selectedIt = entityMap.find(selectedId);
-	if (selectedIt != entityMap.end() && mEnttScene.isValid(selectedIt->second)) {
-		mEnttSelectedEntity = selectedIt->second;
-		mEnttMultiSelection.push_back(mEnttSelectedEntity);
-	}
+	entt::entity selectedEntity = (selectedIt != entityMap.end()) ? selectedIt->second : createdEntities.front();
 
-	for (auto [entity, rb, col, tr] : registry.view<RigidBodyComponent, ColliderComponent, TransformComponent>().each()) {
-		(void)rb;
-		(void)col;
-		(void)tr;
-		entt::entity e = entity;
-		physicsSystem.registerEntity(e, registry);
-	}
-
-	rebuildRenderableRuntimeResources();
-
+	mEnttSelectedEntity = selectedEntity;
+	mEnttMultiSelection.clear();
+	mEnttMultiSelection.push_back(selectedEntity);
 	return true;
 }
+
 
 bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 {
@@ -3064,95 +3057,167 @@ bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 		return false;
 
 	auto& registry = mEnttScene.getRegistry();
-	const auto* tag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
-	if (!tag)
+  const auto* selectedTag = registry.try_get<EnttTagComponent>(mEnttSelectedEntity);
+	if (!selectedTag)
 		return false;
 
 	using json = nlohmann::json;
 	json root;
 	root["entities"] = json::array();
 
+ std::vector<entt::entity> subtree;
+	std::unordered_set<entt::entity> subtreeSet;
+	subtree.push_back(mEnttSelectedEntity);
+	subtreeSet.insert(mEnttSelectedEntity);
+
+	bool added = true;
+	while (added) {
+		added = false;
+		for (auto [entity, hierarchy] : registry.view<HierarchyComponent>().each()) {
+			if (!registry.valid(entity) || subtreeSet.contains(entity))
+				continue;
+			if (hierarchy.parent == entt::null)
+				continue;
+			if (!subtreeSet.contains(hierarchy.parent))
+				continue;
+
+			subtree.push_back(entity);
+			subtreeSet.insert(entity);
+			added = true;
+		}
+	}
+
+	if (subtree.empty())
+		return false;
+
+	std::unordered_map<uint32_t, uint32_t> prefabIdMap;
+	prefabIdMap.reserve(subtree.size());
+	uint32_t nextPrefabId = 1u;
+	for (entt::entity entity : subtree) {
+		prefabIdMap.emplace(static_cast<uint32_t>(entt::to_integral(entity)), nextPrefabId++);
+	}
+
 	const std::string prefabEntityName = std::filesystem::path(prefabPath).stem().string();
-	const std::string outlinerName = prefabEntityName.empty() ? tag->name : prefabEntityName;
 
-	json node;
-	node["id"] = 1u;
-	node["name"] = outlinerName;
+	for (entt::entity entity : subtree) {
+		json node;
+		const uint32_t entityKey = static_cast<uint32_t>(entt::to_integral(entity));
+		node["id"] = prefabIdMap[entityKey];
 
-	if (const auto* transform = registry.try_get<TransformComponent>(mEnttSelectedEntity)) {
-		const auto& pos = transform->GetPosition();
-		const auto& rot = transform->GetRotation();
-		const auto& scale = transform->GetScale();
-		node["transform"] = {
-			{ "position", { pos.x, pos.y, pos.z } },
-			{ "rotation", { rot.x, rot.y, rot.z, rot.w } },
-			{ "scale", { scale.x, scale.y, scale.z } }
+		const auto* tag = registry.try_get<EnttTagComponent>(entity);
+		if (entity == mEnttSelectedEntity) {
+			const std::string outlinerName = prefabEntityName.empty() ? selectedTag->name : prefabEntityName;
+			node["name"] = outlinerName;
+		}
+		else {
+			node["name"] = tag ? tag->name : "Entity";
+		}
+
+		if (const auto* transform = registry.try_get<TransformComponent>(entity)) {
+			const auto& pos = transform->GetPosition();
+			const auto& rot = transform->GetRotation();
+			const auto& scale = transform->GetScale();
+			node["transform"] = {
+				{ "position", { pos.x, pos.y, pos.z } },
+				{ "rotation", { rot.x, rot.y, rot.z, rot.w } },
+				{ "scale", { scale.x, scale.y, scale.z } }
+			};
+		}
+
+		if (const auto* animation = registry.try_get<AnimationComponent>(entity)) {
+			node["animation"] = {
+				{ "clipIndex", animation->clipIndex },
+				{ "speed", animation->speed }
+			};
+		}
+
+		if (const auto* assimpComp = registry.try_get<AssimpInstanceComponent>(entity); assimpComp && assimpComp->instance) {
+			json assimp;
+			auto model = assimpComp->instance->getModel();
+			assimp["model"] = model ? model->getModelFileNamePath() : "";
+
+			InstanceSettings settings = assimpComp->instance->getInstanceSettings();
+			assimp["settings"] = {
+				{ "position", { settings.isWorldPosition.x, settings.isWorldPosition.y, settings.isWorldPosition.z } },
+				{ "rotation", { settings.isWorldRotation.x, settings.isWorldRotation.y, settings.isWorldRotation.z } },
+				{ "scale", settings.isScale },
+				{ "swapYZ", settings.isSwapYZAxis },
+				{ "clipIndex", settings.isAnimClipNr },
+				{ "playTime", settings.isAnimPlayTimePos },
+				{ "speed", settings.isAnimSpeedFactor }
+			};
+			node["assimp"] = assimp;
+		}
+
+		if (const auto* renderableComp = registry.try_get<RenderableComponent>(entity)) {
+			json renderable;
+			renderable["modelPath"] = renderableComp->sourceModelFile;
+			node["renderable"] = renderable;
+		}
+
+		if (const auto* pointLight = registry.try_get<PointLightComponent>(entity)) {
+			node["pointLight"] = {
+				{ "color", { pointLight->color.x, pointLight->color.y, pointLight->color.z } },
+				{ "intensity", pointLight->intensity },
+				{ "range", pointLight->range },
+				{ "enabled", pointLight->enabled }
+			};
+		}
+
+		if (const auto* rigidBody = registry.try_get<RigidBodyComponent>(entity)) {
+			node["rigidBody"] = {
+				{ "bodyType", static_cast<int>(rigidBody->bodyType) },
+				{ "mass", rigidBody->mass },
+				{ "friction", rigidBody->friction },
+				{ "restitution", rigidBody->restitution },
+				{ "useGravity", rigidBody->useGravity },
+				{ "linearVelocity", { rigidBody->linearVelocity.x, rigidBody->linearVelocity.y, rigidBody->linearVelocity.z } }
+			};
+		}
+
+		if (const auto* collider = registry.try_get<ColliderComponent>(entity)) {
+			node["collider"] = {
+				{ "shapeType", static_cast<int>(collider->shapeType) },
+				{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
+				{ "radius", collider->radius },
+				{ "halfHeight", collider->halfHeight },
+				{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
+				{ "alignBottomToEntity", collider->alignBottomToEntity }
+			};
+		}
+
+		int64_t parentPrefabId = -1;
+		glm::vec3 localPosition(0.0f);
+		glm::quat localRotation(1.0f, 0.0f, 0.0f, 0.0f);
+		glm::vec3 localScale(1.0f);
+
+		if (const auto* hierarchy = registry.try_get<HierarchyComponent>(entity)) {
+			if (hierarchy->parent != entt::null) {
+				auto parentIt = prefabIdMap.find(static_cast<uint32_t>(entt::to_integral(hierarchy->parent)));
+				if (parentIt != prefabIdMap.end()) {
+					parentPrefabId = static_cast<int64_t>(parentIt->second);
+				}
+			}
+			localPosition = hierarchy->localPosition;
+			localRotation = hierarchy->localRotation;
+			localScale = hierarchy->localScale;
+		}
+		else if (const auto* transform = registry.try_get<TransformComponent>(entity)) {
+			localPosition = transform->GetPosition();
+			localRotation = transform->GetRotation();
+			localScale = transform->GetScale();
+		}
+
+		node["hierarchy"] = {
+			{ "parent", parentPrefabId },
+			{ "localPosition", { localPosition.x, localPosition.y, localPosition.z } },
+			{ "localRotation", { localRotation.x, localRotation.y, localRotation.z, localRotation.w } },
+			{ "localScale", { localScale.x, localScale.y, localScale.z } }
 		};
+
+		root["entities"].push_back(node);
 	}
 
-	if (const auto* animation = registry.try_get<AnimationComponent>(mEnttSelectedEntity)) {
-		node["animation"] = {
-			{ "clipIndex", animation->clipIndex },
-			{ "speed", animation->speed }
-		};
-	}
-
-	if (const auto* assimpComp = registry.try_get<AssimpInstanceComponent>(mEnttSelectedEntity); assimpComp && assimpComp->instance) {
-		json assimp;
-		auto model = assimpComp->instance->getModel();
-		assimp["model"] = model ? model->getModelFileNamePath() : "";
-
-		InstanceSettings settings = assimpComp->instance->getInstanceSettings();
-		assimp["settings"] = {
-			{ "position", { settings.isWorldPosition.x, settings.isWorldPosition.y, settings.isWorldPosition.z } },
-			{ "rotation", { settings.isWorldRotation.x, settings.isWorldRotation.y, settings.isWorldRotation.z } },
-			{ "scale", settings.isScale },
-			{ "swapYZ", settings.isSwapYZAxis },
-			{ "clipIndex", settings.isAnimClipNr },
-			{ "playTime", settings.isAnimPlayTimePos },
-			{ "speed", settings.isAnimSpeedFactor }
-		};
-		node["assimp"] = assimp;
-	}
-
-	if (const auto* renderableComp = registry.try_get<RenderableComponent>(mEnttSelectedEntity)) {
-		json renderable;
-		renderable["modelPath"] = renderableComp->sourceModelFile;
-		node["renderable"] = renderable;
-	}
-
-	if (const auto* pointLight = registry.try_get<PointLightComponent>(mEnttSelectedEntity)) {
-		node["pointLight"] = {
-			{ "color", { pointLight->color.x, pointLight->color.y, pointLight->color.z } },
-			{ "intensity", pointLight->intensity },
-			{ "range", pointLight->range },
-			{ "enabled", pointLight->enabled }
-		};
-	}
-
-	if (const auto* rigidBody = registry.try_get<RigidBodyComponent>(mEnttSelectedEntity)) {
-		node["rigidBody"] = {
-			{ "bodyType", static_cast<int>(rigidBody->bodyType) },
-			{ "mass", rigidBody->mass },
-			{ "friction", rigidBody->friction },
-			{ "restitution", rigidBody->restitution },
-			{ "useGravity", rigidBody->useGravity },
-			{ "linearVelocity", { rigidBody->linearVelocity.x, rigidBody->linearVelocity.y, rigidBody->linearVelocity.z } }
-		};
-	}
-
-	if (const auto* collider = registry.try_get<ColliderComponent>(mEnttSelectedEntity)) {
-		node["collider"] = {
-			{ "shapeType", static_cast<int>(collider->shapeType) },
-			{ "halfExtents", { collider->halfExtents.x, collider->halfExtents.y, collider->halfExtents.z } },
-			{ "radius", collider->radius },
-			{ "halfHeight", collider->halfHeight },
-			{ "centerOffset", { collider->centerOffset.x, collider->centerOffset.y, collider->centerOffset.z } },
-			{ "alignBottomToEntity", collider->alignBottomToEntity }
-		};
-	}
-
-	root["entities"].push_back(node);
 	root["selected"] = 1u;
 
 	std::filesystem::path outPath(prefabPath);
@@ -3221,38 +3286,68 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		return false;
 
 	auto& registry = mEnttScene.getRegistry();
-	const json& node = root["entities"][0];
-	const std::string baseName = node.value("name", std::string("Prefab Entity"));
-	entt::entity entity = mEnttScene.createEntity(makeUniqueEntityName(registry, baseName));
+ std::unordered_map<uint32_t, entt::entity> entityMap;
+	std::vector<entt::entity> createdEntities;
+	createdEntities.reserve(root["entities"].size());
+
+	for (const auto& node : root["entities"]) {
+		const uint32_t prefabId = node.value("id", 0u);
+		const std::string baseName = node.value("name", std::string("Prefab Entity"));
+		entt::entity entity = mEnttScene.createEntity(makeUniqueEntityName(registry, baseName));
+		entityMap[prefabId] = entity;
+		createdEntities.push_back(entity);
+	}
+
+	struct PendingHierarchy {
+		entt::entity child = entt::null;
+		int64_t parentId = -1;
+		glm::vec3 localPosition = glm::vec3(0.0f);
+		glm::quat localRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+		glm::vec3 localScale = glm::vec3(1.0f);
+		bool hasLocal = false;
+	};
+	std::vector<PendingHierarchy> pendingHierarchy;
+	pendingHierarchy.reserve(root["entities"].size());
+
 	bool addedRenderable = false;
 
-	if (node.contains("transform")) {
-		auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
-		const auto& t = node["transform"];
-		if (t.contains("position") && t["position"].is_array() && t["position"].size() == 3) {
-			transform.SetPosition(glm::vec3(t["position"][0].get<float>(), t["position"][1].get<float>(), t["position"][2].get<float>()));
+	size_t nodeIndex = 0;
+	for (const auto& node : root["entities"]) {
+		const uint32_t prefabId = node.value("id", 0u);
+		auto entityIt = entityMap.find(prefabId);
+		if (entityIt == entityMap.end()) {
+			++nodeIndex;
+			continue;
 		}
-		if (t.contains("rotation") && t["rotation"].is_array() && t["rotation"].size() == 4) {
-			transform.SetRotation(glm::quat(t["rotation"][3].get<float>(), t["rotation"][0].get<float>(), t["rotation"][1].get<float>(), t["rotation"][2].get<float>()));
-		}
-		if (t.contains("scale") && t["scale"].is_array() && t["scale"].size() == 3) {
-			transform.SetScale(glm::vec3(t["scale"][0].get<float>(), t["scale"][1].get<float>(), t["scale"][2].get<float>()));
-		}
-	}
+		entt::entity entity = entityIt->second;
 
-	if (node.contains("animation")) {
-		auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
-		anim.clipIndex = node["animation"].value("clipIndex", 0u);
-		anim.speed = node["animation"].value("speed", 1.0f);
-	}
+       if (node.contains("transform")) {
+			auto& transform = registry.emplace_or_replace<TransformComponent>(entity);
+			const auto& t = node["transform"];
+			if (t.contains("position") && t["position"].is_array() && t["position"].size() == 3) {
+				transform.SetPosition(glm::vec3(t["position"][0].get<float>(), t["position"][1].get<float>(), t["position"][2].get<float>()));
+			}
+			if (t.contains("rotation") && t["rotation"].is_array() && t["rotation"].size() == 4) {
+				transform.SetRotation(glm::quat(t["rotation"][3].get<float>(), t["rotation"][0].get<float>(), t["rotation"][1].get<float>(), t["rotation"][2].get<float>()));
+			}
+			if (t.contains("scale") && t["scale"].is_array() && t["scale"].size() == 3) {
+				transform.SetScale(glm::vec3(t["scale"][0].get<float>(), t["scale"][1].get<float>(), t["scale"][2].get<float>()));
+			}
+		}
 
-	if (node.contains("renderable") && node["renderable"].is_object()) {
+       if (node.contains("animation")) {
+			auto& anim = registry.emplace_or_replace<AnimationComponent>(entity);
+			anim.clipIndex = node["animation"].value("clipIndex", 0u);
+			anim.speed = node["animation"].value("speed", 1.0f);
+		}
+
+        if (node.contains("renderable") && node["renderable"].is_object()) {
 		const auto& renderableNode = node["renderable"];
 		const std::string modelPath = renderableNode.value("modelPath", std::string());
 		if (!modelPath.empty()) {
 			auto model = getOrLoadModelGltfAsset(modelPath);
 			if (model) {
-                addedRenderable = true;
+             addedRenderable = true;
 				auto& renderableComp = registry.emplace_or_replace<RenderableComponent>(entity);
 				renderableComp.vertices = model->vertices;
 				renderableComp.indices = model->indices;
@@ -3271,7 +3366,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		}
 	}
 
-	if (node.contains("assimp") && node["assimp"].is_object()) {
+        if (node.contains("assimp") && node["assimp"].is_object()) {
 		const auto& assimpNode = node["assimp"];
 		const std::string modelName = assimpNode.value("model", std::string());
 		auto model = ensureModelLoadedForScene(modelName);
@@ -3297,7 +3392,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		}
 	}
 
-	if (node.contains("pointLight") && node["pointLight"].is_object()) {
+        if (node.contains("pointLight") && node["pointLight"].is_object()) {
 		auto& light = registry.emplace_or_replace<PointLightComponent>(entity);
 		const auto& pl = node["pointLight"];
 		if (pl.contains("color") && pl["color"].is_array() && pl["color"].size() == 3) {
@@ -3308,7 +3403,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		light.enabled = pl.value("enabled", light.enabled);
 	}
 
-	if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
+      if (node.contains("rigidBody") && node["rigidBody"].is_object()) {
 		auto& rb = registry.emplace_or_replace<RigidBodyComponent>(entity);
 		const auto& rbNode = node["rigidBody"];
 		rb.bodyType = static_cast<RigidBodyType>(rbNode.value("bodyType", static_cast<int>(rb.bodyType)));
@@ -3323,7 +3418,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		rb.bodyId = -1;
 	}
 
-	if (node.contains("collider") && node["collider"].is_object()) {
+        if (node.contains("collider") && node["collider"].is_object()) {
 		auto& col = registry.emplace_or_replace<ColliderComponent>(entity);
 		const auto& colNode = node["collider"];
 		col.shapeType = static_cast<ColliderShapeType>(colNode.value("shapeType", static_cast<int>(col.shapeType)));
@@ -3338,17 +3433,96 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		col.alignBottomToEntity = colNode.value("alignBottomToEntity", col.alignBottomToEntity);
 	}
 
-	if (registry.any_of<RigidBodyComponent, ColliderComponent, TransformComponent>(entity)) {
-		entt::entity e = entity;
-		physicsSystem.registerEntity(e, registry);
+       PendingHierarchy pending{};
+		pending.child = entity;
+		if (node.contains("hierarchy") && node["hierarchy"].is_object()) {
+			const auto& hNode = node["hierarchy"];
+			pending.parentId = hNode.value("parent", -1ll);
+			if (hNode.contains("localPosition") && hNode["localPosition"].is_array() && hNode["localPosition"].size() == 3 &&
+				hNode.contains("localRotation") && hNode["localRotation"].is_array() && hNode["localRotation"].size() == 4 &&
+				hNode.contains("localScale") && hNode["localScale"].is_array() && hNode["localScale"].size() == 3) {
+				pending.localPosition = glm::vec3(hNode["localPosition"][0].get<float>(), hNode["localPosition"][1].get<float>(), hNode["localPosition"][2].get<float>());
+				pending.localRotation = glm::quat(hNode["localRotation"][3].get<float>(), hNode["localRotation"][0].get<float>(), hNode["localRotation"][1].get<float>(), hNode["localRotation"][2].get<float>());
+				pending.localScale = glm::vec3(hNode["localScale"][0].get<float>(), hNode["localScale"][1].get<float>(), hNode["localScale"][2].get<float>());
+				pending.hasLocal = true;
+			}
+		}
+		else if (nodeIndex == 0) {
+			pending.parentId = -1;
+		}
+
+		pendingHierarchy.push_back(pending);
+		++nodeIndex;
+	}
+
+	for (const auto& entry : pendingHierarchy) {
+		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
+		childHierarchy.parent = entt::null;
+		childHierarchy.children.clear();
+		if (entry.hasLocal) {
+			childHierarchy.localPosition = entry.localPosition;
+			childHierarchy.localRotation = entry.localRotation;
+			childHierarchy.localScale = entry.localScale;
+		}
+	}
+
+	for (const auto& entry : pendingHierarchy) {
+		if (!registry.valid(entry.child))
+			continue;
+		if (entry.parentId < 0)
+			continue;
+
+		auto it = entityMap.find(static_cast<uint32_t>(entry.parentId));
+		if (it == entityMap.end())
+			continue;
+
+		entt::entity parent = it->second;
+		if (!registry.valid(parent) || parent == entry.child)
+			continue;
+
+		auto& childHierarchy = registry.emplace_or_replace<HierarchyComponent>(entry.child);
+		childHierarchy.parent = parent;
+
+		auto& parentHierarchy = registry.emplace_or_replace<HierarchyComponent>(parent);
+		if (std::find(parentHierarchy.children.begin(), parentHierarchy.children.end(), entry.child) == parentHierarchy.children.end()) {
+			parentHierarchy.children.push_back(entry.child);
+		}
+	}
+
+	for (const auto& entry : pendingHierarchy) {
+		if (!registry.valid(entry.child))
+			continue;
+		if (!entry.hasLocal)
+			TransformSystems::RecalculateLocalFromParent(registry, entry.child);
+	}
+
+	for (const auto& [id, entity] : entityMap) {
+		(void)id;
+		auto* hierarchy = registry.try_get<HierarchyComponent>(entity);
+		if (!hierarchy)
+			continue;
+		if (hierarchy->parent != entt::null && registry.valid(hierarchy->parent))
+			continue;
+		TransformSystems::ApplyWorldFromParent(registry, entity);
+	}
+
+	for (entt::entity entity : createdEntities) {
+		if (registry.any_of<RigidBodyComponent, ColliderComponent, TransformComponent>(entity)) {
+			entt::entity e = entity;
+			physicsSystem.registerEntity(e, registry);
+		}
 	}
 
 	if (addedRenderable)
 		rebuildRenderableRuntimeResources();
 
-	mEnttSelectedEntity = entity;
+   const uint32_t selectedId = root.value("selected", 0u);
+	auto selectedIt = entityMap.find(selectedId);
+	entt::entity selectedEntity = (selectedIt != entityMap.end()) ? selectedIt->second : createdEntities.front();
+
+	mEnttSelectedEntity = selectedEntity;
 	mEnttMultiSelection.clear();
-	mEnttMultiSelection.push_back(entity);
+  mEnttMultiSelection.push_back(selectedEntity);
 	return true;
 }
 
@@ -4546,7 +4720,7 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		vk::PipelineStageFlagBits2::eFragmentShader,
 		vk::ImageAspectFlagBits::eDepth);
 
-	// Transition swapchain image: undefined â†’ color attachment for FXAA output
+	// Transition swapchain image: undefined GåÆ color attachment for FXAA output
 	transition_image_layout(swapChainImages[imageIndex],
 		vk::ImageLayout::eUndefined,
 		vk::ImageLayout::eColorAttachmentOptimal,
@@ -4601,7 +4775,7 @@ void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t i
 		pc
 	);
 
-	// 3 vertices, no vertex buffer â€” the VS generates the fullscreen triangle
+	// 3 vertices, no vertex buffer GÇö the VS generates the fullscreen triangle
 	commandBuffer.draw(3, 1, 0, 0);
 	commandBuffer.endRendering();
 
@@ -5180,7 +5354,7 @@ void Renderer::initAssimpRenderData()
 	skinningDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	mRenderData.rdDescriptorPool = *skinningDescriptorPool;
 
-	// ---- 1Ã—1 white fallback texture ----
+	// ---- 1+ù1 white fallback texture ----
 	{
 		const uint32_t white = 0xFFFFFFFF;
 		vk::raii::Buffer       stagingBuf({});

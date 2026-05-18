@@ -20,8 +20,8 @@
       "hierarchy": {
         "localPosition": [
           -355.0,
-          -490.0,
-          13.967604637145996
+          -265.37249755859375,
+          -36.857749938964844
         ],
         "localRotation": [
           0.0,
@@ -37,7 +37,7 @@
         "parent": -1
       },
       "id": 1,
-      "name": "Flight_Helmet_2.prefab",
+      "name": "Flight_Helmet_2_prefab.prefab",
       "renderable": {
         "modelPath": "models/FlightHelmet.gltf"
       },
@@ -56,8 +56,80 @@
       "transform": {
         "position": [
           -355.0,
-          -490.0,
-          13.967604637145996
+          -265.37249755859375,
+          -36.857749938964844
+        ],
+        "rotation": [
+          0.0,
+          0.7071067690849304,
+          0.0,
+          -0.7071067690849304
+        ],
+        "scale": [
+          100.0,
+          100.0,
+          100.0
+        ]
+      }
+    },
+    {
+      "collider": {
+        "alignBottomToEntity": false,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "halfExtents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "halfHeight": 0.5,
+        "radius": 46.0,
+        "shapeType": 1
+      },
+      "hierarchy": {
+        "localPosition": [
+          -0.9761808514595032,
+          -0.9772482514381409,
+          1.1920928955078125e-07
+        ],
+        "localRotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "localScale": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "parent": 1
+      },
+      "id": 2,
+      "name": "Flight Helmet 2",
+      "renderable": {
+        "modelPath": "models/FlightHelmet.gltf"
+      },
+      "rigidBody": {
+        "bodyType": 1,
+        "friction": 0.44999998807907104,
+        "linearVelocity": [
+          40.0000114440918,
+          -8.0,
+          -125.0
+        ],
+        "mass": 2.799999952316284,
+        "restitution": 0.6000000238418579,
+        "useGravity": true
+      },
+      "transform": {
+        "position": [
+          -355.0,
+          -363.0973205566406,
+          -134.475830078125
         ],
         "rotation": [
           0.0,
@@ -106,9 +178,9 @@
           0.3499999940395355,
           0.3499999940395355
         ],
-        "parent": 1
+        "parent": 2
       },
-      "id": 2,
+      "id": 3,
       "name": "Damaged Helmet 1",
       "renderable": {
         "modelPath": "models/DamagedHelmet.gltf"
@@ -129,7 +201,7 @@
         "position": [
           260.0,
           -400.0,
-          -139.9699249267578
+          -275.482177734375
         ],
         "rotation": [
           0.0,

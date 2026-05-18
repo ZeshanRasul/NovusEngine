@@ -1,0 +1,58 @@
+{
+  "entities": [
+    {
+      "collider": {
+        "alignBottomToEntity": true,
+        "centerOffset": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "halfExtents": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "halfHeight": 0.5,
+        "radius": 18.0,
+        "shapeType": 1
+      },
+      "id": 1,
+      "name": "Damaged_Helmet_1.prefab",
+      "renderable": {
+        "modelPath": "models/DamagedHelmet.gltf"
+      },
+      "rigidBody": {
+        "bodyType": 1,
+        "friction": 0.44999998807907104,
+        "linearVelocity": [
+          -40.0,
+          15.0,
+          125.0
+        ],
+        "mass": 1.2000000476837158,
+        "restitution": 0.6000000238418579,
+        "useGravity": true
+      },
+      "transform": {
+        "position": [
+          260.0000915527344,
+          -528.4181518554688,
+          157.402099609375
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "scale": [
+          35.0,
+          35.0,
+          35.0
+        ]
+      }
+    }
+  ],
+  "selected": 1
+}

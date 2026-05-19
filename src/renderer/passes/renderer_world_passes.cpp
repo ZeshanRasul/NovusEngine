@@ -57,7 +57,7 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
     {
         (void)entity;
 
-        UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
+        UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors, static_cast<float>(mIBLPrefilteredMips), mIBLAmbientScale);
         vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
         vk::DeviceSize offsets[] = { 0 };
         commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -139,7 +139,7 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
     {
         (void)ecsEntity;
 
-        UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
+        UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors, static_cast<float>(mIBLPrefilteredMips), mIBLAmbientScale);
         vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
         vk::DeviceSize offsets[] = { 0 };
         commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);

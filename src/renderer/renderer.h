@@ -627,6 +627,23 @@ private:
 	bool uiShowPhysicsWindow = true;
 	bool uiShowPrefabWindow = true;
 	bool uiShowGpuTimingsWindow = true;
+	bool uiShowIBLWindow = true;
+
+	// IBL resources
+	vk::raii::Image        mIBLIrradianceImage  = nullptr;
+	vk::raii::DeviceMemory mIBLIrradianceMemory = nullptr;
+	vk::raii::ImageView    mIBLIrradianceView   = nullptr;
+	vk::raii::Image        mIBLPrefilteredImage  = nullptr;
+	vk::raii::DeviceMemory mIBLPrefilteredMemory = nullptr;
+	vk::raii::ImageView    mIBLPrefilteredView   = nullptr;
+	vk::raii::Image        mIBLBrdfLutImage  = nullptr;
+	vk::raii::DeviceMemory mIBLBrdfLutMemory = nullptr;
+	vk::raii::ImageView    mIBLBrdfLutView   = nullptr;
+	vk::raii::Sampler      mIBLSampler       = nullptr;
+
+	bool     mIBLLoaded            = false;
+	float    mIBLAmbientScale      = 0.3f;
+	uint32_t mIBLPrefilteredMips   = 1;
 
 	bool renderEnableShadows = true;
 	bool renderEnablePostProcessing = true;
@@ -640,6 +657,14 @@ private:
 	void createTimestampQueryPool();
 	void readTimestamps();
 	void renderGpuTimingsPanel(bool isEditMode);
+
+	// IBL
+	void createDefaultIBLResources();
+	void createIBLSampler();
+	std::string loadIBL(const std::string& directory);
+    std::string loadIBLFiles(const std::string& irradiancePath, const std::string& prefilteredPath, const std::string& brdfLutPath);
+	void updateIBLDescriptors();
+	void renderIBLPanel(bool isEditMode);
 
 	vk::raii::QueryPool mTimestampQueryPool = nullptr;
 	float               mTimestampPeriod    = 1.0f;

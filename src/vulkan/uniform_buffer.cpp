@@ -32,7 +32,8 @@ void UniformBuffer::createUniformBuffers(entt::registry& registry, vk::raii::Dev
 
 void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable, TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings,
     const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightPositions,
-	const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightColors)
+	const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightColors,
+	float iblMipLevels, float iblAmbientScale)
 {
 	UniformBufferObject ubo{};
 
@@ -172,8 +173,8 @@ void UniformBuffer::updateUniformBuffer(uint32_t currentFrame, RenderableCompone
 	ubo.camPos = glm::vec4(cam ? cam->getPosition() : glm::vec3(2.0f, 2.0f, 2.0f), 1.0f);
 	ubo.exposure = 2.0f;
 	ubo.gamma = 2.2f;
-	ubo.prefilteredCubeMipLevels = 1.0f;
-	ubo.scaleIBLAmbient = 0.02f;
+	ubo.prefilteredCubeMipLevels = iblMipLevels;
+	ubo.scaleIBLAmbient = iblAmbientScale;
     ubo.shadowTuning = glm::vec4(shadowSettings.biasScale, shadowSettings.biasMin, shadowSettings.cascadeBlendFactor, shadowSettings.enabled);
 	ubo.shadowDebug = glm::vec4(shadowSettings.cascadeDebugView, 0.0f, 0.0f, 0.0f);
 

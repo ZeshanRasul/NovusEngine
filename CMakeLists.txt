@@ -56,6 +56,7 @@ add_executable(NovusEngine
     src/renderer/renderer_editor_runtime_panels.cpp
     src/renderer/renderer_editor_entt.cpp
     src/renderer/renderer_gpu_timestamps.cpp
+    src/renderer/renderer_ibl.cpp
     src/renderer/passes/renderer_world_passes.cpp
     src/renderer/passes/renderer_post_process_passes.cpp
     src/renderer/passes/renderer_frame_passes.cpp

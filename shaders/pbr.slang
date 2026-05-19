@@ -78,6 +78,14 @@ static const float PI = 3.14159265359;
 [[vk::binding(10, 0)]] Texture2D shadowMap4;
 [[vk::binding(10, 0)]] SamplerState shadowSampler4;
 
+// IBL resources
+[[vk::binding(11, 0)]] TextureCube irradianceMap;
+[[vk::binding(11, 0)]] SamplerState irradianceSampler;
+[[vk::binding(12, 0)]] TextureCube prefilteredMap;
+[[vk::binding(12, 0)]] SamplerState prefilteredSampler;
+[[vk::binding(13, 0)]] Texture2D brdfLUT;
+[[vk::binding(13, 0)]] SamplerState brdfSampler;
+
 [[vk::push_constant]] PushConstants material;
 
 // Normal Distribution Function (D) - GGX/Trowbridge-Reitz Distribution
@@ -112,6 +120,12 @@ float GeometrySmith(float NdotV, float NdotL, float roughness) {
 // Models how reflectance changes with viewing angle
 float3 FresnelSchlick(float cosTheta, float3 F0) {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+// Fresnel with roughness term for IBL — avoids over-bright edges on rough surfaces
+float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness) {
+    float3 maxRefl = max(float3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0);
+    return F0 + (maxRefl - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 float SampleShadowMap(int cascadeIndex, float2 uv)
@@ -354,9 +368,22 @@ float4 fragMain(VSOutput input) : SV_TARGET
 
     Lo += (1.0 - shadow) * (diffuse * (1.0 - metallic) + specular) * dirLightColor * NdotL;
 
-    // === AMBIENT AND EMISSIVE ===
-    // Add simple ambient lighting (should be replaced with IBL in production)
-    float3 ambient = ubo.scaleIBLAmbient * baseColor.rgb * ao;
+    // === IMAGE-BASED LIGHTING (split-sum approximation) ===
+    float NdotV_ibl = max(dot(N, V), 0.0);
+    float3 kS_ibl   = FresnelSchlickRoughness(NdotV_ibl, F0, roughness);
+    float3 kD_ibl   = (float3(1.0, 1.0, 1.0) - kS_ibl) * (1.0 - metallic);
+
+    // Diffuse irradiance — sample the convolved irradiance cubemap along the surface normal
+    float3 irradiance  = irradianceMap.Sample(irradianceSampler, N).rgb;
+    float3 diffuseIBL  = irradiance * baseColor.rgb * kD_ibl;
+
+    // Specular — prefiltered environment + BRDF LUT split-sum
+    float3 prefilteredColor = prefilteredMap.SampleLevel(
+        prefilteredSampler, R, roughness * ubo.prefilteredCubeMipLevels).rgb;
+    float2 envBRDF  = brdfLUT.Sample(brdfSampler, float2(NdotV_ibl, roughness)).rg;
+    float3 specularIBL = prefilteredColor * (kS_ibl * envBRDF.x + envBRDF.y);
+
+    float3 ambient = (diffuseIBL + specularIBL) * ao * ubo.scaleIBLAmbient;
 
     // Combine all lighting contributions
     float3 color = ambient + Lo + emissive;

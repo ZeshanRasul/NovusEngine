@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(dir D:\\\\dev\\\\Graphics\\\\NovusEngine /b)"
+      "Bash(dir D:\\\\dev\\\\Graphics\\\\NovusEngine /b)",
+      "Bash(grep -n \"ktxTexture_GetVkFormat\\\\|vkGetFormat\\\\|ktxVulkan\\\\|GL_RGBA16\\\\|glformat_to_vk\\\\|ktxTexture2_c\\\\|classId\\\\|ktxTexture1_c\" \"/c/Program Files/KTX-Software/include/ktx.h\" | head -20)"
     ]
   }
 }

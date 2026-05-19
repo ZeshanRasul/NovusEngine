@@ -365,7 +365,8 @@ void Renderer::rebuildRenderableRuntimeResources()
 	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
 		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
-	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
+	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler,
+		mIBLIrradianceView, mIBLPrefilteredView, mIBLBrdfLutView, mIBLSampler, MAX_FRAMES_IN_FLIGHT);
 }
 
 // ---------------------------------------------------------------------------
@@ -485,6 +486,7 @@ void Renderer::initVulkan()
 
 	CommandPool::init(device, queueIndex, commandPool);
 	createTimestampQueryPool();
+	createDefaultIBLResources();
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
 	for (uint32_t i = 0; i < SHADOW_CASCADE_COUNT; ++i)
 		ShadowPass::createResources(device, physicalDevice, shadowImages[i], shadowImageMemories[i], shadowImageViews[i], shadowSampler);
@@ -507,7 +509,8 @@ void Renderer::initVulkan()
 	std::array<vk::ImageView, SHADOW_CASCADE_COUNT> shadowViews = {
 		   *shadowImageViews[0], *shadowImageViews[1], *shadowImageViews[2], *shadowImageViews[3], *shadowImageViews[4]
 	};
-	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
+	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler,
+		mIBLIrradianceView, mIBLPrefilteredView, mIBLBrdfLutView, mIBLSampler, MAX_FRAMES_IN_FLIGHT);
 	DescriptorSet::createFxaaDescriptorSets(device, fxaaDescriptorPool, fxaaDescriptorSetLayout, fxaaImageView, bloomImageAView, depthImageView, fxaaSampler, MAX_FRAMES_IN_FLIGHT, fxaaDescriptorSets);
 	CommandBuffer::init(device, queueIndex, commandPool, commandBuffers, MAX_FRAMES_IN_FLIGHT);
 	Sync::createSyncObjects(device, swapChainImages.size(), MAX_FRAMES_IN_FLIGHT, presentCompleteSemaphores, renderFinishedSemaphores, inFlightFences);
@@ -1471,6 +1474,7 @@ void Renderer::renderImgui()
 
 	renderPostProcessingAndPhysicsPanels(isEditMode, registry);
 	renderGpuTimingsPanel(isEditMode);
+	renderIBLPanel(isEditMode);
 
 	// End the frame
 	ImGui::EndFrame();

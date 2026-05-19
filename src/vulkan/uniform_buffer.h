@@ -62,5 +62,6 @@ public:
 	static void updateUniformBuffer(uint32_t currentFrame, RenderableComponent* renderable,
 		TransformComponent* transform, Camera* cam, VkExtent2D swapChainExtent, const ShadowSettings& shadowSettings,
         const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightPositions,
-		const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightColors);
+		const std::array<glm::vec4, MAX_POINT_LIGHTS>& pointLightColors,
+		float iblMipLevels = 1.0f, float iblAmbientScale = 0.02f);
 };

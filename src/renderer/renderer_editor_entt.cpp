@@ -210,6 +210,14 @@ void Renderer::renderEnttEditor(glm::mat4 view, glm::mat4 projection)
 			return deserializeEnttScene(jsonContent);
 			});
 	}
+	ImGui::SameLine();
+	if (ImGui::Button("Save Render Preset")) {
+		saveRenderPreset();
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Load Render Preset")) {
+		loadRenderPreset();
+	}
 
 	if (ImGui::Button("Create Entity"))
 	{

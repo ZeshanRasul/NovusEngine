@@ -2333,14 +2333,64 @@ void Renderer::ensureColliderDebugVertexCapacity(size_t vertexCount)
 void Renderer::saveRenderPreset()
 {
 	mSceneRuntimeService.saveRenderPresets([this]() -> std::string {
-		return saveRenderSettings(shadowSettings);
+      RenderPresetSettings renderSettings{};
+		renderSettings.renderEnableShadows = renderEnableShadows;
+		renderSettings.renderEnablePostProcessing = renderEnablePostProcessing;
+		renderSettings.renderEnableFxaa = renderEnableFxaa;
+		renderSettings.renderEnableBloom = renderEnableBloom;
+		renderSettings.fxaaExposure = fxaaExposure;
+		renderSettings.fxaaGamma = fxaaGamma;
+		renderSettings.bloomEnabled = bloomEnabled;
+		renderSettings.bloomThreshold = bloomThreshold;
+		renderSettings.bloomSoftKnee = bloomSoftKnee;
+		renderSettings.bloomPrefilterScale = bloomPrefilterScale;
+		renderSettings.bloomIntensity = bloomIntensity;
+		renderSettings.bloomBlurScale = bloomBlurScale;
+		renderSettings.bloomBlurPasses = bloomBlurPasses;
+		renderSettings.postProcessDebugMode = postProcessDebugMode;
+
+		return saveRenderSettings(shadowSettings, &renderSettings);
 		});
 }
 
 void Renderer::loadRenderPreset()
 {
 	mSceneRuntimeService.loadRenderPresets([this](const std::string& jsonContent) -> bool {
-		return loadRenderSettings(jsonContent, shadowSettings);
+     RenderPresetSettings renderSettings{};
+		renderSettings.renderEnableShadows = renderEnableShadows;
+		renderSettings.renderEnablePostProcessing = renderEnablePostProcessing;
+		renderSettings.renderEnableFxaa = renderEnableFxaa;
+		renderSettings.renderEnableBloom = renderEnableBloom;
+		renderSettings.fxaaExposure = fxaaExposure;
+		renderSettings.fxaaGamma = fxaaGamma;
+		renderSettings.bloomEnabled = bloomEnabled;
+		renderSettings.bloomThreshold = bloomThreshold;
+		renderSettings.bloomSoftKnee = bloomSoftKnee;
+		renderSettings.bloomPrefilterScale = bloomPrefilterScale;
+		renderSettings.bloomIntensity = bloomIntensity;
+		renderSettings.bloomBlurScale = bloomBlurScale;
+		renderSettings.bloomBlurPasses = bloomBlurPasses;
+		renderSettings.postProcessDebugMode = postProcessDebugMode;
+
+		if (!loadRenderSettings(jsonContent, shadowSettings, &renderSettings))
+			return false;
+
+		renderEnableShadows = renderSettings.renderEnableShadows;
+		renderEnablePostProcessing = renderSettings.renderEnablePostProcessing;
+		renderEnableFxaa = renderSettings.renderEnableFxaa;
+		renderEnableBloom = renderSettings.renderEnableBloom;
+		fxaaExposure = renderSettings.fxaaExposure;
+		fxaaGamma = renderSettings.fxaaGamma;
+		bloomEnabled = renderSettings.bloomEnabled;
+		bloomThreshold = renderSettings.bloomThreshold;
+		bloomSoftKnee = renderSettings.bloomSoftKnee;
+		bloomPrefilterScale = renderSettings.bloomPrefilterScale;
+		bloomIntensity = renderSettings.bloomIntensity;
+		bloomBlurScale = renderSettings.bloomBlurScale;
+		bloomBlurPasses = renderSettings.bloomBlurPasses;
+		postProcessDebugMode = renderSettings.postProcessDebugMode;
+
+		return true;
 		});
 }
 

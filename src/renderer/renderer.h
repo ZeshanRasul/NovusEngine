@@ -545,10 +545,10 @@ private:
 	vk::raii::Pipeline bloomBlurPipeline = nullptr;
 
 	bool bloomEnabled = true;
-	float bloomThreshold = 0.7f;
+	float bloomThreshold = 0.13f;
 	float bloomSoftKnee = 0.5f;
 	float bloomPrefilterScale = 2.0f;
-	float bloomIntensity = 0.2f;
+	float bloomIntensity = 0.7f;
 	float bloomBlurScale = 1.0f;
 	int bloomBlurPasses = 2;
 	int postProcessDebugMode = 0;

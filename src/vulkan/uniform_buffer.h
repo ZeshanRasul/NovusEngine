@@ -22,6 +22,7 @@ struct ShadowSettings
 	float biasMin = 0.0002f;
 	float enabled = 1.0f;
 	glm::vec3 lightDirection = glm::normalize(glm::vec3(23.0f, 90.0f, -8.0f));
+	glm::vec3 lightColor = glm::normalize(glm::vec3(255.0f, 255.0f, 255.0f));
 	float cascadeBlendFactor = 0.15f;
 	float cascadeDebugView = 0.0f;
 	float shadowPadding = 15.0f;

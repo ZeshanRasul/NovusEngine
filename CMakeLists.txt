@@ -233,6 +233,15 @@ if(SPIRV_BINARY_FILES)
     )
 endif()
 
+# Copy models directory to the output directory
+add_custom_command(TARGET NovusEngine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/models
+        $<TARGET_FILE_DIR:NovusEngine>/models
+    COMMENT "Copying models directory to output directory"
+    VERBATIM
+)
+
 target_include_directories(NovusEngine PRIVATE src include build/vcpkg_installed/x64-windows/include build/vcpkg_installed/x64-windows/include/nlohmann build/vcpkg-release/vcpkg_installed/x64-windows/include)
 include_directories(${GLFW3_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${ASSIMP_INCLUDE_DIR} ${VMA_SOURCE_DIR}/vma)
 

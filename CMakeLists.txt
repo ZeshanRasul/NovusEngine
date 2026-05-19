@@ -264,5 +264,4 @@ target_compile_definitions(NovusEngine PRIVATE
     MAX_POINT_LIGHTS=16
 )
 
-
 add_subdirectory("NovusEngineProject")

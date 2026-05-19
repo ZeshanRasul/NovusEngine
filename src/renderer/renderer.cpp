@@ -3172,7 +3172,7 @@ void Renderer::initComputeSkinningResources()
 	mComputeTrsSet0 = std::move(set0[0]);
 	mComputeBoneSet0 = std::move(set0[1]);
 
-	const std::string shaderDir = "../../shaders/";	
+	const std::string shaderDir = "shaders\\";	
 	const std::string trsCompPath = shaderDir + "trs_matrix.comp.spv";
 	const std::string boneCompPath = shaderDir + "bone_matrix.comp.spv";
 	if (!std::filesystem::exists(trsCompPath) || !std::filesystem::exists(boneCompPath))

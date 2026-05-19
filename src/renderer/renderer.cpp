@@ -159,8 +159,8 @@ void Renderer::createSkinningPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "../../shaders/skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
-		{ "../../shaders/skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
+		{ "shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	config.vertexBindings = { bindingDesc };
 	config.vertexAttributes = { attribDescs.begin(), attribDescs.end() };
@@ -2209,8 +2209,8 @@ void Renderer::createGraphicsPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "../../shaders/slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "../../shaders/slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 
 	config.vertexBindings = { bindingDescription };
@@ -2243,8 +2243,8 @@ bool Renderer::createPBRPipeline()
 
 		Pipeline::PipelineConfig config{};
 		config.shaderStages = {
-			{ "../../shaders/pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-			{ "../../shaders/pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+			{ "shaders\\pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+			{ "shaders\\pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 		};
 
 		config.vertexBindings = { bindingDescription };
@@ -2287,8 +2287,8 @@ void Renderer::createColliderDebugPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "../../shaders/debug_lines.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "../../shaders/debug_lines.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\debug_lines.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\debug_lines.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	config.vertexBindings = { binding };
 	config.vertexAttributes = { attribs.begin(), attribs.end() };
@@ -2652,8 +2652,8 @@ void Renderer::createBloomPipelines()
 	};
 	Pipeline::PipelineConfig extractConfig{};
 	extractConfig.shaderStages = {
-		{ "../../shaders/bloom_extract.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "../../shaders/bloom_extract.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	extractConfig.descriptorSetLayouts = { *bloomExtractDescriptorSetLayout };
 	extractConfig.pushConstantRanges = { extractPushRange };
@@ -2673,8 +2673,8 @@ void Renderer::createBloomPipelines()
 	};
 	Pipeline::PipelineConfig blurConfig{};
 	blurConfig.shaderStages = {
-		{ "../../shaders/bloom_blur.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "../../shaders/bloom_blur.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	blurConfig.descriptorSetLayouts = { *bloomBlurDescriptorSetLayout };
 	blurConfig.pushConstantRanges = { blurPushRange };
@@ -3103,7 +3103,7 @@ void Renderer::initAssimpRenderData()
 	{
 		Pipeline::PipelineConfig config{};
 		config.shaderStages = {
-			{ "../../shaders/shadow_skinning.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
+			{ "shaders\\shadow_skinning.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
 		};
 		config.vertexBindings = { SkinnedVertex::getBindingDescription() };
 		auto skinnedAttrib = SkinnedVertex::getAttributeDescriptions();

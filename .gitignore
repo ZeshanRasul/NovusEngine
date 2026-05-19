@@ -2,3 +2,4 @@
 build/
 out/
 CMakeUserPresets.json
+vcpkg_installed/

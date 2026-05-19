@@ -159,8 +159,8 @@ void Renderer::createSkinningPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "shaders\\skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
-		{ "shaders\\skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "../../shaders/skinning.spv", vk::ShaderStageFlagBits::eVertex,   "vertMain" },
+		{ "../../shaders/skinning.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	config.vertexBindings = { bindingDesc };
 	config.vertexAttributes = { attribDescs.begin(), attribDescs.end() };
@@ -253,7 +253,7 @@ void Renderer::setupGameObjects()
 		{ 0.0f, 0.0f, 0.0f },
 		{ 0.0f, 0.0f, 0.0f },
 		{ 1.0f, 1.0f, 1.0f },
-		"models/Sponza.gltf");
+		"../../models/Sponza.gltf");
 
 	const entt::entity floor = makeEntity(
 		"Physics Arena Floor",
@@ -300,7 +300,7 @@ void Renderer::setupGameObjects()
 		const glm::vec3 startVelocity = tangent * 125.0f + inward * 40.0f + glm::vec3(0.0f, (i % 3 == 0) ? 15.0f : -8.0f, 0.0f);
 
 		const std::string namePrefix = damagedHelmet ? "Damaged Helmet " : "Flight Helmet ";
-		const std::string modelPath = damagedHelmet ? "models/DamagedHelmet.gltf" : "models/FlightHelmet.gltf";
+		const std::string modelPath = damagedHelmet ? "../../models/DamagedHelmet.gltf" : "../../models/FlightHelmet.gltf";
 		const glm::vec3 scale = damagedHelmet ? glm::vec3(35.0f) : glm::vec3(100.0f);
 		const glm::vec3 rotation = damagedHelmet ? glm::vec3(0.0f, angle, 0.0f) : glm::vec3(0.0f, angle + glm::radians(90.0f), 0.0f);
 		const bool alignBottom = damagedHelmet;
@@ -532,8 +532,8 @@ void Renderer::initVulkan()
 
 	initAssimpRenderData();
 
-	if (!mModelInstData.miModelAddCallbackFunction("models\\Knight.glb")) {
-		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "models\\Knight.glb");
+	if (!mModelInstData.miModelAddCallbackFunction("../../models/Knight.glb")) {
+		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "../../models/Knight.glb");
 	}
 	else {
 		/* select new model and new instance */
@@ -2209,8 +2209,8 @@ void Renderer::createGraphicsPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "shaders\\slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "shaders\\slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "../../shaders/slang.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "../../shaders/slang.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 
 	config.vertexBindings = { bindingDescription };
@@ -2243,8 +2243,8 @@ bool Renderer::createPBRPipeline()
 
 		Pipeline::PipelineConfig config{};
 		config.shaderStages = {
-			{ "shaders\\pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-			{ "shaders\\pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+			{ "../../shaders/pbr.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+			{ "../../shaders/pbr.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 		};
 
 		config.vertexBindings = { bindingDescription };
@@ -2287,8 +2287,8 @@ void Renderer::createColliderDebugPipeline()
 
 	Pipeline::PipelineConfig config{};
 	config.shaderStages = {
-		{ "shaders\\debug_lines.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "shaders\\debug_lines.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "../../shaders/debug_lines.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "../../shaders/debug_lines.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	config.vertexBindings = { binding };
 	config.vertexAttributes = { attribs.begin(), attribs.end() };
@@ -2652,8 +2652,8 @@ void Renderer::createBloomPipelines()
 	};
 	Pipeline::PipelineConfig extractConfig{};
 	extractConfig.shaderStages = {
-		{ "shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "shaders\\bloom_extract.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "../../shaders/bloom_extract.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "../../shaders/bloom_extract.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	extractConfig.descriptorSetLayouts = { *bloomExtractDescriptorSetLayout };
 	extractConfig.pushConstantRanges = { extractPushRange };
@@ -2673,8 +2673,8 @@ void Renderer::createBloomPipelines()
 	};
 	Pipeline::PipelineConfig blurConfig{};
 	blurConfig.shaderStages = {
-		{ "shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
-		{ "shaders\\bloom_blur.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
+		{ "../../shaders/bloom_blur.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" },
+		{ "../../shaders/bloom_blur.spv", vk::ShaderStageFlagBits::eFragment, "fragMain" }
 	};
 	blurConfig.descriptorSetLayouts = { *bloomBlurDescriptorSetLayout };
 	blurConfig.pushConstantRanges = { blurPushRange };
@@ -3103,7 +3103,7 @@ void Renderer::initAssimpRenderData()
 	{
 		Pipeline::PipelineConfig config{};
 		config.shaderStages = {
-			{ "shaders\\shadow_skinning.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
+			{ "../../shaders/shadow_skinning.spv", vk::ShaderStageFlagBits::eVertex, "vertMain" }
 		};
 		config.vertexBindings = { SkinnedVertex::getBindingDescription() };
 		auto skinnedAttrib = SkinnedVertex::getAttributeDescriptions();
@@ -3172,7 +3172,7 @@ void Renderer::initComputeSkinningResources()
 	mComputeTrsSet0 = std::move(set0[0]);
 	mComputeBoneSet0 = std::move(set0[1]);
 
-	const std::string shaderDir = "shaders\\";
+	const std::string shaderDir = "../../shaders/";	
 	const std::string trsCompPath = shaderDir + "trs_matrix.comp.spv";
 	const std::string boneCompPath = shaderDir + "bone_matrix.comp.spv";
 	if (!std::filesystem::exists(trsCompPath) || !std::filesystem::exists(boneCompPath))

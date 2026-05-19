@@ -234,8 +234,8 @@ namespace Pipeline
 		PipelineBundle result;
 		result.layout = vk::raii::PipelineLayout(device, layoutInfo);
 
-		auto vertCode = readFile("D:\\dev\\Graphics\\NovusEngine\\shaders\\fxaa.spv");
-		auto fragCode = readFile("D:\\dev\\Graphics\\NovusEngine\\shaders\\fxaa.spv");
+		auto vertCode = readFile("shaders\\fxaa.spv");
+		auto fragCode = readFile("shaders\\fxaa.spv");
 
 		auto vertModule = createShaderModule(device, vertCode);
 		auto fragModule = createShaderModule(device, fragCode);

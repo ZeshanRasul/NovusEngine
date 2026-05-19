@@ -1,0 +1,26 @@
+{
+  "shadowSettings": {
+    "biasMin": 0.00019999999494757503,
+    "biasScale": 0.001500000013038516,
+    "cascadeBlendFactor": 0.15000000596046448,
+    "cascadeDebugView": 0.0,
+    "casterPadding": 60.0,
+    "coveragePaddingFactor": 0.07999999821186066,
+    "depthPaddingFactor": 0.20000000298023224,
+    "enabled": 1.0,
+    "farCascadeExpansion": 2.0,
+    "lambda": 0.19900000095367432,
+    "lightColor": [
+      0.5773502588272095,
+      0.5773502588272095,
+      0.5773502588272095
+    ],
+    "lightDirection": [
+      0.24668514728546143,
+      0.9652897119522095,
+      -0.08580353111028671
+    ],
+    "shadowMaxDistance": 3000.0,
+    "shadowPadding": 15.0
+  }
+}

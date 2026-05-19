@@ -17,6 +17,8 @@ public:
 
     const std::string& sceneFilePath() const;
     const std::string& editorSceneFilePath() const;
+	const std::string& prefabFilePath() const;
+	const std::string& renderPresetsFilePath() const;
 
     std::string& prefabFilePath();
     std::string& prefabSaveFilePath();
@@ -42,6 +44,7 @@ private:
     std::string mEditorSceneFilePath = "editor_scene.json";
     std::string mPrefabFilePath = "prefabs/default.prefab.json";
     std::string mPrefabSaveFilePath = "prefabs/default.prefab.json";
+	std::string mRenderPresetsFilePath = "render_presets.json";
     std::vector<std::string> mPrefabAssets{};
     int mSelectedPrefabAsset = -1;
     bool mPrefabAssetsDirty = true;

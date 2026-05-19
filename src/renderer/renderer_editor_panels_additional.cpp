@@ -24,6 +24,16 @@ void Renderer::renderShadowTuningPanel(bool isEditMode)
     ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
     ImGui::ColorEdit4("Light Color", &shadowSettings.lightColor.x);
     ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
+    if (ImGui::Button("Save Presets"))
+    {
+        saveRenderPreset();
+    }
+
+    if (ImGui::Button("Load Presets"))
+    {
+        loadRenderPreset();
+	}
+    
     if (ImGui::Button("Reset Shadows")) {
         shadowSettings = ShadowSettings{};
     }

@@ -30,6 +30,7 @@
 #include "../core/scene_serialization.h"
 #include "../../lib/ImGuiFileDialog.h"
 #include "../../include/imgui_internal.h"
+#include "render_settings_io.h"
 
 namespace {
 	using json = nlohmann::json;
@@ -2327,6 +2328,20 @@ void Renderer::ensureColliderDebugVertexCapacity(size_t vertexCount)
 	colliderDebugVertexBuffer = std::move(newBuffer);
 	colliderDebugVertexBufferMemory = std::move(newMemory);
 	colliderDebugVertexCapacity = newCapacity;
+}
+
+void Renderer::saveRenderPreset()
+{
+	mSceneRuntimeService.saveRenderPresets([this]() -> std::string {
+		return saveRenderSettings(shadowSettings);
+		});
+}
+
+void Renderer::loadRenderPreset()
+{
+	mSceneRuntimeService.loadRenderPresets([this](const std::string& jsonContent) -> bool {
+		return loadRenderSettings(jsonContent, shadowSettings);
+		});
 }
 
 void Renderer::rebuildColliderDebugLines()

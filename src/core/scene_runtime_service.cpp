@@ -75,6 +75,16 @@ bool SceneRuntimeService::loadEditorScene(const DeserializeFn& deserialize)
     return loadFromFile(mState.editorSceneFilePath(), deserialize);
 }
 
+bool SceneRuntimeService::saveRenderPresets(const SerializeFn& serialize)
+{
+    return saveToFile(mState.renderPresetsFilePath(), serialize);
+}
+
+bool SceneRuntimeService::loadRenderPresets(const DeserializeFn& deserialize)
+{
+    return loadFromFile(mState.renderPresetsFilePath(), deserialize);
+}
+
 bool SceneRuntimeService::saveToFile(const std::string& filePath, const SerializeFn& serialize)
 {
     if (!serialize)

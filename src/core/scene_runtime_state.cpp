@@ -62,6 +62,16 @@ const std::string& SceneRuntimeState::editorSceneFilePath() const
     return mEditorSceneFilePath;
 }
 
+const std::string& SceneRuntimeState::prefabFilePath() const
+{
+    return mPrefabFilePath;
+}
+
+const std::string& SceneRuntimeState::renderPresetsFilePath() const
+{
+    return mRenderPresetsFilePath;
+}
+
 std::string& SceneRuntimeState::prefabFilePath()
 {
     return mPrefabFilePath;

@@ -632,5 +632,8 @@ private:
 	bool renderEnableFxaa = true;
 	bool renderEnableBloom = true;
 
+	void saveRenderPreset();
+	void loadRenderPreset();
+
 	Gameplay::GameplayRuntime mGameplayRuntime{};
 };

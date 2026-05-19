@@ -4,6 +4,7 @@
 
 #include "ECS/entt/transform_systems.h"
 #include "ECS/entt/scene.h"
+#include "../renderer/renderer.h"
 
 namespace Core::SceneSerialization
 {

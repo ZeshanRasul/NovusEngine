@@ -77,7 +77,7 @@ add_executable(NovusEngine
     "src/gameplay/gameplay_layer.h"
     "src/gameplay/gameplay_runtime.h"
     "src/gameplay/gameplay_runtime.cpp"
-    "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp" "include/IconsFontAwesome7.h" "src/renderer/passes/pass_common.h" "src/renderer/passes/pass_common.cpp")
+    "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp" "include/IconsFontAwesome7.h" "src/renderer/passes/pass_common.h" "src/renderer/passes/pass_common.cpp" "src/renderer/render_settings_io.h" "src/renderer/render_settings_io.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)

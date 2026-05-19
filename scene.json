@@ -41,7 +41,7 @@
         "radius": 25.649999618530273,
         "shapeType": 2
       },
-      "id": 11534349,
+      "id": 2097165,
       "name": "Assimp: Knight.glb",
       "playerController": {
         "enabled": true,
@@ -97,7 +97,7 @@
         "radius": 46.0,
         "shapeType": 1
       },
-      "id": 11534348,
+      "id": 2097164,
       "name": "Flight Helmet 2",
       "renderable": {
         "modelPath": "models/FlightHelmet.gltf"
@@ -150,7 +150,7 @@
         "radius": 18.0,
         "shapeType": 1
       },
-      "id": 11534347,
+      "id": 2097163,
       "name": "Damaged Helmet 1",
       "renderable": {
         "modelPath": "models/DamagedHelmet.gltf"
@@ -203,7 +203,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 11534346,
+      "id": 2097162,
       "name": "Physics Arena Wall -Z",
       "rigidBody": {
         "bodyType": 0,
@@ -253,7 +253,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 11534345,
+      "id": 2097161,
       "name": "Physics Arena Wall +Z",
       "rigidBody": {
         "bodyType": 0,
@@ -303,7 +303,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 11534344,
+      "id": 2097160,
       "name": "Physics Arena Wall -X",
       "rigidBody": {
         "bodyType": 0,
@@ -353,7 +353,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 11534343,
+      "id": 2097159,
       "name": "Physics Arena Wall +X",
       "rigidBody": {
         "bodyType": 0,
@@ -403,7 +403,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 11534342,
+      "id": 2097158,
       "name": "Physics Arena Floor",
       "rigidBody": {
         "bodyType": 0,
@@ -453,7 +453,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 11534341,
+      "id": 2097157,
       "name": "Sponza",
       "renderable": {
         "modelPath": "models/Sponza.gltf"
@@ -506,7 +506,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 11534340,
+      "id": 2097156,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -566,7 +566,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 11534339,
+      "id": 2097155,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -626,7 +626,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 11534338,
+      "id": 2097154,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -686,7 +686,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 11534337,
+      "id": 2097153,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -746,7 +746,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 11534336,
+      "id": 2097152,
       "name": "Main Camera",
       "rigidBody": {
         "bodyType": 1,
@@ -780,5 +780,5 @@
       }
     }
   ],
-  "selected": 11534349
+  "selected": 2097165
 }

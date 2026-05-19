@@ -367,32 +367,6 @@ void Renderer::rebuildRenderableRuntimeResources()
 	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler, MAX_FRAMES_IN_FLIGHT);
 }
 
-struct FxaaPushConstantsCPU
-{
-	glm::vec2 rcpFrame;
-	float exposure;
-	float gamma;
-	float bloomIntensity;
-	int debugMode;
-	glm::vec2 _pad{};
-};
-
-struct BloomExtractPushConstantsCPU
-{
-	float threshold;
-	float softKnee;
-	float prefilterScale;
-	float _pad = 0.0f;
-};
-
-struct BloomBlurPushConstantsCPU
-{
-	glm::vec2 direction;
-	float blurScale;
-	float _pad = 0.0f;
-};
-
-
 // ---------------------------------------------------------------------------
 // Public
 // ---------------------------------------------------------------------------
@@ -584,7 +558,7 @@ void Renderer::initEnttDemoScene()
 		}
 		});
 
- mSceneRuntimeService.clearHistory();
+	mSceneRuntimeService.clearHistory();
 	pushUndoSnapshot();
 }
 
@@ -1381,7 +1355,7 @@ void Renderer::buildEditorDockspace()
 
 	if (!mEditorDockLayoutInitialized)
 	{
-        const std::string imguiIniPath = "imgui.ini";
+		const std::string imguiIniPath = "imgui.ini";
 		if (std::filesystem::exists(imguiIniPath)) {
 			std::error_code ec;
 			std::filesystem::remove(imguiIniPath, ec);
@@ -1396,7 +1370,7 @@ void Renderer::buildEditorDockspace()
 		ImGui::DockBuilderSetNodeSize(dockspaceId, mainViewport->Size);
 
 		ImGuiID dockMain = dockspaceId;
-     ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.20f, nullptr, &dockMain);
+		ImGuiID dockLeft = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Left, 0.20f, nullptr, &dockMain);
 		ImGuiID dockRight = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Right, 0.28f, nullptr, &dockMain);
 		ImGuiID dockBottom = ImGui::DockBuilderSplitNode(dockMain, ImGuiDir_Down, 0.30f, nullptr, &dockMain);
 		ImGuiID dockLeftBottom = ImGui::DockBuilderSplitNode(dockLeft, ImGuiDir_Down, 0.45f, nullptr, &dockLeft);
@@ -1405,7 +1379,7 @@ void Renderer::buildEditorDockspace()
 		ImGui::DockBuilderDockWindow("Viewport", dockMain);
 		ImGui::DockBuilderDockWindow("ECS Scene", dockLeft);
 		ImGui::DockBuilderDockWindow("ECS Lights", dockLeftBottom);
-     ImGui::DockBuilderDockWindow("ECS Inspector", dockRight);
+		ImGui::DockBuilderDockWindow("ECS Inspector", dockRight);
 		ImGui::DockBuilderDockWindow("Camera Controls", dockRightSecondary);
 		ImGui::DockBuilderDockWindow("Shadow Tuning", dockBottom);
 		ImGui::DockBuilderDockWindow("Animation Controls", dockBottom);
@@ -1482,227 +1456,31 @@ void Renderer::renderImgui()
 	const bool isEditMode = (sceneState == SceneState::EDIT);
 	renderPlayModePanel(isEditMode);
 
-  renderCameraControlsPanel();
+	renderCameraControlsPanel();
 	renderPrefabPanel(isEditMode, registry);
+	renderShadowTuningPanel(isEditMode);
+	renderAnimationControlsPanel(isEditMode);
+	renderPlayHudPanel(isEditMode, registry);
 
 	if (isEditMode)
 	{
 		renderEnttEditor(camera.getViewMatrix(), camera.getProjectionMatrix(static_cast<float>(WIDTH) / HEIGHT, 0.1f, 3000.0f));
-
-		if (uiShowShadowTuningWindow)
-		{
-			ImGui::Begin("Shadow Tuning");
-			ImGui::SliderFloat("Shadow Distance", &shadowSettings.shadowMaxDistance, 50.0f, 600.0f);
-			ImGui::SliderFloat("Lambda", &shadowSettings.lambda, 0.0f, 1.0f);
-			ImGui::SliderFloat("Bias Scale", &shadowSettings.biasScale, 0.0001f, 0.01f, "%.5f", ImGuiSliderFlags_Logarithmic);
-			ImGui::SliderFloat("Bias Min", &shadowSettings.biasMin, 0.00001f, 0.005f, "%.5f", ImGuiSliderFlags_Logarithmic);
-			ImGui::SliderFloat("Cascade Blend", &shadowSettings.cascadeBlendFactor, 0.0f, 0.5f);
-			ImGui::SliderFloat("Coverage Padding", &shadowSettings.coveragePaddingFactor, 0.0f, 0.5f);
-			ImGui::SliderFloat("Depth Padding", &shadowSettings.depthPaddingFactor, 0.0f, 1.0f);
-			ImGui::SliderFloat("Caster Padding", &shadowSettings.casterPadding, 0.0f, 250.0f);
-			ImGui::SliderFloat("Far Cascade Expansion", &shadowSettings.farCascadeExpansion, 1.0f, 4.0f);
-			ImGui::SliderFloat("Base Padding", &shadowSettings.shadowPadding, 0.0f, 100.0f);
-			ImGui::SliderFloat3("Light Direction", &shadowSettings.lightDirection.x, -1.0f, 1.0f);
-			ImGui::Checkbox("Cascade Debug View", reinterpret_cast<bool*>(&shadowSettings.cascadeDebugView));
-			if (ImGui::Button("Reset Shadows")) {
-				shadowSettings = ShadowSettings{};
-			}
-
-			ImGui::End();
-		}
-
-		ImGui::Begin("Animation Controls");
-
-		if (ImGui::CollapsingHeader("Models")) {
-			/* state is changed during model deletion, so save it first */
-			bool modelListEmtpy = mModelInstData.miModelList.empty();
-			std::string selectedModelName;
-
-			if (!modelListEmtpy) {
-				selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
-			}
-
-			if (modelListEmtpy) {
-				ImGui::BeginDisabled();
-			}
-
-			ImGui::AlignTextToFramePadding();
-			ImGui::Text("Models :");
-			ImGui::SameLine();
-			ImGui::PushItemWidth(200);
-			if (ImGui::BeginCombo("##ModelCombo",
-				// avoid access the empty model vector
-				selectedModelName.c_str())) {
-				for (int i = 0; i < mModelInstData.miModelList.size(); ++i) {
-					const bool isSelected = (mModelInstData.miSelectedModel == i);
-					if (ImGui::Selectable(mModelInstData.miModelList.at(i)->getModelFileName().c_str(), isSelected)) {
-						mModelInstData.miSelectedModel = i;
-						selectedModelName = mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str();
-					}
-
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
-				}
-				ImGui::EndCombo();
-			}
-			ImGui::PopItemWidth();
-
-			if (modelListEmtpy) {
-				ImGui::EndDisabled();
-			}
-
-
-			if (ImGui::Button("Import Model")) {
-				IGFD::FileDialogConfig config;
-				config.path = ".";
-				config.countSelectionMax = 1;
-				config.flags = ImGuiFileDialogFlags_Modal;
-				ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-				ImGuiFileDialog::Instance()->OpenDialog("ChooseModelFile", "Choose Model File",
-					"Supported Model Files{.gltf,.glb,.obj,.fbx,.dae,.mdl,.md3,.pk3}", config);
-			}
-
-			if (ImGuiFileDialog::Instance()->Display("ChooseModelFile")) {
-				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
-
-					/* try to construct a relative path */
-					std::filesystem::path currentPath = std::filesystem::current_path();
-					std::string relativePath = std::filesystem::relative(filePathName, currentPath).generic_string();
-
-					if (!relativePath.empty()) {
-						filePathName = relativePath;
-					}
-					/* Windows does understand forward slashes, but std::filesystem preferres backslashes... */
-					std::replace(filePathName.begin(), filePathName.end(), '\\', '/');
-
-					if (!mModelInstData.miModelAddCallbackFunction(filePathName)) {
-						Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, filePathName.c_str());
-					}
-					else {
-						/* select new model and new instance */
-						mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
-						mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-					}
-				}
-				ImGuiFileDialog::Instance()->Close();
-			}
-
-			if (modelListEmtpy) {
-				ImGui::BeginDisabled();
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Delete Model")) {
-				ImGui::OpenPopup("Delete Model?");
-			}
-
-			if (ImGui::BeginPopupModal("Delete Model?", nullptr, ImGuiChildFlags_AlwaysAutoResize)) {
-				ImGui::Text("Delete Model '%s'?", mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
-
-				/* cheating a bit to get buttons more to the center */
-				ImGui::Indent();
-				ImGui::Indent();
-				if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-					mModelInstData.miModelDeleteCallbackFunction(mModelInstData.miModelList.at(mModelInstData.miSelectedModel)->getModelFileName().c_str());
-
-					/* decrement selected model index to point to model that is in list before the deleted one */
-					if (mModelInstData.miSelectedModel > 0) {
-						mModelInstData.miSelectedModel -= 1;
-					}
-
-					/* reset model instance to first instnace - if we have instances */
-					if (!mModelInstData.miAssimpInstances.empty()) {
-						mModelInstData.miSelectedInstance = 0;
-					}
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-					ImGui::CloseCurrentPopup();
-				}
-				ImGui::EndPopup();
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Create Instance")) {
-				std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
-				mModelInstData.miInstanceAddCallbackFunction(currentModel);
-				/* select new instance */
-				mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-			}
-
-			if (ImGui::Button("Create Multiple Instances")) {
-				std::shared_ptr<AssimpModel> currentModel = mModelInstData.miModelList[mModelInstData.miSelectedModel];
-				mModelInstData.miInstanceAddManyCallbackFunction(currentModel, mManyInstanceCreateNum);
-				mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
-			}
-			ImGui::SameLine();
-			ImGui::SliderInt("##MassInstanceCreation", &mManyInstanceCreateNum, 1, 100, "%d");
-
-			if (modelListEmtpy) {
-				ImGui::EndDisabled();
-			}
-		}
-
-		ImGui::Separator();
-		ImGui::TextUnformatted("Instance and animation editing moved to ECS Inspector.");
-
-		ImGui::End();
-	}
-	else
-	{
-		if (uiShowPlayHud)
-			ImGui::Begin("Play HUD");
-		else
-			ImGui::Begin("Play HUD", nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs);
-
-		if (uiShowPlayHud)
-		{
-			ImGui::TextUnformatted("Runtime UI");
-			ImGui::Separator();
-			ImGui::TextUnformatted("W/A/S/D + Mouse: Move camera");
-			ImGui::TextUnformatted("Space/Ctrl: Up/Down");
-			ImGui::TextUnformatted("Esc: Toggle mouse capture");
-
-			int rigidBodyCount = 0;
-			for (auto entity : registry.view<RigidBodyComponent>()) {
-				(void)entity;
-				++rigidBodyCount;
-			}
-			int colliderCount = 0;
-			for (auto entity : registry.view<ColliderComponent>()) {
-				(void)entity;
-				++colliderCount;
-			}
-			ImGui::Text("RigidBodies: %d", rigidBodyCount);
-			ImGui::Text("Colliders: %d", colliderCount);
-		}
-		ImGui::End();
 	}
 
-  renderPostProcessingAndPhysicsPanels(isEditMode, registry);
+	renderPostProcessingAndPhysicsPanels(isEditMode, registry);
 
 	// End the frame
 	ImGui::EndFrame();
 
-
 	// Render to generate draw data
 	ImGui::Render();
-	//ImDrawData* drawData = ImGui::GetDrawData();
-///if (drawData && drawData->CmdListsCount > 0) {
-///	if (drawData->TotalVtxCount > vertexCount || drawData->TotalIdxCount > indexCount) {
-///		needsUpdateBuffers = true;
-///		return true;
-///	}
-///}
+
 	imGui->updateBuffers();
 }
 
 void Renderer::enterPlayMode()
 {
-    mSceneRuntimeService.saveEditorScene([this]() { return serializeEnttScene(); });
+	mSceneRuntimeService.saveEditorScene([this]() { return serializeEnttScene(); });
 
 	mLogPlayToEditCacheStats = false;
 
@@ -1718,7 +1496,7 @@ void Renderer::exitPlayMode()
 {
 	mLogPlayToEditCacheStats = true;
 
-    if (mSceneRuntimeService.loadEditorScene([this](const std::string& jsonContent) {
+	if (mSceneRuntimeService.loadEditorScene([this](const std::string& jsonContent) {
 		pushUndoSnapshot();
 		return deserializeEnttScene(jsonContent);
 		})) {
@@ -1731,62 +1509,6 @@ void Renderer::exitPlayMode()
 
 	sceneState = SceneState::EDIT;
 	currentFrameIndex = 0;
-}
-
-Gameplay::RuntimeContext Renderer::buildGameplayRuntimeContext()
-{
-	auto& registry = mEnttScene.getRegistry();
-
-	Gameplay::RuntimeContext ctx{};
-	ctx.registry = &registry;
-	ctx.physicsSystem = &physicsSystem;
-
-	ctx.destroyEntity = [this](entt::entity entity)
-		{
-			auto& reg = mEnttScene.getRegistry();
-			if (!reg.valid(entity))
-				return;
-
-			if (reg.any_of<RigidBodyComponent>(entity))
-				physicsSystem.unregisterEntity(entity, reg);
-
-			if (auto* hc = reg.try_get<HierarchyComponent>(entity)) {
-				if (hc->parent != entt::null && reg.valid(hc->parent)) {
-					if (auto* parent = reg.try_get<HierarchyComponent>(hc->parent)) {
-						auto it = std::remove(parent->children.begin(), parent->children.end(), entity);
-						parent->children.erase(it, parent->children.end());
-					}
-				}
-				for (entt::entity child : hc->children) {
-					if (reg.valid(child)) {
-						auto& ch = reg.emplace_or_replace<HierarchyComponent>(child);
-						ch.parent = entt::null;
-					}
-				}
-			}
-
-			if (reg.any_of<AssimpInstanceComponent>(entity))
-				removeInstanceFromEntity(entity);
-
-			if (mEnttScene.isValid(entity))
-				mEnttScene.destroyEntity(entity);
-		};
-
-	ctx.spawnPrefab = [this](const std::string& prefabPath, const glm::vec3& spawnOffset) -> entt::entity
-		{
-			if (!instantiatePrefab(prefabPath))
-				return entt::null;
-
-			entt::entity spawned = mEnttSelectedEntity;
-			auto& reg = mEnttScene.getRegistry();
-			if (reg.valid(spawned)) {
-				if (auto* tr = reg.try_get<TransformComponent>(spawned))
-					tr->SetPosition(tr->GetPosition() + spawnOffset);
-			}
-			return spawned;
-		};
-
-	return ctx;
 }
 
 std::string Renderer::serializeEnttScene() const
@@ -1877,7 +1599,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 	mEnttMultiSelection.clear();
 
 	std::unordered_map<uint32_t, entt::entity> entityMap;
-   std::vector<Core::SceneSerialization::PendingHierarchy> pendingHierarchy;
+	std::vector<Core::SceneSerialization::PendingHierarchy> pendingHierarchy;
 	bool addedRenderable = false;
 
 	for (const auto& node : root["entities"]) {
@@ -1886,7 +1608,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 		entt::entity entity = mEnttScene.createEntity(name);
 		entityMap[sourceId] = entity;
 
-       Core::SceneSerialization::deserializeCommonComponents(registry, entity, node);
+		Core::SceneSerialization::deserializeCommonComponents(registry, entity, node);
 
 		if (node.contains("renderable") && node["renderable"].is_object()) {
 			const auto& renderableNode = node["renderable"];
@@ -1937,7 +1659,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 			}
 		}
 
-        pendingHierarchy.push_back(Core::SceneSerialization::buildPendingHierarchy(registry, entity, node));
+		pendingHierarchy.push_back(Core::SceneSerialization::buildPendingHierarchy(registry, entity, node));
 	}
 
 	std::vector<entt::entity> createdEntities;
@@ -1947,7 +1669,7 @@ bool Renderer::deserializeEnttScene(const std::string& sceneJson)
 		createdEntities.push_back(entity);
 	}
 
- Core::SceneSerialization::applyPendingHierarchy(registry, pendingHierarchy, entityMap);
+	Core::SceneSerialization::applyPendingHierarchy(registry, pendingHierarchy, entityMap);
 
 	for (entt::entity entity : createdEntities) {
 		if (registry.any_of<RigidBodyComponent, ColliderComponent, TransformComponent>(entity)) {
@@ -2100,13 +1822,13 @@ bool Renderer::saveSelectedAsPrefab(const std::string& prefabPath)
 		return false;
 
 	outFile << root.dump(2);
-   mSceneRuntimeService.state().markPrefabAssetsDirty();
+	mSceneRuntimeService.state().markPrefabAssetsDirty();
 	return true;
 }
 
 void Renderer::refreshPrefabAssetList()
 {
-  mSceneRuntimeService.state().refreshPrefabAssetList();
+	mSceneRuntimeService.state().refreshPrefabAssetList();
 }
 
 bool Renderer::instantiatePrefab(const std::string& prefabPath)
@@ -2137,7 +1859,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		createdEntities.push_back(entity);
 	}
 
-   std::vector<Core::SceneSerialization::PendingHierarchy> pendingHierarchy;
+	std::vector<Core::SceneSerialization::PendingHierarchy> pendingHierarchy;
 	pendingHierarchy.reserve(root["entities"].size());
 
 	bool addedRenderable = false;
@@ -2152,7 +1874,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 		}
 		entt::entity entity = entityIt->second;
 
-       Core::SceneSerialization::deserializeCommonComponents(registry, entity, node);
+		Core::SceneSerialization::deserializeCommonComponents(registry, entity, node);
 
 		if (node.contains("renderable") && node["renderable"].is_object()) {
 			const auto& renderableNode = node["renderable"];
@@ -2205,7 +1927,7 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 			}
 		}
 
-        pendingHierarchy.push_back(Core::SceneSerialization::buildPendingHierarchy(registry, entity, node, nodeIndex == 0));
+		pendingHierarchy.push_back(Core::SceneSerialization::buildPendingHierarchy(registry, entity, node, nodeIndex == 0));
 		++nodeIndex;
 	}
 
@@ -2233,19 +1955,19 @@ bool Renderer::instantiatePrefab(const std::string& prefabPath)
 
 void Renderer::pushUndoSnapshot()
 {
-    mSceneRuntimeService.pushUndoSnapshot([this]() { return serializeEnttScene(); });
+	mSceneRuntimeService.pushUndoSnapshot([this]() { return serializeEnttScene(); });
 }
 
 void Renderer::performUndo()
 {
-  mSceneRuntimeService.undo(
+	mSceneRuntimeService.undo(
 		[this]() { return serializeEnttScene(); },
 		[this](const std::string& snapshot) { return deserializeEnttScene(snapshot); });
 }
 
 void Renderer::performRedo()
 {
-  mSceneRuntimeService.redo(
+	mSceneRuntimeService.redo(
 		[this]() { return serializeEnttScene(); },
 		[this](const std::string& snapshot) { return deserializeEnttScene(snapshot); });
 }
@@ -2745,37 +2467,6 @@ void Renderer::rebuildColliderDebugLines()
 	}
 }
 
-void Renderer::recordColliderDebugPass(vk::raii::CommandBuffer& commandBuffer)
-{
-	if (!physicsDrawColliderDebug || *colliderDebugPipeline == VK_NULL_HANDLE)
-		return;
-
-	rebuildColliderDebugLines();
-	if (colliderDebugVertices.empty())
-		return;
-
-	ensureColliderDebugVertexCapacity(colliderDebugVertices.size());
-
-	void* mapped = colliderDebugVertexBufferMemory.mapMemory(
-		0, colliderDebugVertices.size() * sizeof(DebugLineVertex));
-	std::memcpy(mapped, colliderDebugVertices.data(),
-		colliderDebugVertices.size() * sizeof(DebugLineVertex));
-	colliderDebugVertexBufferMemory.unmapMemory();
-
-	const float aspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
-	DebugLinePushConstants pc{};
-	pc.viewProj = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f) * camera.getViewMatrix();
-
-	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *colliderDebugPipeline);
-	commandBuffer.pushConstants<DebugLinePushConstants>(
-		*colliderDebugPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, pc);
-
-	vk::Buffer vb = *colliderDebugVertexBuffer;
-	vk::DeviceSize off = 0;
-	commandBuffer.bindVertexBuffers(0, vb, off);
-	commandBuffer.draw(static_cast<uint32_t>(colliderDebugVertices.size()), 1, 0, 0);
-}
-
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -2895,89 +2586,6 @@ void Renderer::beginMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t im
 	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pbrPipeline);
 	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width), static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
 	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-}
-
-void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex)
-{
-	vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
-	vk::RenderingAttachmentInfo depthAttachmentInfo = {
-	.imageView = shadowImageViews[cascadeIndex],
-	.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-	.loadOp = vk::AttachmentLoadOp::eClear,
-	.storeOp = vk::AttachmentStoreOp::eStore,
-	.clearValue = clearDepth
-	};
-
-	vk::RenderingInfo renderingInfo = {
-		.renderArea = {.offset = { 0, 0 }, .extent = vk::Extent2D(2048, 2048)},
-		.layerCount = 1,
-		.colorAttachmentCount = 0,
-		.pColorAttachments = nullptr,
-		.pDepthAttachment = &depthAttachmentInfo
-	};
-
-	commandBuffer.beginRendering(renderingInfo);
-	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadowPipeline);
-	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(2048), static_cast<float>(2048), 0.0f, 1.0f));
-	commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), vk::Extent2D(2048, 2048)));
-
-	// Push the cascade index so the shadow vertex shader picks the right light matrix
-	int cascadeIndexInt = static_cast<int>(cascadeIndex);
-	commandBuffer.pushConstants<int>(*shadowPipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, cascadeIndexInt);
-
-	auto& registry = mEnttScene.getRegistry();
-	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
-	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
-	pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
-	pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
-	pointLightPositions[2] = glm::vec4(10.0f, -50.0f, -75.0f, 1.0f);
-	pointLightPositions[3] = glm::vec4(20.0f, 40.0f, -10.0f, 1.0f);
-	pointLightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
-	pointLightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
-	pointLightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
-	pointLightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
-	int lightIndex = 0;
-	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
-	{
-		(void)lightEntity;
-		if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
-			break;
-		if (!light.enabled)
-			continue;
-
-		pointLightPositions[lightIndex] = glm::vec4(lightTransform.GetPosition(), 1.0f);
-		pointLightColors[lightIndex] = glm::vec4(light.color * light.intensity, 1.0f);
-		++lightIndex;
-	}
-	for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
-		pointLightColors[lightIndex] = glm::vec4(0.0f);
-	}
-
-	for (auto [entity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
-	{
-		(void)entity;
-
-		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
-		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
-		vk::DeviceSize offsets[] = { 0 };
-		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-		commandBuffer.bindIndexBuffer(*renderable.indexBuffer, 0, vk::IndexType::eUint32);
-
-		for (const auto& mesh : renderable.meshes)
-		{
-			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable.materialDescriptorSets.size() ? mesh.materialIndex : 0;
-
-			commandBuffer.bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics,
-				*shadowPipelineLayout,
-				0,
-				*renderable.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
-				nullptr);
-
-			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
-		}
-	}
-
 }
 
 void Renderer::recordAssimpShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex)
@@ -3197,319 +2805,6 @@ void Renderer::createBloomPipelines()
 	bloomBlurPipeline = std::move(blurBundle.pipeline);
 }
 
-void Renderer::recordBloomPasses(vk::raii::CommandBuffer& commandBuffer)
-{
-	if (!bloomEnabled)
-		return;
-
-	transition_image_layout(*fxaaImage,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		vk::AccessFlagBits2::eColorAttachmentWrite,
-		vk::AccessFlagBits2::eShaderSampledRead,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits2::eFragmentShader,
-		vk::ImageAspectFlagBits::eColor);
-
-	transition_image_layout(*bloomImageA,
-		bloomImageALayout,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::AccessFlags2{},
-		vk::AccessFlagBits2::eColorAttachmentWrite,
-		vk::PipelineStageFlagBits2::eTopOfPipe,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::ImageAspectFlagBits::eColor);
-	bloomImageALayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	vk::RenderingAttachmentInfo bloomAttachmentA{
-		.imageView = bloomImageAView,
-		.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		.loadOp = vk::AttachmentLoadOp::eClear,
-		.storeOp = vk::AttachmentStoreOp::eStore,
-		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
-	};
-
-	vk::RenderingInfo bloomRenderInfoA{
-	 .renderArea = {.offset = { 0, 0 }, .extent = bloomExtent },
-		.layerCount = 1,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = &bloomAttachmentA
-	};
-
-	vk::RenderingInfo bloomRenderInfoB{
-		.renderArea = {.offset = { 0, 0 }, .extent = bloomExtent },
-		.layerCount = 1,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = nullptr
-	};
-	commandBuffer.beginRendering(bloomRenderInfoA);
-	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloomExtractPipeline);
-	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
-		static_cast<float>(bloomExtent.width),
-		static_cast<float>(bloomExtent.height), 0.0f, 1.0f));
-	commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, bloomExtent));
-	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-		*bloomExtractPipelineLayout, 0,
-		*bloomExtractDescriptorSets[frameIndex], nullptr);
-	BloomExtractPushConstantsCPU extractPc{
-		  .threshold = bloomThreshold,
-		  .softKnee = bloomSoftKnee,
-		  .prefilterScale = bloomPrefilterScale
-	};
-	commandBuffer.pushConstants<BloomExtractPushConstantsCPU>(
-		*bloomExtractPipelineLayout,
-		vk::ShaderStageFlagBits::eFragment,
-		0,
-		extractPc);
-	commandBuffer.draw(3, 1, 0, 0);
-	commandBuffer.endRendering();
-
-	transition_image_layout(*bloomImageA,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		vk::AccessFlagBits2::eColorAttachmentWrite,
-		vk::AccessFlagBits2::eShaderSampledRead,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits2::eFragmentShader,
-		vk::ImageAspectFlagBits::eColor);
-	bloomImageALayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-	transition_image_layout(*bloomImageB,
-		bloomImageBLayout,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::AccessFlags2{},
-		vk::AccessFlagBits2::eColorAttachmentWrite,
-		vk::PipelineStageFlagBits2::eTopOfPipe,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::ImageAspectFlagBits::eColor);
-	bloomImageBLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-	vk::RenderingAttachmentInfo bloomAttachmentB{
-		 .imageView = bloomImageBView,
-		 .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		 .loadOp = vk::AttachmentLoadOp::eClear,
-		 .storeOp = vk::AttachmentStoreOp::eStore,
-		 .clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
-	};
-	bloomRenderInfoB.pColorAttachments = &bloomAttachmentB;
-
-	const int blurPassPairs = std::max(1, bloomBlurPasses);
-	for (int i = 0; i < blurPassPairs; ++i)
-	{
-		if (i > 0)
-		{
-			transition_image_layout(*bloomImageB,
-				vk::ImageLayout::eShaderReadOnlyOptimal,
-				vk::ImageLayout::eColorAttachmentOptimal,
-				vk::AccessFlagBits2::eShaderSampledRead,
-				vk::AccessFlagBits2::eColorAttachmentWrite,
-				vk::PipelineStageFlagBits2::eFragmentShader,
-				vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-				vk::ImageAspectFlagBits::eColor);
-			bloomImageBLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		}
-
-		commandBuffer.beginRendering(bloomRenderInfoB);
-		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloomBlurPipeline);
-		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
-			static_cast<float>(bloomExtent.width),
-			static_cast<float>(bloomExtent.height), 0.0f, 1.0f));
-		commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, bloomExtent));
-		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-			*bloomBlurPipelineLayout, 0,
-			*bloomBlurFromADescriptorSets[frameIndex], nullptr);
-		BloomBlurPushConstantsCPU blurPcX{
-			.direction = {
-				1.0f / static_cast<float>(bloomExtent.width),
-				0.0f
-			},
-			.blurScale = bloomBlurScale
-		};
-		commandBuffer.pushConstants<BloomBlurPushConstantsCPU>(
-			*bloomBlurPipelineLayout,
-			vk::ShaderStageFlagBits::eFragment,
-			0,
-			blurPcX);
-		commandBuffer.draw(3, 1, 0, 0);
-		commandBuffer.endRendering();
-
-		transition_image_layout(*bloomImageB,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::AccessFlagBits2::eColorAttachmentWrite,
-			vk::AccessFlagBits2::eShaderSampledRead,
-			vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits2::eFragmentShader,
-			vk::ImageAspectFlagBits::eColor);
-		bloomImageBLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-		transition_image_layout(*bloomImageA,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::AccessFlagBits2::eShaderSampledRead,
-			vk::AccessFlagBits2::eColorAttachmentWrite,
-			vk::PipelineStageFlagBits2::eFragmentShader,
-			vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-			vk::ImageAspectFlagBits::eColor);
-		bloomImageALayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-		commandBuffer.beginRendering(bloomRenderInfoA);
-		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *bloomBlurPipeline);
-		commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
-			static_cast<float>(bloomExtent.width),
-			static_cast<float>(bloomExtent.height), 0.0f, 1.0f));
-		commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, bloomExtent));
-		commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-			*bloomBlurPipelineLayout, 0,
-			*bloomBlurFromBDescriptorSets[frameIndex], nullptr);
-		BloomBlurPushConstantsCPU blurPcY{
-			.direction = {
-				0.0f,
-				1.0f / static_cast<float>(bloomExtent.height)
-			},
-			.blurScale = bloomBlurScale
-		};
-		commandBuffer.pushConstants<BloomBlurPushConstantsCPU>(
-			*bloomBlurPipelineLayout,
-			vk::ShaderStageFlagBits::eFragment,
-			0,
-			blurPcY);
-		commandBuffer.draw(3, 1, 0, 0);
-		commandBuffer.endRendering();
-
-		transition_image_layout(*bloomImageA,
-			vk::ImageLayout::eColorAttachmentOptimal,
-			vk::ImageLayout::eShaderReadOnlyOptimal,
-			vk::AccessFlagBits2::eColorAttachmentWrite,
-			vk::AccessFlagBits2::eShaderSampledRead,
-			vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-			vk::PipelineStageFlagBits2::eFragmentShader,
-			vk::ImageAspectFlagBits::eColor);
-		bloomImageALayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-	}
-}
-
-void Renderer::recordFxaaPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
-{
-	transition_image_layout(*depthImage,
-		vk::ImageLayout::eDepthAttachmentOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-		vk::AccessFlagBits2::eShaderSampledRead,
-		vk::PipelineStageFlagBits2::eLateFragmentTests,
-		vk::PipelineStageFlagBits2::eFragmentShader,
-		vk::ImageAspectFlagBits::eDepth);
-
-	// Transition swapchain image: undefined Gs¦ color attachment for FXAA output
-	transition_image_layout(swapChainImages[imageIndex],
-		vk::ImageLayout::eUndefined,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::AccessFlags2{},
-		vk::AccessFlagBits2::eColorAttachmentWrite,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::ImageAspectFlagBits::eColor);
-
-	vk::RenderingAttachmentInfo colorAttachment{
-		.imageView = swapChainImageViews[imageIndex],
-		.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-		.loadOp = vk::AttachmentLoadOp::eClear,
-		.storeOp = vk::AttachmentStoreOp::eStore,
-		.clearValue = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f)
-	};
-
-	vk::RenderingInfo renderingInfo{
-		.renderArea = {.offset = { 0, 0 }, .extent = swapChainExtent },
-		.layerCount = 1,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = &colorAttachment
-	};
-
-	commandBuffer.beginRendering(renderingInfo);
-	commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *fxaaPipeline);
-	commandBuffer.setViewport(0, vk::Viewport(0.0f, 0.0f,
-		static_cast<float>(swapChainExtent.width),
-		static_cast<float>(swapChainExtent.height), 0.0f, 1.0f));
-	commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, swapChainExtent));
-
-	commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-		*fxaaPipelineLayout, 0,
-		*fxaaDescriptorSets[frameIndex], nullptr);
-
-	// Push rcpFrame so the FXAA shader knows the texel size
-	FxaaPushConstantsCPU pc{
-		.rcpFrame = {
-			1.0f / static_cast<float>(swapChainExtent.width),
-			1.0f / static_cast<float>(swapChainExtent.height)
-		},
-		.exposure = fxaaExposure,
-	  .gamma = fxaaGamma,
-	  .bloomIntensity = bloomEnabled ? bloomIntensity : 0.0f,
-		.debugMode = postProcessDebugMode
-	};
-
-	commandBuffer.pushConstants<FxaaPushConstantsCPU>(
-		*fxaaPipelineLayout,
-		vk::ShaderStageFlagBits::eFragment,
-		0,
-		pc
-	);
-
-	// 3 vertices, no vertex buffer G¦÷ the VS generates the fullscreen triangle
-	commandBuffer.draw(3, 1, 0, 0);
-	commandBuffer.endRendering();
-
-	transition_image_layout(*viewportPreviewImage,
-		viewportPreviewImageLayout,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::AccessFlags2{},
-		vk::AccessFlagBits2::eTransferWrite,
-		vk::PipelineStageFlagBits2::eTopOfPipe,
-		vk::PipelineStageFlagBits2::eTransfer,
-		vk::ImageAspectFlagBits::eColor);
-	viewportPreviewImageLayout = vk::ImageLayout::eTransferDstOptimal;
-
-	transition_image_layout(swapChainImages[imageIndex],
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::ImageLayout::eTransferSrcOptimal,
-		vk::AccessFlagBits2::eColorAttachmentWrite,
-		vk::AccessFlagBits2::eTransferRead,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::PipelineStageFlagBits2::eTransfer,
-		vk::ImageAspectFlagBits::eColor);
-
-	vk::ImageCopy copyRegion{
-		.srcSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
-		.srcOffset = { 0, 0, 0 },
-		.dstSubresource = {.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1 },
-		.dstOffset = { 0, 0, 0 },
-		.extent = { swapChainExtent.width, swapChainExtent.height, 1 }
-	};
-	commandBuffer.copyImage(swapChainImages[imageIndex], vk::ImageLayout::eTransferSrcOptimal,
-		*viewportPreviewImage, vk::ImageLayout::eTransferDstOptimal,
-		copyRegion);
-
-	transition_image_layout(*viewportPreviewImage,
-		vk::ImageLayout::eTransferDstOptimal,
-		vk::ImageLayout::eShaderReadOnlyOptimal,
-		vk::AccessFlagBits2::eTransferWrite,
-		vk::AccessFlagBits2::eShaderSampledRead,
-		vk::PipelineStageFlagBits2::eTransfer,
-		vk::PipelineStageFlagBits2::eFragmentShader,
-		vk::ImageAspectFlagBits::eColor);
-	viewportPreviewImageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-
-	transition_image_layout(swapChainImages[imageIndex],
-		vk::ImageLayout::eTransferSrcOptimal,
-		vk::ImageLayout::eColorAttachmentOptimal,
-		vk::AccessFlagBits2::eTransferRead,
-		vk::AccessFlagBits2::eColorAttachmentWrite,
-		vk::PipelineStageFlagBits2::eTransfer,
-		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-		vk::ImageAspectFlagBits::eColor);
-
-}
-
 void Renderer::recordSceneCopyPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
 {
 	transition_image_layout(swapChainImages[imageIndex],
@@ -3583,79 +2878,6 @@ void Renderer::recordSceneCopyPass(vk::raii::CommandBuffer& commandBuffer, uint3
 		vk::PipelineStageFlagBits2::eColorAttachmentOutput,
 		vk::ImageAspectFlagBits::eColor);
 }
-
-void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
-{
-	auto& registry = mEnttScene.getRegistry();
-	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
-	std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
-	pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
-	pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
-	pointLightPositions[2] = glm::vec4(10.0f, -50.0f, -75.0f, 1.0f);
-	pointLightPositions[3] = glm::vec4(20.0f, 40.0f, -10.0f, 1.0f);
-	pointLightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
-	pointLightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
-	pointLightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
-	pointLightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
-
-	int lightIndex = 0;
-	for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
-	{
-		(void)lightEntity;
-		if (lightIndex >= static_cast<int>(MAX_POINT_LIGHTS))
-			break;
-		if (!light.enabled)
-			continue;
-
-		pointLightPositions[lightIndex] = glm::vec4(lightTransform.GetPosition(), 1.0f);
-		pointLightColors[lightIndex] = glm::vec4(light.color * light.intensity, 1.0f);
-		++lightIndex;
-	}
-
-	for (; lightIndex < static_cast<int>(MAX_POINT_LIGHTS); ++lightIndex) {
-		pointLightColors[lightIndex] = glm::vec4(0.0f);
-	}
-
-	for (auto [ecsEntity, renderable, transform] : registry.view<RenderableComponent, TransformComponent>().each())
-	{
-		(void)ecsEntity;
-
-		UniformBuffer::updateUniformBuffer(frameIndex, &renderable, &transform, &camera, swapChainExtent, shadowSettings, pointLightPositions, pointLightColors);
-		vk::Buffer     vertexBuffers[] = { renderable.vertexBuffer };
-		vk::DeviceSize offsets[] = { 0 };
-		commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-		commandBuffer.bindIndexBuffer(*renderable.indexBuffer, 0, vk::IndexType::eUint32);
-
-		for (const auto& mesh : renderable.meshes)
-		{
-			const Material& material = renderable.materials[mesh.materialIndex < renderable.materials.size() ? mesh.materialIndex : 0];
-			MaterialPushConstants::push(commandBuffer, *pbrPipelineLayout, material);
-			uint32_t descriptorMaterialIndex = mesh.materialIndex < renderable.materialDescriptorSets.size() ? mesh.materialIndex : 0;
-
-			commandBuffer.bindDescriptorSets(
-				vk::PipelineBindPoint::eGraphics,
-				*pbrPipelineLayout,
-				0,
-				*renderable.materialDescriptorSets[descriptorMaterialIndex][frameIndex],
-				nullptr);
-
-			commandBuffer.drawIndexed(mesh.indexCount, 1, mesh.firstIndex, 0, 0);
-		}
-	}
-
-	recordAssimpSkinnedPass(commandBuffer);
-}
-
-
-
-
-void Renderer::recordImguiPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
-{
-	imGui->drawFrame(commandBuffer, *swapChainImageViews[imageIndex]);
-}
-
-
-
 
 void Renderer::endMainPass(vk::raii::CommandBuffer& commandBuffer, uint32_t imageIndex)
 {

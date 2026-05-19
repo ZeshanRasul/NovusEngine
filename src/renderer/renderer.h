@@ -258,6 +258,9 @@ private:
 	void renderCameraControlsPanel();
 	void renderPrefabPanel(bool isEditMode, entt::registry& registry);
 	void renderPlayModePanel(bool isEditMode);
+	void renderShadowTuningPanel(bool isEditMode);
+	void renderAnimationControlsPanel(bool isEditMode);
+	void renderPlayHudPanel(bool isEditMode, entt::registry& registry);
 	void renderPostProcessingAndPhysicsPanels(bool isEditMode, entt::registry& registry);
 	void initEnttDemoScene();
 	void renderEnttEditor(glm::mat4 view, glm::mat4 projection);
@@ -484,6 +487,31 @@ private:
 	vk::raii::Sampler fxaaSampler = nullptr;
 	float fxaaExposure = 1.0f;
 	float fxaaGamma = 2.2f;
+
+	struct FxaaPushConstantsCPU
+	{
+		glm::vec2 rcpFrame;
+		float exposure;
+		float gamma;
+		float bloomIntensity;
+		int debugMode;
+		glm::vec2 _pad{};
+	};
+
+	struct BloomExtractPushConstantsCPU
+	{
+		float threshold;
+		float softKnee;
+		float prefilterScale;
+		float _pad = 0.0f;
+	};
+
+	struct BloomBlurPushConstantsCPU
+	{
+		glm::vec2 direction;
+		float blurScale;
+		float _pad = 0.0f;
+	};
 
 	void createFxaaSampler();
 	void createBloomResources();

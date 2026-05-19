@@ -98,6 +98,7 @@ set(SHADOW_SKINNING_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shadow_ski
 set(TRS_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/trs_matrix.comp)
 set(BONE_COMPUTE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/bone_matrix.comp)
 set(FXAA_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/fxaa.slang)
+set(DEBUG_LINE_SHADER_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/debug_lines.slang)
 
 function(add_slang_shader_target TARGET)
     set(SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
@@ -163,6 +164,25 @@ add_slang_shader_target(shaders)
 add_dependencies(NovusEngine shaders)
 set (SHADERS_DIR ${CMAKE_CURRENT_LIST_DIR}/shaders)
 
+# Copy Slang-compiled .spv files to the output directory
+add_custom_command(TARGET NovusEngine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:NovusEngine>/shaders
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${SHADERS_DIR}/slang.spv
+        ${SHADERS_DIR}/pbr.spv
+        ${SHADERS_DIR}/imgui.spv
+        ${SHADERS_DIR}/shadow.spv
+        ${SHADERS_DIR}/skinning.spv
+        ${SHADERS_DIR}/shadow_skinning.spv
+        ${SHADERS_DIR}/fxaa.spv
+        ${SHADERS_DIR}/bloom_extract.spv
+        ${SHADERS_DIR}/bloom_blur.spv
+        ${SHADERS_DIR}/debug_lines.spv
+        $<TARGET_FILE_DIR:NovusEngine>/shaders
+    COMMENT "Copying Slang shader binaries to output directory"
+    VERBATIM
+)
+
 file(GLOB GLSL_SOURCE_FILES
    ${SHADERS_DIR}/*.comp
 )
@@ -200,6 +220,18 @@ endif()
 
 add_custom_target(compute_shaders DEPENDS ${SPIRV_BINARY_FILES})
 add_dependencies(NovusEngine compute_shaders)
+
+# Copy compute shader .spv files to the output directory
+if(SPIRV_BINARY_FILES)
+    add_custom_command(TARGET NovusEngine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:NovusEngine>/shaders
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${SPIRV_BINARY_FILES}
+            $<TARGET_FILE_DIR:NovusEngine>/shaders
+        COMMENT "Copying compute shader binaries to output directory"
+        VERBATIM
+    )
+endif()
 
 target_include_directories(NovusEngine PRIVATE src include build/vcpkg_installed/x64-windows/include build/vcpkg_installed/x64-windows/include/nlohmann build/vcpkg-release/vcpkg_installed/x64-windows/include)
 include_directories(${GLFW3_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${ASSIMP_INCLUDE_DIR} ${VMA_SOURCE_DIR}/vma)

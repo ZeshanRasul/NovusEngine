@@ -2,7 +2,7 @@
 #include <glm/glm.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
-#include "../renderer/shadow_pass.h"
+#include "../renderer/passes/shadow_pass.h"
 #include "uniform_buffer.h"
 
 void UniformBuffer::createUniformBuffers(entt::registry& registry, vk::raii::Device& device, vk::raii::PhysicalDevice& physicalDevice, uint32_t framesInFlight)

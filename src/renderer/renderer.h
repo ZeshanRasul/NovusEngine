@@ -38,7 +38,7 @@ import vulkan_hpp;
 #include "renderer/renderer_types.h"
 #include "ECS/components/renderable_component.h"
 #include "ECS/components/physics_component.h"
-#include "renderer/shadow_pass.h"
+#include "renderer/passes/shadow_pass.h"
 #include "../imgui_vulkan_util.h"
 #include "../input/input_system.h"
 #include "VkRenderData.h"

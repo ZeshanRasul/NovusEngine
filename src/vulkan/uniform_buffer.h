@@ -18,7 +18,7 @@ static constexpr uint32_t MAX_POINT_LIGHTS = 16;
 struct ShadowSettings
 {
 	float shadowMaxDistance = 3000.0f;
-	float lambda = 0.9f;
+	float lambda = 0.3f;
 	float biasScale = 0.0015f;
 	float biasMin = 0.0002f;
 	float enabled = 1.0f;

@@ -1,12 +1,12 @@
-#include "shadow_pass.h"
+#include "renderer/passes/shadow_pass.h"
 
-#include "../vulkan/depth_target.h"
-#include "../vulkan/image.h"
-#include "../vulkan/image_view.h"
-#include "../vulkan/material.h"
-#include "../vulkan/pipeline.h"
-#include "../vulkan/descriptors.h"
-#include "renderer_types.h"
+#include "vulkan/depth_target.h"
+#include "vulkan/image.h"
+#include "vulkan/image_view.h"
+#include "vulkan/material.h"
+#include "vulkan/pipeline.h"
+#include "vulkan/descriptors.h"
+#include "renderer/renderer_types.h"
 
 void ShadowPass::createResources(vk::raii::Device& device,
     vk::raii::PhysicalDevice& physicalDevice,
@@ -62,20 +62,20 @@ void ShadowPass::createPipeline(vk::raii::Device& device,
      attributeDescriptions.begin(),
         attributeDescriptions.end()
     };
-	config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
-	config.cullMode = vk::CullModeFlagBits::eNone;
-	config.depthBiasEnable = true;
-	config.depthBiasConstantFactor = 1.25f;
-	config.depthBiasSlopeFactor = 1.75f;
-	config.blendEnable = false;
-	config.descriptorSetLayouts = { {shadowDescriptorLayout} };
-	config.pushConstantRanges = { vk::PushConstantRange{
-		.stageFlags = vk::ShaderStageFlagBits::eVertex,
-		.offset = 0,
-		.size = sizeof(int)
-	}};
+    config.depthAttachmentFormat = DepthTarget::findDepthFormat(physicalDevice);
+    config.cullMode = vk::CullModeFlagBits::eNone;
+    config.depthBiasEnable = true;
+    config.depthBiasConstantFactor = 1.25f;
+    config.depthBiasSlopeFactor = 1.75f;
+    config.blendEnable = false;
+    config.descriptorSetLayouts = { {shadowDescriptorLayout} };
+    config.pushConstantRanges = { vk::PushConstantRange{
+        .stageFlags = vk::ShaderStageFlagBits::eVertex,
+        .offset = 0,
+        .size = sizeof(int)
+    }};
 
-	auto pipelineBundle = Pipeline::createPipeline(device, config);
-	shadowPipelineLayout = std::move(pipelineBundle.layout);
-	shadowPipeline = std::move(pipelineBundle.pipeline);
+    auto pipelineBundle = Pipeline::createPipeline(device, config);
+    shadowPipelineLayout = std::move(pipelineBundle.layout);
+    shadowPipeline = std::move(pipelineBundle.pipeline);
 }

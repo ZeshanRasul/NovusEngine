@@ -626,6 +626,7 @@ private:
 	bool uiShowShadowTuningWindow = true;
 	bool uiShowPhysicsWindow = true;
 	bool uiShowPrefabWindow = true;
+	bool uiShowGpuTimingsWindow = true;
 
 	bool renderEnableShadows = true;
 	bool renderEnablePostProcessing = true;
@@ -634,6 +635,16 @@ private:
 
 	void saveRenderPreset();
 	void loadRenderPreset();
+
+	// GPU timestamp queries
+	void createTimestampQueryPool();
+	void readTimestamps();
+	void renderGpuTimingsPanel(bool isEditMode);
+
+	vk::raii::QueryPool mTimestampQueryPool = nullptr;
+	float               mTimestampPeriod    = 1.0f;
+	bool                mTimestampsSupported = false;
+	GpuTimings          mGpuTimings{};
 
 	Gameplay::GameplayRuntime mGameplayRuntime{};
 };

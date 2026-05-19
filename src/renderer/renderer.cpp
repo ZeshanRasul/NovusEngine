@@ -484,6 +484,7 @@ void Renderer::initVulkan()
 
 
 	CommandPool::init(device, queueIndex, commandPool);
+	createTimestampQueryPool();
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
 	for (uint32_t i = 0; i < SHADOW_CASCADE_COUNT; ++i)
 		ShadowPass::createResources(device, physicalDevice, shadowImages[i], shadowImageMemories[i], shadowImageViews[i], shadowSampler);
@@ -1469,6 +1470,7 @@ void Renderer::renderImgui()
 	}
 
 	renderPostProcessingAndPhysicsPanels(isEditMode, registry);
+	renderGpuTimingsPanel(isEditMode);
 
 	// End the frame
 	ImGui::EndFrame();
@@ -2998,6 +3000,10 @@ void Renderer::drawFrame()
 	if (fenceResult != vk::Result::eSuccess)
 		throw std::runtime_error("Failed to wait for draw fence!");
 
+	// Read GPU timestamps recorded by this frame slot's previous command buffer.
+	// The fence wait above guarantees the GPU has finished writing them.
+	readTimestamps();
+
 	auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
 
 	if (result == vk::Result::eErrorOutOfDateKHR)
@@ -3116,7 +3122,7 @@ void Renderer::initAssimpRenderData()
 	skinningDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 	mRenderData.rdDescriptorPool = *skinningDescriptorPool;
 
-	// ---- 1+·1 white fallback texture ----
+	// ---- 1+ï¿½1 white fallback texture ----
 	{
 		const uint32_t white = 0xFFFFFFFF;
 		vk::raii::Buffer       stagingBuf({});

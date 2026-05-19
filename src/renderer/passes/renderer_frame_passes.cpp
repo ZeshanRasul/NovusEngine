@@ -5,6 +5,33 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
     auto& commandBuffer = commandBuffers[frameIndex];
     commandBuffer.begin({});
 
+    // Reset this frame's query slots then bracket each pass with timestamps.
+    // tsBegin/tsEnd are no-ops when timestamps are unsupported.
+    if (mTimestampsSupported)
+    {
+        commandBuffer.resetQueryPool(
+            *mTimestampQueryPool,
+            frameIndex * GPU_PASS_SLOT_COUNT * 2,
+            GPU_PASS_SLOT_COUNT * 2);
+    }
+
+    auto tsBegin = [&](GpuPassSlot slot) {
+        if (!mTimestampsSupported) return;
+        const uint32_t q = frameIndex * GPU_PASS_SLOT_COUNT * 2
+                         + static_cast<uint32_t>(slot) * 2;
+        commandBuffer.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe,
+            *mTimestampQueryPool, q);
+    };
+    auto tsEnd = [&](GpuPassSlot slot) {
+        if (!mTimestampsSupported) return;
+        const uint32_t q = frameIndex * GPU_PASS_SLOT_COUNT * 2
+                         + static_cast<uint32_t>(slot) * 2 + 1;
+        commandBuffer.writeTimestamp2(vk::PipelineStageFlagBits2::eBottomOfPipe,
+            *mTimestampQueryPool, q);
+    };
+
+    // --- Shadow pass ---
+    tsBegin(GpuPassSlot::Shadow);
     if (renderEnableShadows)
     {
         for (uint32_t cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade)
@@ -34,17 +61,25 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
             shadowImageLayouts[cascade] = vk::ImageLayout::eShaderReadOnlyOptimal;
         }
     }
+    tsEnd(GpuPassSlot::Shadow);
 
+    // --- Scene pass ---
+    tsBegin(GpuPassSlot::Scene);
     beginMainPass(commandBuffer, imageIndex);
     recordScenePass(commandBuffer);
     recordColliderDebugPass(commandBuffer);
     commandBuffer.endRendering();
+    tsEnd(GpuPassSlot::Scene);
 
+    // --- Post-processing passes ---
+    tsBegin(GpuPassSlot::Bloom);
+    if (renderEnablePostProcessing && renderEnableBloom && bloomEnabled)
+        recordBloomPasses(commandBuffer);
+    tsEnd(GpuPassSlot::Bloom);
+
+    tsBegin(GpuPassSlot::Fxaa);
     if (renderEnablePostProcessing)
     {
-        if (renderEnableBloom && bloomEnabled)
-            recordBloomPasses(commandBuffer);
-
         if (renderEnableFxaa)
             recordFxaaPass(commandBuffer, imageIndex);
         else
@@ -54,8 +89,12 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
     {
         recordSceneCopyPass(commandBuffer, imageIndex);
     }
+    tsEnd(GpuPassSlot::Fxaa);
 
+    // --- ImGui pass ---
+    tsBegin(GpuPassSlot::ImGui);
     recordImguiPass(commandBuffer, imageIndex);
+    tsEnd(GpuPassSlot::ImGui);
 
     endMainPass(commandBuffer, imageIndex);
 

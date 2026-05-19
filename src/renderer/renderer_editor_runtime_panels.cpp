@@ -16,6 +16,8 @@ void Renderer::renderPlayModePanel(bool isEditMode)
     ImGui::Checkbox("Physics UI", &uiShowPhysicsWindow);
     ImGui::SameLine();
     ImGui::Checkbox("Prefab UI", &uiShowPrefabWindow);
+    ImGui::SameLine();
+    ImGui::Checkbox("GPU Timings", &uiShowGpuTimingsWindow);
 
     ImGui::Checkbox("Render Shadows", &renderEnableShadows);
     ImGui::SameLine();

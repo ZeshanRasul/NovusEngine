@@ -156,6 +156,28 @@ struct SkinnedVertex
 };
 
 // ---------------------------------------------------------------------------
+// GPU pass timing
+// ---------------------------------------------------------------------------
+enum class GpuPassSlot : uint32_t {
+    Shadow = 0,
+    Scene,
+    Bloom,
+    Fxaa,
+    ImGui,
+    Count
+};
+constexpr uint32_t GPU_PASS_SLOT_COUNT = static_cast<uint32_t>(GpuPassSlot::Count);
+
+struct GpuTimings {
+    float shadowMs = 0.0f;
+    float sceneMs  = 0.0f;
+    float bloomMs  = 0.0f;
+    float fxaaMs   = 0.0f;
+    float imguiMs  = 0.0f;
+    float totalMs  = 0.0f;
+};
+
+// ---------------------------------------------------------------------------
 // Per-instance GPU resources for a skinned AssimpInstance
 // ---------------------------------------------------------------------------
 struct AssimpInstanceGPUData

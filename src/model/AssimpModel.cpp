@@ -8,7 +8,7 @@
 #include "AssimpModel.h"
 #include "Tools.h"
 #include "Logger.h"
-#include "../vulkan/Texture (2).h"
+#include "../vulkan/assimp_texture.h"
 #include "../vulkan/VertexBuffer.h"
 #include "../vulkan/IndexBuffer.h"
 

@@ -1,7 +1,7 @@
 #include <cstring>
 #include <stb_image.h>
 #include "../vulkan/CommandBuffer.h"
-#include "../vulkan/Texture (2).h"
+#include "../vulkan/assimp_texture.h"
 #include "Logger.h"
 
 bool AssimpTexture::loadTexture(VkRenderData &renderData, VkTextureData &texData, std::string textureFilename,

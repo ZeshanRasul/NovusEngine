@@ -4,7 +4,7 @@
 
 #include "Logger.h"
 #include "Tools.h"
-#include "../vulkan/Texture (2).h"
+#include "../vulkan/assimp_texture.h"
 
 bool AssimpMesh::processMesh(VkRenderData &renderData, aiMesh* mesh, const aiScene* scene, std::string assetDirectory,
     std::unordered_map<std::string, VkTextureData> &textures) {

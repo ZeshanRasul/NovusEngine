@@ -69,7 +69,7 @@ add_executable(NovusEngine
     "src/model/AssimpAnimChannel.h" "src/model/AssimpAnimClip.cpp" "src/model/AssimpAnimClip.h" "src/model/AssimpBone.cpp" "src/model/AssimpBone.h" "src/model/AssimpInstance.cpp" 
     "src/model/AssimpInstance.h" "src/model/AssimpMesh.cpp" "src/model/AssimpMesh.h" "src/model/AssimpModel.cpp" "src/model/AssimpModel.h" "src/model/AssimpNode.cpp" "src/model/AssimpNode.h" 
     "src/model/InstanceSettings.h" "src/model/AssimpLoadedModel.cpp" "src/model/AssimpLoadedModel.h" "src/model/ModelAndInstanceData.h" "src/renderer/VkRenderData.h" "src/Logger.cpp" "src/Logger.h" 
-    "src/vulkan/IndexBuffer.cpp" "src/vulkan/IndexBuffer.h" "src/vulkan/Texture (2).cpp" "src/vulkan/Texture (2).h" "src/vulkan/VertexBuffer.cpp" "src/vulkan/VertexBuffer.h" "src/vulkan/CommandBuffer.cpp" 
+    "src/vulkan/IndexBuffer.cpp" "src/vulkan/IndexBuffer.h" "src/vulkan/assimp_texture.cpp" "src/vulkan/assimp_texture.h" "src/vulkan/VertexBuffer.cpp" "src/vulkan/VertexBuffer.h" "src/vulkan/CommandBuffer.cpp" 
     "src/vulkan/CommandBuffer.h" "lib/ImGuiFileDialog.cpp"
     "src/ECS/entt/scene.h"
     "src/ECS/entt/assimp_instance_component.h"

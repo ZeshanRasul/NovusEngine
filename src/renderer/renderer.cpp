@@ -253,7 +253,7 @@ void Renderer::setupGameObjects()
 		{ 0.0f, 0.0f, 0.0f },
 		{ 0.0f, 0.0f, 0.0f },
 		{ 1.0f, 1.0f, 1.0f },
-		"../../models/Sponza.gltf");
+		"models\\Sponza.gltf");
 
 	const entt::entity floor = makeEntity(
 		"Physics Arena Floor",
@@ -300,7 +300,7 @@ void Renderer::setupGameObjects()
 		const glm::vec3 startVelocity = tangent * 125.0f + inward * 40.0f + glm::vec3(0.0f, (i % 3 == 0) ? 15.0f : -8.0f, 0.0f);
 
 		const std::string namePrefix = damagedHelmet ? "Damaged Helmet " : "Flight Helmet ";
-		const std::string modelPath = damagedHelmet ? "../../models/DamagedHelmet.gltf" : "../../models/FlightHelmet.gltf";
+		const std::string modelPath = damagedHelmet ? "models\\DamagedHelmet.gltf" : "models\\FlightHelmet.gltf";
 		const glm::vec3 scale = damagedHelmet ? glm::vec3(35.0f) : glm::vec3(100.0f);
 		const glm::vec3 rotation = damagedHelmet ? glm::vec3(0.0f, angle, 0.0f) : glm::vec3(0.0f, angle + glm::radians(90.0f), 0.0f);
 		const bool alignBottom = damagedHelmet;
@@ -532,8 +532,8 @@ void Renderer::initVulkan()
 
 	initAssimpRenderData();
 
-	if (!mModelInstData.miModelAddCallbackFunction("../../models/Knight.glb")) {
-		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "../../models/Knight.glb");
+	if (!mModelInstData.miModelAddCallbackFunction("models\\Knight.glb")) {
+		Logger::log(1, "%s error: unable to load model file '%s', unknown error \n", __FUNCTION__, "models\\Knight.glb");
 	}
 	else {
 		/* select new model and new instance */

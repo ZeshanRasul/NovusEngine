@@ -11,8 +11,8 @@
           "clipIndex": 0,
           "playTime": 0.0,
           "position": [
-            -1.638701860429137e-06,
-            -70.77510070800781,
+            -8.104710104817059e-06,
+            3.1874351501464844,
             -131.29949951171875
           ],
           "rotation": [
@@ -26,31 +26,31 @@
         }
       },
       "collider": {
-        "alignBottomToEntity": false,
+        "alignBottomToEntity": true,
         "centerOffset": [
           0.0,
-          0.0,
+          4.599999904632568,
           0.0
         ],
         "halfExtents": [
-          0.5,
-          0.5,
-          0.5
+          29.649999618530273,
+          40.79999923706055,
+          15.5
         ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
+        "halfHeight": 15.600000381469727,
+        "radius": 25.649999618530273,
+        "shapeType": 2
       },
-      "id": 4194317,
+      "id": 11534349,
       "name": "Assimp: Knight.glb",
       "playerController": {
         "enabled": true,
-        "jumpImpulse": 22.950000762939453,
-        "moveSpeed": 88.0,
-        "sprintSpeed": 87.3499984741211
+        "jumpImpulse": 62.45000076293945,
+        "moveSpeed": 40.20000076293945,
+        "sprintSpeed": 73.94999694824219
       },
       "rigidBody": {
-        "bodyType": 1,
+        "bodyType": 2,
         "friction": 0.5,
         "linearVelocity": [
           0.0,
@@ -63,8 +63,8 @@
       },
       "transform": {
         "position": [
-          -1.638701860429137e-06,
-          -70.77510070800781,
+          -8.104710104817059e-06,
+          3.1874351501464844,
           -131.29949951171875
         ],
         "rotation": [
@@ -97,7 +97,7 @@
         "radius": 46.0,
         "shapeType": 1
       },
-      "id": 4194316,
+      "id": 11534348,
       "name": "Flight Helmet 2",
       "renderable": {
         "modelPath": "models/FlightHelmet.gltf"
@@ -150,7 +150,7 @@
         "radius": 18.0,
         "shapeType": 1
       },
-      "id": 4194315,
+      "id": 11534347,
       "name": "Damaged Helmet 1",
       "renderable": {
         "modelPath": "models/DamagedHelmet.gltf"
@@ -203,7 +203,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 4194314,
+      "id": 11534346,
       "name": "Physics Arena Wall -Z",
       "rigidBody": {
         "bodyType": 0,
@@ -253,7 +253,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 4194313,
+      "id": 11534345,
       "name": "Physics Arena Wall +Z",
       "rigidBody": {
         "bodyType": 0,
@@ -303,7 +303,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 4194312,
+      "id": 11534344,
       "name": "Physics Arena Wall -X",
       "rigidBody": {
         "bodyType": 0,
@@ -353,7 +353,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 4194311,
+      "id": 11534343,
       "name": "Physics Arena Wall +X",
       "rigidBody": {
         "bodyType": 0,
@@ -403,7 +403,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 4194310,
+      "id": 11534342,
       "name": "Physics Arena Floor",
       "rigidBody": {
         "bodyType": 0,
@@ -453,7 +453,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 4194309,
+      "id": 11534341,
       "name": "Sponza",
       "renderable": {
         "modelPath": "models/Sponza.gltf"
@@ -506,7 +506,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 4194308,
+      "id": 11534340,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -566,7 +566,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 4194307,
+      "id": 11534339,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -626,7 +626,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 4194306,
+      "id": 11534338,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -686,7 +686,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 4194305,
+      "id": 11534337,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -746,7 +746,7 @@
         "radius": 0.5,
         "shapeType": 0
       },
-      "id": 4194304,
+      "id": 11534336,
       "name": "Main Camera",
       "rigidBody": {
         "bodyType": 1,
@@ -780,5 +780,5 @@
       }
     }
   ],
-  "selected": 4194317
+  "selected": 11534349
 }

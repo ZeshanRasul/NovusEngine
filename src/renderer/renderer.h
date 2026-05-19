@@ -255,6 +255,10 @@ private:
 	void renderImgui();
 	void buildEditorDockspace();
 	void renderViewportPanel();
+	void renderCameraControlsPanel();
+	void renderPrefabPanel(bool isEditMode, entt::registry& registry);
+	void renderPlayModePanel(bool isEditMode);
+	void renderPostProcessingAndPhysicsPanels(bool isEditMode, entt::registry& registry);
 	void initEnttDemoScene();
 	void renderEnttEditor(glm::mat4 view, glm::mat4 projection);
 	std::string serializeEnttScene() const;
@@ -368,7 +372,7 @@ private:
 	EnttScene mEnttScene{};
 	entt::entity mEnttSelectedEntity = entt::null;
 	std::vector<entt::entity> mEnttMultiSelection{};
-   SceneRuntimeService mSceneRuntimeService{};
+	SceneRuntimeService mSceneRuntimeService{};
 	bool mLogPlayToEditCacheStats = false;
 
 	std::string normalizeModelAssetKey(const std::string& modelFileName) const;
@@ -600,5 +604,5 @@ private:
 	bool renderEnableFxaa = true;
 	bool renderEnableBloom = true;
 
- Gameplay::GameplayRuntime mGameplayRuntime{};
+	Gameplay::GameplayRuntime mGameplayRuntime{};
 };

@@ -1,6 +1,7 @@
 #include "renderer/renderer.h"
 
 #include "vulkan/material.h"
+#include "pass_common.h"
 
 void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t cascadeIndex)
 {
@@ -32,14 +33,9 @@ void Renderer::recordShadowPass(vk::raii::CommandBuffer& commandBuffer, uint32_t
     auto& registry = mEnttScene.getRegistry();
     std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
     std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
-    pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
-    pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
-    pointLightPositions[2] = glm::vec4(10.0f, -50.0f, -75.0f, 1.0f);
-    pointLightPositions[3] = glm::vec4(20.0f, 40.0f, -10.0f, 1.0f);
-    pointLightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
-    pointLightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
-    pointLightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
-    pointLightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
+    
+	collectPointLights(registry, pointLightPositions, pointLightColors);
+
     int lightIndex = 0;
     for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())
     {
@@ -119,14 +115,7 @@ void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
     auto& registry = mEnttScene.getRegistry();
     std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
     std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};
-    pointLightPositions[0] = glm::vec4(0.0f, -45.0f, 0.0f, 1.0f);
-    pointLightPositions[1] = glm::vec4(-70.0f, -80.0f, 5.0f, 1.0f);
-    pointLightPositions[2] = glm::vec4(10.0f, -50.0f, -75.0f, 1.0f);
-    pointLightPositions[3] = glm::vec4(20.0f, 40.0f, -10.0f, 1.0f);
-    pointLightColors[0] = glm::vec4(1000.0f, 1000.0f, 1000.0f, 1.0f);
-    pointLightColors[1] = glm::vec4(800.0f, 200.0f, 200.0f, 1.0f);
-    pointLightColors[2] = glm::vec4(200.0f, 200.0f, 800.0f, 1.0f);
-    pointLightColors[3] = glm::vec4(200.0f, 800.0f, 200.0f, 1.0f);
+	collectPointLights(registry, pointLightPositions, pointLightColors);
 
     int lightIndex = 0;
     for (auto [lightEntity, light, lightTransform] : registry.view<PointLightComponent, TransformComponent>().each())

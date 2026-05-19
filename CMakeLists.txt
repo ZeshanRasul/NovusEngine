@@ -77,7 +77,7 @@ add_executable(NovusEngine
     "src/gameplay/gameplay_layer.h"
     "src/gameplay/gameplay_runtime.h"
     "src/gameplay/gameplay_runtime.cpp"
-    "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp" "include/IconsFontAwesome7.h")
+    "src/physics/physics_system.h" "src/physics/physics_system.cpp" "src/ECS/jolt_physics/physics_world.h" "src/ECS/jolt_physics/physics_world.cpp" "include/IconsFontAwesome7.h" "src/renderer/passes/pass_common.h" "src/renderer/passes/pass_common.cpp")
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -220,6 +220,7 @@ target_compile_definitions(NovusEngine PRIVATE
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1
     VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS=1
     GLM_ENABLE_EXPERIMENTAL
+    MAX_POINT_LIGHTS=16
 )
 
 

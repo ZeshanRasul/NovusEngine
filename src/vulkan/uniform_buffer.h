@@ -13,7 +13,6 @@ import vulkan_hpp;
 #include "buffer.h"
 
 static constexpr uint32_t SHADOW_CASCADE_COUNT = 5;
-static constexpr uint32_t MAX_POINT_LIGHTS = 16;
 
 struct ShadowSettings
 {

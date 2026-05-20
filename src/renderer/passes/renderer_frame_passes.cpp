@@ -64,8 +64,10 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
     tsEnd(GpuPassSlot::Shadow);
 
     // --- Frustum cull compute (runs before the render pass) ---
+    tsBegin(GpuPassSlot::Cull);
     if (mIndirectRenderingEnabled && mGPUScene.valid)
         recordCullPass(commandBuffer);
+    tsEnd(GpuPassSlot::Cull);
 
     // --- Scene pass ---
     tsBegin(GpuPassSlot::Scene);

@@ -694,7 +694,7 @@ private:
 	// GPU-driven indirect rendering members
 	// -------------------------------------------------------------------------
 	GPUScene mGPUScene{};
-	bool     mIndirectRenderingEnabled = false;
+	bool     mIndirectRenderingEnabled = false; // set to true by buildGPUScene() on success
 
 	// Indirect PBR pipeline
 	vk::raii::DescriptorSetLayout        mIndirectGlobalSetLayout = nullptr;

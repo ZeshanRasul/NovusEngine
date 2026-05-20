@@ -46,15 +46,20 @@ void Renderer::readTimestamps()
     auto toMs = [&](uint64_t start, uint64_t end) -> float {
         return static_cast<float>((end - start) * mTimestampPeriod) * 1e-6f;
     };
+    auto slotMs = [&](GpuPassSlot s) -> float {
+        const uint32_t i = static_cast<uint32_t>(s) * 2;
+        return toMs(data[i], data[i + 1]);
+    };
 
-    mGpuTimings.shadowMs = toMs(data[0], data[1]);
-    mGpuTimings.sceneMs  = toMs(data[2], data[3]);
-    mGpuTimings.bloomMs  = toMs(data[4], data[5]);
-    mGpuTimings.fxaaMs   = toMs(data[6], data[7]);
-    mGpuTimings.imguiMs  = toMs(data[8], data[9]);
-    mGpuTimings.totalMs  = mGpuTimings.shadowMs + mGpuTimings.sceneMs
-                         + mGpuTimings.bloomMs  + mGpuTimings.fxaaMs
-                         + mGpuTimings.imguiMs;
+    mGpuTimings.shadowMs = slotMs(GpuPassSlot::Shadow);
+    mGpuTimings.cullMs   = slotMs(GpuPassSlot::Cull);
+    mGpuTimings.sceneMs  = slotMs(GpuPassSlot::Scene);
+    mGpuTimings.bloomMs  = slotMs(GpuPassSlot::Bloom);
+    mGpuTimings.fxaaMs   = slotMs(GpuPassSlot::Fxaa);
+    mGpuTimings.imguiMs  = slotMs(GpuPassSlot::ImGui);
+    mGpuTimings.totalMs  = mGpuTimings.shadowMs + mGpuTimings.cullMs
+                         + mGpuTimings.sceneMs  + mGpuTimings.bloomMs
+                         + mGpuTimings.fxaaMs   + mGpuTimings.imguiMs;
 }
 
 void Renderer::renderGpuTimingsPanel(bool isEditMode)
@@ -89,6 +94,7 @@ void Renderer::renderGpuTimingsPanel(bool isEditMode)
     };
 
     passRow("Shadow",  mGpuTimings.shadowMs, ImVec4(0.90f, 0.60f, 0.20f, 1.0f));
+    passRow("Cull",    mGpuTimings.cullMs,   ImVec4(0.95f, 0.85f, 0.20f, 1.0f));
     passRow("Scene",   mGpuTimings.sceneMs,  ImVec4(0.30f, 0.70f, 0.90f, 1.0f));
     passRow("Bloom",   mGpuTimings.bloomMs,  ImVec4(0.90f, 0.40f, 0.70f, 1.0f));
     passRow("FXAA",    mGpuTimings.fxaaMs,   ImVec4(0.50f, 0.90f, 0.40f, 1.0f));
@@ -97,6 +103,8 @@ void Renderer::renderGpuTimingsPanel(bool isEditMode)
     ImGui::Separator();
 
     ImGui::Text("GPU Total   %.3f ms", mGpuTimings.totalMs);
+    if (mIndirectRenderingEnabled)
+        ImGui::Text("Indirect draws (max): %u", mGPUScene.drawCount());
 
     const ImGuiIO& io = ImGui::GetIO();
     const float cpuMs = io.Framerate > 0.0f ? 1000.0f / io.Framerate : 0.0f;

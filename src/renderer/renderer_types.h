@@ -160,6 +160,7 @@ struct SkinnedVertex
 // ---------------------------------------------------------------------------
 enum class GpuPassSlot : uint32_t {
     Shadow = 0,
+    Cull,
     Scene,
     Bloom,
     Fxaa,
@@ -170,6 +171,7 @@ constexpr uint32_t GPU_PASS_SLOT_COUNT = static_cast<uint32_t>(GpuPassSlot::Coun
 
 struct GpuTimings {
     float shadowMs = 0.0f;
+    float cullMs   = 0.0f;
     float sceneMs  = 0.0f;
     float bloomMs  = 0.0f;
     float fxaaMs   = 0.0f;

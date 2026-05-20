@@ -502,6 +502,11 @@ void Renderer::initVulkan()
 	CommandPool::init(device, queueIndex, commandPool);
 	createTimestampQueryPool();
 	createDefaultIBLResources();
+	// Auto-load IBL from the textures directory shipped with the project.
+	// Called before createDescriptorSets so the real views are used on the first allocation.
+	// Silently falls back to the grey default if the files are missing.
+	if (std::string err = loadIBL("textures"); !err.empty())
+		std::cerr << "[IBL] Auto-load skipped: " << err << "\n";
 	DepthTarget::createDepthResources(device, physicalDevice, swapChainExtent, depthImage, depthImageMemory, depthImageView);
 	for (uint32_t i = 0; i < SHADOW_CASCADE_COUNT; ++i)
 		ShadowPass::createResources(device, physicalDevice, shadowImages[i], shadowImageMemories[i], shadowImageViews[i], shadowSampler);
@@ -560,6 +565,10 @@ void Renderer::initVulkan()
 		mModelInstData.miSelectedModel = mModelInstData.miModelList.size() - 1;
 		mModelInstData.miSelectedInstance = mModelInstData.miAssimpInstances.size() - 1;
 	}
+
+	// Build the GPU-driven indirect scene from whatever renderables setupGameObjects() added.
+	// This also fires after each scene load via rebuildRenderableRuntimeResources().
+	buildGPUScene();
 }
 
 void Renderer::initEnttDemoScene()

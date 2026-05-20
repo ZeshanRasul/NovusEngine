@@ -248,6 +248,19 @@ add_custom_command(TARGET NovusEngine POST_BUILD
     VERBATIM
 )
 
+# Copy default IBL textures (irradiance, prefiltered, BRDF LUT) to the output directory.
+# These are loaded automatically at startup via loadIBL("textures").
+add_custom_command(TARGET NovusEngine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:NovusEngine>/textures
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/textures/irradiance.ktx2
+        ${CMAKE_CURRENT_SOURCE_DIR}/textures/prefiltered.ktx2
+        ${CMAKE_CURRENT_SOURCE_DIR}/textures/brdf_lut.ktx2
+        $<TARGET_FILE_DIR:NovusEngine>/textures
+    COMMENT "Copying default IBL textures to output directory"
+    VERBATIM
+)
+
 target_include_directories(NovusEngine PRIVATE src include build/vcpkg_installed/x64-windows/include build/vcpkg_installed/x64-windows/include/nlohmann build/vcpkg-release/vcpkg_installed/x64-windows/include)
 include_directories(${GLFW3_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${ASSIMP_INCLUDE_DIR} ${VMA_SOURCE_DIR}/vma)
 

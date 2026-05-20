@@ -29,16 +29,30 @@ Novus Engine is a game engine built from the ground up using the Vulkan graphics
 ## Demo Examples
 
 ![Demo Screenshot 1](./docs/images/scene.png)
+
 **Figure 1:** A sample scene showcasing the engine's capabilities, including PBR materials, dynamic lighting, and post-processing effects.
 
+
 ![Demo Screenshot 2](./docs/images/gpu_timings.png)
+
 **Figure 2:** GPU timings overlay displaying per-pass performance metrics.
 
+
 ![Demo Screenshot 3](./docs/images/csm_debug.png)
+
 **Figure 3:** Cascaded shadow map debug visualization showing cascade splits and frustum intersections.
 
+
 ![Demo Screenshot 4](./docs/images/physics_debug_draw.png)
+
 **Figure 4:** Physics debug draw mode visualizing collider shapes and interactions.
 
+
 ![Demo Screenshot 5](./docs/images/editor.png)
+
 **Figure 5:** ImGui-based scene editor showcasing entity hierarchy, component inspector, and transform gizmos.
+
+
+https://github.com/user-attachments/assets/96204b0b-dd33-4b59-9f4f-88439cc7b19b
+
+**Figure 6:** Skeletal animation GPU skinning

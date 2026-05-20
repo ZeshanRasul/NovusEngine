@@ -1,6 +1,6 @@
 # Novus Engine
 
-Novus Engine is a game engine built from the ground up using the Vulkan graphics API. It is designed to be a high-performance, cross-platform engine for creating games and interactive applications.
+Novus Engine is a game engine built from the ground up using the Vulkan graphics API. It is designed to be a high-performance, cross-platform engine for creating games and interactive applications. The YouTube demo can be found here: https://youtu.be/Qdvzi5hv7ps
 
 **Stack:** C++20 · Vulkan 1.4 (RAII hpp) · Slang shaders → SPIR-V · entt ECS · Jolt Physics · Assimp · ImGui · GLM
 

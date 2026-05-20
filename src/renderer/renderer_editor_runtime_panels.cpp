@@ -111,6 +111,7 @@ void Renderer::renderPostProcessingAndPhysicsPanels(bool isEditMode, entt::regis
 
     if (uiShowPhysicsWindow)
     {
+        ImGui::Checkbox("Show Collider Debug", &physicsDrawColliderDebug);
         ImGui::Checkbox("Pause Physics", &physicsPaused);
         physicsSystem.setPaused(physicsPaused);
 

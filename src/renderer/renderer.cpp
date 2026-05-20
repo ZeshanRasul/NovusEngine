@@ -1422,6 +1422,9 @@ void Renderer::buildEditorDockspace()
 		ImGui::DockBuilderDockWindow("Animation Controls", dockBottom);
 		ImGui::DockBuilderDockWindow("Post Processing", dockBottom);
 		ImGui::DockBuilderDockWindow("Physics Demo", dockBottom);
+		ImGui::DockBuilderDockWindow("Play Mode", dockBottom);
+		ImGui::DockBuilderDockWindow("IBL", dockRightSecondary);
+		ImGui::DockBuilderDockWindow("GPU Timings", dockRightSecondary);
 
 		ImGui::DockBuilderFinish(dockspaceId);
 	}

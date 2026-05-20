@@ -54,6 +54,7 @@ import vulkan_hpp;
 #include "../gameplay/gameplay_layer.h"
 #include "../gameplay/gameplay_runtime.h"
 #include "../core/scene_runtime_service.h"
+#include "gpu_scene.h"
 
 #include <Jolt/Jolt.h>
 #include <Jolt/RegisterTypes.h>
@@ -653,6 +654,22 @@ private:
 	void saveRenderPreset();
 	void loadRenderPreset();
 
+	// -------------------------------------------------------------------------
+	// Indirect rendering
+	// -------------------------------------------------------------------------
+	void buildGPUScene();
+	void buildIndirectGlobalDescriptorSets();
+	void buildCullDescriptorSets();
+	void buildIndirectPBRPipeline();
+	void buildCullPipeline();
+	void updateIndirectGlobalDescriptors(); // call after IBL reload
+	void updateIndirectFrameData();
+	void recordCullPass(vk::raii::CommandBuffer& commandBuffer);
+	void recordIndirectScenePass(vk::raii::CommandBuffer& commandBuffer);
+	FrameData buildIndirectFrameData(
+		const std::array<glm::vec4, MAX_POINT_LIGHTS>& lightPositions,
+		const std::array<glm::vec4, MAX_POINT_LIGHTS>& lightColors) const;
+
 	// GPU timestamp queries
 	void createTimestampQueryPool();
 	void readTimestamps();
@@ -672,4 +689,24 @@ private:
 	GpuTimings          mGpuTimings{};
 
 	Gameplay::GameplayRuntime mGameplayRuntime{};
+
+	// -------------------------------------------------------------------------
+	// GPU-driven indirect rendering members
+	// -------------------------------------------------------------------------
+	GPUScene mGPUScene{};
+	bool     mIndirectRenderingEnabled = false;
+
+	// Indirect PBR pipeline
+	vk::raii::DescriptorSetLayout        mIndirectGlobalSetLayout = nullptr;
+	vk::raii::DescriptorPool             mIndirectGlobalPool      = nullptr;
+	std::vector<vk::raii::DescriptorSet> mIndirectGlobalSets;
+	vk::raii::PipelineLayout             mIndirectPBRPipelineLayout = nullptr;
+	vk::raii::Pipeline                   mIndirectPBRPipeline       = nullptr;
+
+	// Frustum cull compute pipeline
+	vk::raii::DescriptorSetLayout mCullSetLayout    = nullptr;
+	vk::raii::DescriptorPool      mCullPool         = nullptr;
+	vk::raii::DescriptorSet       mCullSet          = nullptr;
+	vk::raii::PipelineLayout      mCullPipelineLayout = nullptr;
+	vk::raii::Pipeline            mCullPipeline       = nullptr;
 };

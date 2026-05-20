@@ -367,6 +367,12 @@ void Renderer::rebuildRenderableRuntimeResources()
 	};
 	DescriptorSet::createDescriptorSets(device, registry, descriptorPool, descriptorSetLayout, defaultTextureView, defaultNormalView, textureSampler, shadowViews, shadowSampler,
 		mIBLIrradianceView, mIBLPrefilteredView, mIBLBrdfLutView, mIBLSampler, MAX_FRAMES_IN_FLIGHT);
+
+	// Rebuild GPU-driven indirect scene — always attempt; buildGPUScene sets mIndirectRenderingEnabled
+	device.waitIdle();
+	mGPUScene.destroy();
+	mIndirectGlobalSets.clear();
+	buildGPUScene();
 }
 
 // ---------------------------------------------------------------------------
@@ -449,6 +455,15 @@ void Renderer::initVulkan()
 	}
 
 	createColliderDebugPipeline();
+
+	// Build indirect rendering pipelines (requires mIndirectGlobalSetLayout + mGPUScene.bindlessLayout,
+	// which are created lazily in buildGPUScene / buildIndirectGlobalDescriptorSets).
+	// The pipelines themselves are built after the first scene load via rebuildRenderableRuntimeResources.
+	// Enable indirect rendering by default if shaders are present.
+	try {
+		// Defer pipeline creation until buildGPUScene provides the descriptor layouts.
+		// mIndirectRenderingEnabled will be set to true after buildGPUScene succeeds.
+	} catch (...) {}
 
 	std::array<glm::vec4, 4> pointLightPositions = {
 	   glm::vec4(0.0f, -45.0f, 0.0f, 1.0f),
@@ -2091,11 +2106,17 @@ bool Renderer::isDeviceSuitable(vk::raii::PhysicalDevice const& pd)
 
 	auto features = pd.template getFeatures2<vk::PhysicalDeviceFeatures2,
 		vk::PhysicalDeviceVulkan11Features,
+		vk::PhysicalDeviceVulkan12Features,
 		vk::PhysicalDeviceVulkan13Features,
 		vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
 		vk::PhysicalDeviceDynamicRenderingLocalReadFeaturesKHR>();
 	bool supportsRequiredFeatures =
 		features.template get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy &&
+		features.template get<vk::PhysicalDeviceVulkan12Features>().drawIndirectCount &&
+		features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorIndexing &&
+		features.template get<vk::PhysicalDeviceVulkan12Features>().runtimeDescriptorArray &&
+		features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingPartiallyBound &&
+		features.template get<vk::PhysicalDeviceVulkan12Features>().shaderSampledImageArrayNonUniformIndexing &&
 		features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
 		features.template get<vk::PhysicalDeviceVulkan13Features>().synchronization2 &&
 		features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
@@ -2133,12 +2154,22 @@ void Renderer::createLogicalDevice()
 
 	vk::StructureChain<vk::PhysicalDeviceFeatures2,
 		vk::PhysicalDeviceVulkan11Features,
+		vk::PhysicalDeviceVulkan12Features,
 		vk::PhysicalDeviceVulkan13Features,
 		vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
 		vk::PhysicalDeviceDynamicRenderingLocalReadFeaturesKHR>
 		featureChain = {
 			{.features = {.samplerAnisotropy = true } },
 			{.shaderDrawParameters = true },
+			{
+				.drawIndirectCount                        = true,
+				.descriptorIndexing                       = true,
+				.shaderSampledImageArrayNonUniformIndexing = true,
+				.descriptorBindingPartiallyBound          = true,
+				.runtimeDescriptorArray                   = true,
+				.imagelessFramebuffer                     = false,
+				.uniformBufferStandardLayout              = true
+			},
 			{.synchronization2 = true, .dynamicRendering = true },
 			{.extendedDynamicState = true },
 			{.dynamicRenderingLocalRead = true }
@@ -3025,6 +3056,10 @@ void Renderer::drawFrame()
 	commandBuffers[frameIndex].reset();
 
 	renderImgui();
+
+	// Update GPU-driven scene data (transforms + FrameData UBO) before recording
+	if (mIndirectRenderingEnabled)
+		updateIndirectFrameData();
 
 	recordCommandBuffer(imageIndex);
 

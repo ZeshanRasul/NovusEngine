@@ -60,6 +60,8 @@ add_executable(NovusEngine
     src/renderer/passes/renderer_world_passes.cpp
     src/renderer/passes/renderer_post_process_passes.cpp
     src/renderer/passes/renderer_frame_passes.cpp
+    src/renderer/gpu_scene.cpp
+    src/renderer/renderer_indirect.cpp
     "src/ECS/entity.h" "src/ECS/component.h" "src/ECS/components/transform_component.h"  "src/ECS/components/camera_component.h" "src/ECS/components/animation_component.h" "src/ECS/event/event.h" "src/ECS/components/physics_component.h" "src/ECS/components/player_controller_component.h" "src/ECS/components/camera_component.cpp" "src/renderer/renderer.h" "src/renderer/passes/shadow_pass.h" "src/renderer/passes/shadow_pass.cpp"
     ${IMGUI_SOURCES}
     ${IMGUI_VULKAN_SOURCES} "src/imgui_vulkan_util.h" "src/input/input_system.h" "src/input/input_system.cpp" "src/vulkan/command_pool.h" 
@@ -118,6 +120,7 @@ function(add_slang_shader_target TARGET)
         "bloom_extract.slang|bloom_extract.spv|vertMain|fragMain"
         "bloom_blur.slang|bloom_blur.spv|vertMain|fragMain"
         "debug_lines.slang|debug_lines.spv|vertMain|fragMain"
+        "pbr_indirect.slang|pbr_indirect.spv|vertMain|fragMain"
     )
 
     foreach(SHADER_ENTRY IN LISTS SLANG_SHADERS)
@@ -180,6 +183,7 @@ add_custom_command(TARGET NovusEngine POST_BUILD
         ${SHADERS_DIR}/bloom_extract.spv
         ${SHADERS_DIR}/bloom_blur.spv
         ${SHADERS_DIR}/debug_lines.spv
+        ${SHADERS_DIR}/pbr_indirect.spv
         $<TARGET_FILE_DIR:NovusEngine>/shaders
     COMMENT "Copying Slang shader binaries to output directory"
     VERBATIM

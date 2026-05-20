@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(dir D:\\\\dev\\\\Graphics\\\\NovusEngine /b)",
-      "Bash(grep -n \"ktxTexture_GetVkFormat\\\\|vkGetFormat\\\\|ktxVulkan\\\\|GL_RGBA16\\\\|glformat_to_vk\\\\|ktxTexture2_c\\\\|classId\\\\|ktxTexture1_c\" \"/c/Program Files/KTX-Software/include/ktx.h\" | head -20)"
+      "Bash(grep -n \"ktxTexture_GetVkFormat\\\\|vkGetFormat\\\\|ktxVulkan\\\\|GL_RGBA16\\\\|glformat_to_vk\\\\|ktxTexture2_c\\\\|classId\\\\|ktxTexture1_c\" \"/c/Program Files/KTX-Software/include/ktx.h\" | head -20)",
+      "Bash(cmake --build build --config Debug)",
+      "Read(//mnt/d/dev/Graphics/**)",
+      "Bash(cmd.exe /c \"cmake --build build --config Debug 2>&1\")"
     ]
   }
 }

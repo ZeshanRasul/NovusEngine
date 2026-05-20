@@ -1,0 +1,69 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : enable
+
+// One thread per potential draw command.
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// ---------------------------------------------------------------------------
+// Data structures — must match GPUScene::ObjectData and vk::DrawIndexedIndirectCommand
+// ---------------------------------------------------------------------------
+struct ObjectData {
+    mat4  modelMatrix;      // 64 bytes
+    vec4  boundingSphere;   // xyz = world-space centre, w = radius
+    uint  materialIndex;
+    uint  _pad[3];
+};
+
+struct DrawCmd {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int  vertexOffset;
+    uint firstInstance;  // carries the object index
+};
+
+// ---------------------------------------------------------------------------
+// Descriptor bindings (set 0)
+// ---------------------------------------------------------------------------
+layout(set = 0, binding = 0) readonly  buffer DrawCmdIn  { DrawCmd inCmds[];  };
+layout(set = 0, binding = 1) writeonly buffer DrawCmdOut { DrawCmd outCmds[]; };
+layout(set = 0, binding = 2) buffer    DrawCount         { uint count;        };
+layout(set = 0, binding = 3) readonly  buffer Objects    { ObjectData objects[]; };
+
+// ---------------------------------------------------------------------------
+// Push constants — 6 frustum planes + draw count (96 + 4 = 100 bytes)
+// ---------------------------------------------------------------------------
+layout(push_constant) uniform CullParams {
+    vec4  frustumPlanes[6];  // Gribb–Hartmann, inward-pointing normals
+    uint  drawCount;
+} pc;
+
+// ---------------------------------------------------------------------------
+// Sphere-frustum test (dot product with plane equation ax+by+cz+d)
+// Returns false if the sphere is fully outside any plane.
+// ---------------------------------------------------------------------------
+bool sphereInFrustum(vec3 centre, float radius) {
+    for (int i = 0; i < 6; ++i) {
+        if (dot(pc.frustumPlanes[i].xyz, centre) + pc.frustumPlanes[i].w < -radius)
+            return false;
+    }
+    return true;
+}
+
+void main() {
+    uint drawIdx = gl_GlobalInvocationID.x;
+    if (drawIdx >= pc.drawCount)
+        return;
+
+    DrawCmd cmd    = inCmds[drawIdx];
+    uint    objIdx = cmd.firstInstance;
+
+    vec3  worldCentre = objects[objIdx].boundingSphere.xyz;
+    float radius      = objects[objIdx].boundingSphere.w;
+
+    if (sphereInFrustum(worldCentre, radius)) {
+        // Atomically claim a slot in the output buffer
+        uint slot = atomicAdd(count, 1u);
+        outCmds[slot] = cmd;
+    }
+}

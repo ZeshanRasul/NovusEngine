@@ -113,6 +113,12 @@ public:
     std::array<vk::raii::DeviceMemory, GPU_FRAMES_IN_FLIGHT> frameUBOMemories  = { nullptr, nullptr };
     std::array<void*,                  GPU_FRAMES_IN_FLIGHT> frameUBOMapped     = {};
 
+    // Host-visible readback for the post-cull draw count (one per frame-in-flight)
+    std::array<vk::raii::Buffer,       GPU_FRAMES_IN_FLIGHT> drawCountReadbackBuffers  = { nullptr, nullptr };
+    std::array<vk::raii::DeviceMemory, GPU_FRAMES_IN_FLIGHT> drawCountReadbackMemories = { nullptr, nullptr };
+    std::array<void*,                  GPU_FRAMES_IN_FLIGHT> drawCountReadbackMapped    = {};
+    uint32_t lastVisibleDrawCount = 0;
+
     // Bindless PBR texture descriptor set (set 1 in the indirect pipeline)
     vk::raii::DescriptorPool      bindlessPool   = nullptr;
     vk::raii::DescriptorSetLayout bindlessLayout = nullptr;

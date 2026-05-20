@@ -565,57 +565,93 @@ void Renderer::recordCullPass(vk::raii::CommandBuffer& cmd)
 {
     if (!mGPUScene.valid) return;
 
-    // --- 1. Reset draw count to 0 ---
-    cmd.fillBuffer(*mGPUScene.drawCountBuffer, 0, sizeof(uint32_t), 0u);
+    const uint32_t totalDraws = mGPUScene.drawCount();
+    if (totalDraws == 0) return;
+    const vk::DeviceSize cmdBufSize = vk::DeviceSize(totalDraws) * sizeof(vk::DrawIndexedIndirectCommand);
 
-    // Barrier: fillBuffer write → shader read/write
-    vk::BufferMemoryBarrier2 fillBarrier{
-        .srcStageMask  = vk::PipelineStageFlagBits2::eTransfer,
-        .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-        .dstStageMask  = vk::PipelineStageFlagBits2::eComputeShader,
-        .dstAccessMask = vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite,
-        .buffer = *mGPUScene.drawCountBuffer, .offset = 0, .size = sizeof(uint32_t)
-    };
-    cmd.pipelineBarrier2(vk::DependencyInfo{ .bufferMemoryBarrierCount = 1,
-                                              .pBufferMemoryBarriers    = &fillBarrier });
+    if (!mCullingEnabled)
+    {
+        // Pass all draws through: copy source commands → cull output, set full count.
+        cmd.copyBuffer(*mGPUScene.drawCommandBuffer, *mGPUScene.cullOutputBuffer,
+            vk::BufferCopy{ .size = cmdBufSize });
+        cmd.fillBuffer(*mGPUScene.drawCountBuffer, 0, sizeof(uint32_t), totalDraws);
 
-    // --- 2. Dispatch cull compute ---
-    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *mCullPipeline);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *mCullPipelineLayout, 0, *mCullSet, nullptr);
+        // Barrier: transfer writes → indirect draw reads + readback copy
+        std::array<vk::BufferMemoryBarrier2, 2> barriers = {{
+            {   .srcStageMask  = vk::PipelineStageFlagBits2::eTransfer,
+                .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+                .dstStageMask  = vk::PipelineStageFlagBits2::eDrawIndirect | vk::PipelineStageFlagBits2::eTransfer,
+                .dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead | vk::AccessFlagBits2::eTransferRead,
+                .buffer = *mGPUScene.cullOutputBuffer, .offset = 0, .size = vk::WholeSize },
+            {   .srcStageMask  = vk::PipelineStageFlagBits2::eTransfer,
+                .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+                .dstStageMask  = vk::PipelineStageFlagBits2::eDrawIndirect | vk::PipelineStageFlagBits2::eTransfer,
+                .dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead | vk::AccessFlagBits2::eTransferRead,
+                .buffer = *mGPUScene.drawCountBuffer, .offset = 0, .size = sizeof(uint32_t) },
+        }};
+        cmd.pipelineBarrier2(vk::DependencyInfo{
+            .bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
+            .pBufferMemoryBarriers    = barriers.data()
+        });
+    }
+    else
+    {
+        // --- 1. Reset draw count to 0 ---
+        cmd.fillBuffer(*mGPUScene.drawCountBuffer, 0, sizeof(uint32_t), 0u);
 
-    const float aspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
-    glm::mat4 vp = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f) * camera.getViewMatrix();
-    auto planes  = extractFrustumPlanes(vp);
+        // Barrier: fillBuffer write → shader read/write
+        vk::BufferMemoryBarrier2 fillBarrier{
+            .srcStageMask  = vk::PipelineStageFlagBits2::eTransfer,
+            .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .dstStageMask  = vk::PipelineStageFlagBits2::eComputeShader,
+            .dstAccessMask = vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eShaderWrite,
+            .buffer = *mGPUScene.drawCountBuffer, .offset = 0, .size = sizeof(uint32_t)
+        };
+        cmd.pipelineBarrier2(vk::DependencyInfo{ .bufferMemoryBarrierCount = 1,
+                                                  .pBufferMemoryBarriers    = &fillBarrier });
 
-    struct CullPushConstants {
-        glm::vec4 frustumPlanes[6];
-        uint32_t  drawCount;
-    };
-    CullPushConstants pc;
-    for (int i = 0; i < 6; ++i) pc.frustumPlanes[i] = planes[i];
-    pc.drawCount = mGPUScene.drawCount();
-    cmd.pushConstants<CullPushConstants>(*mCullPipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, pc);
+        // --- 2. Dispatch cull compute ---
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *mCullPipeline);
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *mCullPipelineLayout, 0, *mCullSet, nullptr);
 
-    const uint32_t groups = (mGPUScene.drawCount() + 63) / 64;
-    cmd.dispatch(groups, 1, 1);
+        const float aspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
+        glm::mat4 vp = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f) * camera.getViewMatrix();
+        auto planes  = extractFrustumPlanes(vp);
 
-    // --- 3. Barrier: compute writes → indirect draw reads ---
-    std::array<vk::BufferMemoryBarrier2, 2> barriers = {{
-        {   .srcStageMask  = vk::PipelineStageFlagBits2::eComputeShader,
-            .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
-            .dstStageMask  = vk::PipelineStageFlagBits2::eDrawIndirect,
-            .dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead,
-            .buffer = *mGPUScene.cullOutputBuffer, .offset = 0, .size = vk::WholeSize },
-        {   .srcStageMask  = vk::PipelineStageFlagBits2::eComputeShader,
-            .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
-            .dstStageMask  = vk::PipelineStageFlagBits2::eDrawIndirect,
-            .dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead,
-            .buffer = *mGPUScene.drawCountBuffer, .offset = 0, .size = sizeof(uint32_t) },
-    }};
-    cmd.pipelineBarrier2(vk::DependencyInfo{
-        .bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
-        .pBufferMemoryBarriers    = barriers.data()
-    });
+        struct CullPushConstants {
+            glm::vec4 frustumPlanes[6];
+            uint32_t  drawCount;
+        };
+        CullPushConstants pc;
+        for (int i = 0; i < 6; ++i) pc.frustumPlanes[i] = planes[i];
+        pc.drawCount = totalDraws;
+        cmd.pushConstants<CullPushConstants>(*mCullPipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, pc);
+
+        const uint32_t groups = (totalDraws + 63) / 64;
+        cmd.dispatch(groups, 1, 1);
+
+        // --- 3. Barrier: compute writes → indirect draw reads + readback copy ---
+        std::array<vk::BufferMemoryBarrier2, 2> barriers = {{
+            {   .srcStageMask  = vk::PipelineStageFlagBits2::eComputeShader,
+                .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
+                .dstStageMask  = vk::PipelineStageFlagBits2::eDrawIndirect,
+                .dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead,
+                .buffer = *mGPUScene.cullOutputBuffer, .offset = 0, .size = vk::WholeSize },
+            {   .srcStageMask  = vk::PipelineStageFlagBits2::eComputeShader,
+                .srcAccessMask = vk::AccessFlagBits2::eShaderWrite,
+                .dstStageMask  = vk::PipelineStageFlagBits2::eDrawIndirect | vk::PipelineStageFlagBits2::eTransfer,
+                .dstAccessMask = vk::AccessFlagBits2::eIndirectCommandRead | vk::AccessFlagBits2::eTransferRead,
+                .buffer = *mGPUScene.drawCountBuffer, .offset = 0, .size = sizeof(uint32_t) },
+        }};
+        cmd.pipelineBarrier2(vk::DependencyInfo{
+            .bufferMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
+            .pBufferMemoryBarriers    = barriers.data()
+        });
+    }
+
+    // --- Readback: copy draw count to host-visible buffer for this frame slot ---
+    cmd.copyBuffer(*mGPUScene.drawCountBuffer, *mGPUScene.drawCountReadbackBuffers[frameIndex],
+        vk::BufferCopy{ .size = sizeof(uint32_t) });
 }
 
 // ---------------------------------------------------------------------------
@@ -662,6 +698,11 @@ void Renderer::recordIndirectScenePass(vk::raii::CommandBuffer& cmd)
 void Renderer::updateIndirectFrameData()
 {
     if (!mGPUScene.valid) return;
+
+    // Safe to read: the fence for this frameIndex was already waited in drawFrame().
+    if (mGPUScene.drawCountReadbackMapped[frameIndex])
+        mGPUScene.lastVisibleDrawCount =
+            *static_cast<const uint32_t*>(mGPUScene.drawCountReadbackMapped[frameIndex]);
 
     auto& registry = mEnttScene.getRegistry();
     std::array<glm::vec4, MAX_POINT_LIGHTS> lightPos{}, lightCol{};

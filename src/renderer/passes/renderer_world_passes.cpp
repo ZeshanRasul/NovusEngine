@@ -112,6 +112,8 @@ void Renderer::recordColliderDebugPass(vk::raii::CommandBuffer& commandBuffer)
 
 void Renderer::recordScenePass(vk::raii::CommandBuffer& commandBuffer)
 {
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pbrPipeline);
+
     auto& registry = mEnttScene.getRegistry();
     std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightPositions{};
     std::array<glm::vec4, MAX_POINT_LIGHTS> pointLightColors{};

@@ -674,6 +674,7 @@ private:
 	void createTimestampQueryPool();
 	void readTimestamps();
 	void renderGpuTimingsPanel(bool isEditMode);
+	void renderStatsOverlay(bool isEditMode);
 
 	// IBL
 	void createDefaultIBLResources();
@@ -687,6 +688,7 @@ private:
 	float               mTimestampPeriod    = 1.0f;
 	bool                mTimestampsSupported = false;
 	GpuTimings          mGpuTimings{};
+	bool                mF3WasPressed = false;  // debounce for F3 cascade debug toggle
 
 	Gameplay::GameplayRuntime mGameplayRuntime{};
 
@@ -695,6 +697,7 @@ private:
 	// -------------------------------------------------------------------------
 	GPUScene mGPUScene{};
 	bool     mIndirectRenderingEnabled = false; // set to true by buildGPUScene() on success
+	bool     mCullingEnabled           = true;  // toggle via GPU Timings panel; false = all draws pass through
 
 	// Indirect PBR pipeline
 	vk::raii::DescriptorSetLayout        mIndirectGlobalSetLayout = nullptr;

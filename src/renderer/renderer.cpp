@@ -1202,6 +1202,14 @@ void Renderer::mainLoop()
 			updateAssimpAnimations(0.0f);
 		}
 
+		// F3: toggle cascade shadow debug view
+		{
+			const bool f3Down = glfwGetKey(window, GLFW_KEY_F3) == GLFW_PRESS;
+			if (f3Down && !mF3WasPressed)
+				shadowSettings.cascadeDebugView = (shadowSettings.cascadeDebugView == 0.0f) ? 1.0f : 0.0f;
+			mF3WasPressed = f3Down;
+		}
+
 		drawFrame();
 		currentFrameIndex++;
 	}
@@ -1499,6 +1507,7 @@ void Renderer::renderImgui()
 	renderPostProcessingAndPhysicsPanels(isEditMode, registry);
 	renderGpuTimingsPanel(isEditMode);
 	renderIBLPanel(isEditMode);
+	renderStatsOverlay(isEditMode);
 
 	// End the frame
 	ImGui::EndFrame();

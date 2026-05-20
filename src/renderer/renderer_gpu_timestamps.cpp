@@ -104,11 +104,55 @@ void Renderer::renderGpuTimingsPanel(bool isEditMode)
 
     ImGui::Text("GPU Total   %.3f ms", mGpuTimings.totalMs);
     if (mIndirectRenderingEnabled)
-        ImGui::Text("Indirect draws (max): %u", mGPUScene.drawCount());
+    {
+        ImGui::Text("Visible draws: %u / %u", mGPUScene.lastVisibleDrawCount, mGPUScene.drawCount());
+        ImGui::Checkbox("Frustum Culling", &mCullingEnabled);
+    }
 
     const ImGuiIO& io = ImGui::GetIO();
     const float cpuMs = io.Framerate > 0.0f ? 1000.0f / io.Framerate : 0.0f;
     ImGui::Text("CPU Frame   %.3f ms  (%.0f FPS)", cpuMs, io.Framerate);
 
+    ImGui::End();
+}
+
+void Renderer::renderStatsOverlay(bool isEditMode)
+{
+    if (!((isEditMode || playShowDebugUI)))
+        return;
+
+    const ImGuiIO& io = ImGui::GetIO();
+
+    // Pin to the top-right corner of the display with a small margin.
+    constexpr float PAD = 10.0f;
+    ImVec2 workPos  = ImGui::GetMainViewport()->WorkPos;
+    ImVec2 workSize = ImGui::GetMainViewport()->WorkSize;
+    ImVec2 windowPos{ workPos.x + workSize.x - PAD, workPos.y + PAD };
+    ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.50f);
+
+    constexpr ImGuiWindowFlags overlayFlags =
+        ImGuiWindowFlags_NoDecoration      |
+        ImGuiWindowFlags_AlwaysAutoResize  |
+        ImGuiWindowFlags_NoSavedSettings   |
+        ImGuiWindowFlags_NoFocusOnAppearing|
+        ImGuiWindowFlags_NoNav             |
+        ImGuiWindowFlags_NoMove            |
+        ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+    if (ImGui::Begin("##StatsOverlay", nullptr, overlayFlags))
+    {
+        const float fps   = io.Framerate;
+        const float cpuMs = fps > 0.0f ? 1000.0f / fps : 0.0f;
+
+        ImGui::Text("%.0f FPS  (%.2f ms)", fps, cpuMs);
+        ImGui::Text("GPU  %.2f ms", mGpuTimings.totalMs);
+
+        if (mIndirectRenderingEnabled)
+        {
+            ImGui::Text("Draws  %u / %u", mGPUScene.lastVisibleDrawCount, mGPUScene.drawCount());
+            ImGui::Text("Indirect ON  Cull %s", mCullingEnabled ? "ON" : "OFF");
+        }
+    }
     ImGui::End();
 }

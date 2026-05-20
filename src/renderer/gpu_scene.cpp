@@ -238,7 +238,8 @@ void GPUScene::createCullBuffers(vk::raii::Device& device, vk::raii::PhysicalDev
     {
         vk::BufferCreateInfo bi{ .size = cmdSize,
             .usage = vk::BufferUsageFlagBits::eStorageBuffer |
-                     vk::BufferUsageFlagBits::eIndirectBuffer };
+                     vk::BufferUsageFlagBits::eIndirectBuffer |
+                     vk::BufferUsageFlagBits::eTransferDst };
         cullOutputBuffer = vk::raii::Buffer(device, bi);
         auto mr = cullOutputBuffer.getMemoryRequirements();
         vk::MemoryAllocateInfo mai{
@@ -255,7 +256,8 @@ void GPUScene::createCullBuffers(vk::raii::Device& device, vk::raii::PhysicalDev
         vk::BufferCreateInfo bi{ .size = sizeof(uint32_t),
             .usage = vk::BufferUsageFlagBits::eStorageBuffer |
                      vk::BufferUsageFlagBits::eIndirectBuffer |
-                     vk::BufferUsageFlagBits::eTransferDst };
+                     vk::BufferUsageFlagBits::eTransferDst |
+                     vk::BufferUsageFlagBits::eTransferSrc };
         drawCountBuffer = vk::raii::Buffer(device, bi);
         auto mr = drawCountBuffer.getMemoryRequirements();
         vk::MemoryAllocateInfo mai{
@@ -265,6 +267,25 @@ void GPUScene::createCullBuffers(vk::raii::Device& device, vk::raii::PhysicalDev
         };
         drawCountMemory = vk::raii::DeviceMemory(device, mai);
         drawCountBuffer.bindMemory(*drawCountMemory, 0);
+    }
+
+    // Readback buffers — host-visible, one per frame-in-flight
+    for (uint32_t i = 0; i < GPU_FRAMES_IN_FLIGHT; ++i)
+    {
+        vk::BufferCreateInfo bi{ .size = sizeof(uint32_t),
+            .usage = vk::BufferUsageFlagBits::eTransferDst };
+        drawCountReadbackBuffers[i] = vk::raii::Buffer(device, bi);
+        auto mr = drawCountReadbackBuffers[i].getMemoryRequirements();
+        vk::MemoryAllocateInfo mai{
+            .allocationSize  = mr.size,
+            .memoryTypeIndex = findMemoryType(physicalDevice, mr.memoryTypeBits,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)
+        };
+        drawCountReadbackMemories[i] = vk::raii::DeviceMemory(device, mai);
+        drawCountReadbackBuffers[i].bindMemory(*drawCountReadbackMemories[i], 0);
+        drawCountReadbackMapped[i] = drawCountReadbackMemories[i].mapMemory(0, sizeof(uint32_t));
+        // Initialise to 0 so the display doesn't show garbage before the first frame.
+        *static_cast<uint32_t*>(drawCountReadbackMapped[i]) = 0;
     }
 }
 
@@ -441,7 +462,7 @@ void GPUScene::build(entt::registry&           registry,
         drawCommands.data(),
         drawCommands.size() * sizeof(vk::DrawIndexedIndirectCommand),
         drawCommandBuffer, drawCommandMemory,
-        vk::BufferUsageFlagBits::eStorageBuffer);
+        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc);
 
     // 5. Upload material data via staging (materialDataBuffer is device-local)
     {
@@ -532,5 +553,7 @@ void GPUScene::destroy()
     valid          = false;
     objectDataMapped = nullptr;
     for (auto& m : frameUBOMapped) m = nullptr;
+    for (auto& m : drawCountReadbackMapped) m = nullptr;
+    lastVisibleDrawCount = 0;
     nextBindlessIdx = 0;
 }

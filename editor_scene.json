@@ -11,9 +11,9 @@
           "clipIndex": 0,
           "playTime": 0.0,
           "position": [
-            -8.104710104817059e-06,
-            3.1874351501464844,
-            -131.29949951171875
+            0.0,
+            0.0,
+            0.0
           ],
           "rotation": [
             180.0,
@@ -25,47 +25,13 @@
           "swapYZ": false
         }
       },
-      "collider": {
-        "alignBottomToEntity": true,
-        "centerOffset": [
-          0.0,
-          4.599999904632568,
-          0.0
-        ],
-        "halfExtents": [
-          29.649999618530273,
-          40.79999923706055,
-          15.5
-        ],
-        "halfHeight": 15.600000381469727,
-        "radius": 25.649999618530273,
-        "shapeType": 2
-      },
-      "id": 16,
+      "id": 13,
       "name": "Assimp: Knight.glb",
-      "playerController": {
-        "enabled": true,
-        "jumpImpulse": 62.45000076293945,
-        "moveSpeed": 40.20000076293945,
-        "sprintSpeed": 73.94999694824219
-      },
-      "rigidBody": {
-        "bodyType": 2,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
       "transform": {
         "position": [
-          -8.104710104817059e-06,
-          3.1874351501464844,
-          -131.29949951171875
+          0.0,
+          0.0,
+          0.0
         ],
         "rotation": [
           0.7071067690849304,
@@ -97,7 +63,7 @@
         "radius": 46.0,
         "shapeType": 1
       },
-      "id": 15,
+      "id": 12,
       "name": "Flight Helmet 2",
       "renderable": {
         "modelPath": "models/FlightHelmet.gltf"
@@ -150,7 +116,7 @@
         "radius": 18.0,
         "shapeType": 1
       },
-      "id": 14,
+      "id": 11,
       "name": "Damaged Helmet 1",
       "renderable": {
         "modelPath": "models/DamagedHelmet.gltf"
@@ -203,7 +169,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 1048589,
+      "id": 10,
       "name": "Physics Arena Wall -Z",
       "rigidBody": {
         "bodyType": 0,
@@ -253,7 +219,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 1048588,
+      "id": 9,
       "name": "Physics Arena Wall +Z",
       "rigidBody": {
         "bodyType": 0,
@@ -303,7 +269,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 1048587,
+      "id": 8,
       "name": "Physics Arena Wall -X",
       "rigidBody": {
         "bodyType": 0,
@@ -353,7 +319,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 1048586,
+      "id": 7,
       "name": "Physics Arena Wall +X",
       "rigidBody": {
         "bodyType": 0,
@@ -403,7 +369,7 @@
         "radius": 1.0,
         "shapeType": 0
       },
-      "id": 1048585,
+      "id": 6,
       "name": "Physics Arena Floor",
       "rigidBody": {
         "bodyType": 0,
@@ -437,38 +403,10 @@
       }
     },
     {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048584,
+      "id": 5,
       "name": "Sponza",
       "renderable": {
         "modelPath": "models/Sponza.gltf"
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
       },
       "transform": {
         "position": [
@@ -490,23 +428,7 @@
       }
     },
     {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048583,
+      "id": 4,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -518,23 +440,11 @@
         "intensity": 800.0,
         "range": 120.0
       },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
       "transform": {
         "position": [
-          -1157.33837890625,
-          -36.218040466308594,
-          153.90916442871094
+          20.0,
+          40.0,
+          -10.0
         ],
         "rotation": [
           0.0,
@@ -550,23 +460,7 @@
       }
     },
     {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048582,
+      "id": 3,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -578,22 +472,10 @@
         "intensity": 800.0,
         "range": 120.0
       },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
       "transform": {
         "position": [
-          -1002.1585693359375,
-          -72.89015197753906,
+          10.0,
+          -50.0,
           -75.0
         ],
         "rotation": [
@@ -610,23 +492,7 @@
       }
     },
     {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048581,
+      "id": 2,
       "name": "Point Light",
       "pointLight": {
         "color": [
@@ -636,25 +502,13 @@
         ],
         "enabled": true,
         "intensity": 800.0,
-        "range": 114.19999694824219
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
+        "range": 120.0
       },
       "transform": {
         "position": [
-          -45.7607421875,
-          -45.770668029785156,
-          126.89192199707031
+          -70.0,
+          -80.0,
+          5.0
         ],
         "rotation": [
           0.0,
@@ -670,51 +524,23 @@
       }
     },
     {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048580,
+      "id": 1,
       "name": "Point Light",
       "pointLight": {
         "color": [
           1.0,
-          0.03529411926865578,
+          1.0,
           1.0
         ],
         "enabled": true,
         "intensity": 1000.0,
         "range": 120.0
       },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
       "transform": {
         "position": [
-          -760.2305908203125,
-          -91.16033935546875,
-          93.03654479980469
+          0.0,
+          -45.0,
+          0.0
         ],
         "rotation": [
           0.0,
@@ -730,221 +556,13 @@
       }
     },
     {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048579,
+      "id": 0,
       "name": "Main Camera",
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
       "transform": {
         "position": [
           0.0,
           0.0,
           0.0
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048578,
-      "name": "New Entity",
-      "pointLight": {
-        "color": [
-          0.82367342710495,
-          0.0,
-          0.9656862616539001
-        ],
-        "enabled": true,
-        "intensity": 800.0,
-        "range": 100.0
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          0.0,
-          -64.22114562988281,
-          144.03907775878906
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048577,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          0.2078431248664856,
-          1.0,
-          0.8835062384605408
-        ],
-        "enabled": true,
-        "intensity": 800.0,
-        "range": 100.0
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          399.1121520996094,
-          -119.71871185302734,
-          0.6885592341423035
-        ],
-        "rotation": [
-          0.0,
-          0.0,
-          0.0,
-          1.0
-        ],
-        "scale": [
-          1.0,
-          1.0,
-          1.0
-        ]
-      }
-    },
-    {
-      "collider": {
-        "alignBottomToEntity": false,
-        "centerOffset": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "halfExtents": [
-          0.5,
-          0.5,
-          0.5
-        ],
-        "halfHeight": 0.5,
-        "radius": 0.5,
-        "shapeType": 0
-      },
-      "id": 1048576,
-      "name": "Point Light",
-      "pointLight": {
-        "color": [
-          0.7990195751190186,
-          0.35250863432884216,
-          0.7858868837356567
-        ],
-        "enabled": true,
-        "intensity": 981.0,
-        "range": 67.30000305175781
-      },
-      "rigidBody": {
-        "bodyType": 1,
-        "friction": 0.5,
-        "linearVelocity": [
-          0.0,
-          0.0,
-          0.0
-        ],
-        "mass": 1.0,
-        "restitution": 0.20000000298023224,
-        "useGravity": true
-      },
-      "transform": {
-        "position": [
-          430.92510986328125,
-          -52.9256477355957,
-          81.6455078125
         ],
         "rotation": [
           0.0,
@@ -960,5 +578,5 @@
       }
     }
   ],
-  "selected": 1048580
+  "selected": 13
 }

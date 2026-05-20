@@ -665,6 +665,8 @@ std::string Renderer::loadIBLFiles(const std::string& irradiancePath,
     createIBLSampler();
     mIBLLoaded = true;
     updateIBLDescriptors();
+    if (mIndirectRenderingEnabled)
+        updateIndirectGlobalDescriptors();
     return {};
 }
 

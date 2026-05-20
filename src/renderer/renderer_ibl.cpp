@@ -710,6 +710,47 @@ void Renderer::updateIBLDescriptors()
             }
         }
     }
+
+    for (auto& gpuData : mAssimpGPUData)
+    {
+        vk::DescriptorImageInfo irrInfo{
+            .sampler = *mIBLSampler,
+            .imageView = *mIBLIrradianceView,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        };
+        vk::DescriptorImageInfo preInfo{
+            .sampler = *mIBLSampler,
+            .imageView = *mIBLPrefilteredView,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        };
+        vk::DescriptorImageInfo lutInfo{
+            .sampler = *mIBLSampler,
+            .imageView = *mIBLBrdfLutView,
+            .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+        };
+
+        for (auto& frameSets : gpuData.descriptorSets)
+        {
+            for (auto& descSet : frameSets)
+            {
+                std::array writes{
+                    vk::WriteDescriptorSet{.dstSet = *descSet, .dstBinding = 3,
+                        .descriptorCount = 1,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .pImageInfo = &irrInfo },
+                    vk::WriteDescriptorSet{.dstSet = *descSet, .dstBinding = 4,
+                        .descriptorCount = 1,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .pImageInfo = &preInfo },
+                    vk::WriteDescriptorSet{.dstSet = *descSet, .dstBinding = 5,
+                        .descriptorCount = 1,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .pImageInfo = &lutInfo }
+                };
+                device.updateDescriptorSets(writes, {});
+            }
+        }
+    }
 }
 
 void Renderer::renderIBLPanel(bool isEditMode)

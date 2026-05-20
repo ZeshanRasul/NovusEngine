@@ -3098,11 +3098,17 @@ void Renderer::initAssimpRenderData()
 	// ---- Skinning descriptor set layout ----
 	// binding 0 = UBO          (vertex)
 	// binding 1 = bone SSBO    (vertex)
-	// binding 2 = diffuse tex  (fragment)
-	std::array<vk::DescriptorSetLayoutBinding, 3> bindings = { {
+  // binding 2 = diffuse tex  (fragment)
+	// binding 3 = IBL irradiance cube (fragment)
+	// binding 4 = IBL prefiltered cube (fragment)
+	// binding 5 = IBL BRDF LUT (fragment)
+	std::array<vk::DescriptorSetLayoutBinding, 6> bindings = { {
 		{ 0, vk::DescriptorType::eUniformBuffer,        1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment },
 		{ 1, vk::DescriptorType::eStorageBuffer,        1, vk::ShaderStageFlagBits::eVertex   },
-		{ 2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment }
+     { 2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment },
+		{ 3, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment },
+		{ 4, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment },
+		{ 5, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment }
 	} };
 	vk::DescriptorSetLayoutCreateInfo layoutInfo{
 		.bindingCount = static_cast<uint32_t>(bindings.size()),
@@ -3112,10 +3118,10 @@ void Renderer::initAssimpRenderData()
 	mRenderData.rdAssimpTextureDescriptorLayout = *skinningDescriptorSetLayout;
 
 	// ---- Descriptor pool ----
-	std::array<vk::DescriptorPoolSize, 3> poolSizes = { {
+   std::array<vk::DescriptorPoolSize, 3> poolSizes = { {
 		{ vk::DescriptorType::eUniformBuffer,        512 },
 		{ vk::DescriptorType::eStorageBuffer,        512 },
-		{ vk::DescriptorType::eCombinedImageSampler, 512 }
+      { vk::DescriptorType::eCombinedImageSampler, 2048 }
 	} };
 	vk::DescriptorPoolCreateInfo poolInfo{
 		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
@@ -3476,7 +3482,23 @@ void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 				.imageView = diffuseView,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
 			};
-			std::array<vk::WriteDescriptorSet, 3> writes = { {
+          vk::DescriptorImageInfo iblIrrInfo{
+				.sampler = *mIBLSampler,
+				.imageView = *mIBLIrradianceView,
+				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+			};
+			vk::DescriptorImageInfo iblPreInfo{
+				.sampler = *mIBLSampler,
+				.imageView = *mIBLPrefilteredView,
+				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+			};
+			vk::DescriptorImageInfo iblBrdfInfo{
+				.sampler = *mIBLSampler,
+				.imageView = *mIBLBrdfLutView,
+				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+			};
+
+			std::array<vk::WriteDescriptorSet, 6> writes = { {
 				{
 					.dstSet = *gpuData.descriptorSets[f][m],
 					.dstBinding = 0,
@@ -3497,6 +3519,27 @@ void Renderer::createAssimpInstanceGPUData(std::shared_ptr<AssimpInstance> insta
 					.descriptorCount = 1,
 					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
 					.pImageInfo = &imgInfo
+               },
+				{
+					.dstSet = *gpuData.descriptorSets[f][m],
+					.dstBinding = 3,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo = &iblIrrInfo
+				},
+				{
+					.dstSet = *gpuData.descriptorSets[f][m],
+					.dstBinding = 4,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo = &iblPreInfo
+				},
+				{
+					.dstSet = *gpuData.descriptorSets[f][m],
+					.dstBinding = 5,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo = &iblBrdfInfo
 				}
 			} };
 			device.updateDescriptorSets(writes, nullptr);
@@ -3837,6 +3880,9 @@ void Renderer::recordAssimpSkinnedPass(vk::raii::CommandBuffer& commandBuffer)
 		ubo.model = gpuData.instance->getWorldTransformMatrix();
 		ubo.view = camera.getViewMatrix();
 		ubo.proj = camera.getProjectionMatrix(aspect, 0.1f, 3000.0f);
+     ubo.camPos = glm::vec4(camera.getPosition(), 1.0f);
+		ubo.prefilteredCubeMipLevels = static_cast<float>(mIBLPrefilteredMips);
+		ubo.scaleIBLAmbient = mIBLAmbientScale;
 		ubo.directionalLightDirection = glm::vec4(glm::normalize(shadowSettings.lightDirection), 0.0f);
 		ubo.directionalLightColor = glm::vec4(1.0f);
 		memcpy(gpuData.uboMapped[frameIndex], &ubo, sizeof(UniformBufferObject));

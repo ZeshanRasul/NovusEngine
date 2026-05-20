@@ -25,8 +25,8 @@ struct UniformBufferObject {
     float4x4 lightSpaceMatrices[5];
     float4 directionalLightDirection;
     float4 directionalLightColor;
-    float4 lightPositions[4];
-    float4 lightColors[4];
+    float4 lightPositions[16];
+    float4 lightColors[16];
     float4 camPos;
     float4 cascadeSplits;
     float exposure;
@@ -37,6 +37,8 @@ struct UniformBufferObject {
     float4 shadowDebug;
 };
 
+static const float PI = 3.14159265359;
+
 struct BoneMatrices {
     float4x4 bones[256];
 };
@@ -45,6 +47,18 @@ struct BoneMatrices {
 [[vk::binding(1, 0)]] StructuredBuffer<float4x4> boneBuffer;
 [[vk::binding(2, 0)]] Texture2D diffuseMap;
 [[vk::binding(2, 0)]] SamplerState diffuseSampler;
+[[vk::binding(3, 0)]] TextureCube irradianceMap;
+[[vk::binding(3, 0)]] SamplerState irradianceSampler;
+[[vk::binding(4, 0)]] TextureCube prefilteredMap;
+[[vk::binding(4, 0)]] SamplerState prefilteredSampler;
+[[vk::binding(5, 0)]] Texture2D brdfLUT;
+[[vk::binding(5, 0)]] SamplerState brdfSampler;
+
+float3 FresnelSchlickRoughness(float cosTheta, float3 F0, float roughness)
+{
+    float3 maxRefl = max(float3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0);
+    return F0 + (maxRefl - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
 
 [[shader("vertex")]]
 VSOutput vertMain(VSInput input)
@@ -92,16 +106,37 @@ float4 fragMain(VSOutput input) : SV_TARGET
 {
     float3 lightDir = normalize(-ubo.directionalLightDirection.xyz);
     float3 N        = normalize(input.Normal);
+    float3 V        = normalize(ubo.camPos.xyz - input.WorldPos);
+    float3 R        = reflect(-V, N);
+    float NdotV     = max(dot(N, V), 0.0);
 
-    // Lambertian diffuse
+    // Simple direct Lambert term
     float diff = max(dot(N, lightDir), 0.0);
 
     float4 texColor = diffuseMap.Sample(diffuseSampler, input.UV);
-    // Fallback to vertex color if texture is the default white (sampler will return 1,1,1,1)
     float3 baseColor = texColor.rgb * input.Color.rgb;
 
-    float3 ambient  = 0.15 * ubo.directionalLightColor.rgb * baseColor;
-    float3 diffuse  = diff * ubo.directionalLightColor.rgb * baseColor;
+    const float metallic = 0.0;
+    const float roughness = 0.6;
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), baseColor, metallic);
 
-    return float4(ambient + diffuse, texColor.a * input.Color.a);
+    float3 diffuseDirect = diff * ubo.directionalLightColor.rgb * baseColor;
+
+    // IBL ambient
+    float3 F = FresnelSchlickRoughness(NdotV, F0, roughness);
+    float3 kS = F;
+    float3 kD = (1.0 - kS) * (1.0 - metallic);
+
+    float3 irradiance = irradianceMap.Sample(irradianceSampler, N).rgb;
+    float3 diffuseIBL = irradiance * baseColor;
+
+    float maxLod = max(ubo.prefilteredCubeMipLevels - 1.0, 0.0);
+    float3 prefilteredColor = prefilteredMap.SampleLevel(prefilteredSampler, R, roughness * maxLod).rgb;
+    float2 brdf = brdfLUT.Sample(brdfSampler, float2(NdotV, roughness)).rg;
+    float3 specularIBL = prefilteredColor * (F * brdf.x + brdf.y);
+
+    float3 ambient = (kD * diffuseIBL + specularIBL) * ubo.scaleIBLAmbient;
+    float3 color = ambient + diffuseDirect;
+
+    return float4(color, texColor.a * input.Color.a);
 }
